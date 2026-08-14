@@ -1,0 +1,140 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  FUNCIONARIO
+}
+
+model Usuario {
+  id        Int      @id @default(autoincrement())
+  nome      String
+  email     String   @unique
+  senha     String
+  role      Role     @default(FUNCIONARIO)
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Produto {
+  id         Int      @id @default(autoincrement())
+  nome       String
+  quantidade Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  lotes         Lote[]
+  aparelhos     Aparelho[]
+  vendas        VendaItem[]
+  vendasLegadas Venda[]       @relation("VendaProdutoLegado")
+  garantias     Garantia[]
+  assistencias  Assistencia[]
+}
+
+model Lote {
+  id             Int      @id @default(autoincrement())
+  fornecedor     String?
+  precoCompraUsd Float?
+  quantidade     Int      @default(0)
+  observacao     String?
+  createdAt      DateTime @default(now())
+
+  produtoId Int
+  produto   Produto @relation(fields: [produtoId], references: [id])
+
+  aparelhos Aparelho[]
+}
+
+model Aparelho {
+  id        Int      @id @default(autoincrement())
+  imei      String   @unique
+  vendido   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  loteId Int
+  lote   Lote @relation(fields: [loteId], references: [id])
+
+  produtoId Int
+  produto   Produto @relation(fields: [produtoId], references: [id])
+
+  vendaItemId Int?
+  vendaItem   VendaItem? @relation(fields: [vendaItemId], references: [id])
+
+  assistencias Assistencia[]
+}
+
+model Venda {
+  id          Int      @id @default(autoincrement())
+  cliente     String
+  taxa        Float?
+  taxaFechada Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  produtoId      Int?
+  quantidade     Int?
+  valorVenda     Float?
+  precoCompraUsd Float?
+
+  produto Produto? @relation("VendaProdutoLegado", fields: [produtoId], references: [id])
+
+  itens VendaItem[]
+}
+
+model VendaItem {
+  id            Int   @id @default(autoincrement())
+  quantidade    Int
+  valorUnitario Float
+  total         Float
+
+  precoCompraUsd Float?
+  custoTotal     Float?
+
+  createdAt DateTime @default(now())
+
+  vendaId Int
+  venda   Venda @relation(fields: [vendaId], references: [id])
+
+  produtoId Int
+  produto   Produto @relation(fields: [produtoId], references: [id])
+
+  aparelhos Aparelho[]
+}
+
+model Garantia {
+  id         Int      @id @default(autoincrement())
+  cliente    String
+  telefone   String?
+  tipo       String
+  inicio     DateTime
+  fim        DateTime
+  observacao String?
+  createdAt  DateTime @default(now())
+
+  produtoId Int
+  produto   Produto @relation(fields: [produtoId], references: [id])
+}
+
+model Assistencia {
+  id          Int       @id @default(autoincrement())
+  cliente     String
+  telefone    String?
+  problema    String
+  observacao  String?
+  status      String    @default("Pendente")
+  custo       Float     @default(0)
+  dataEntrada DateTime  @default(now())
+  dataSaida   DateTime?
+  createdAt   DateTime  @default(now())
+
+  produtoId Int
+  produto   Produto @relation(fields: [produtoId], references: [id])
+
+  aparelhoId Int?
+  aparelho   Aparelho? @relation(fields: [aparelhoId], references: [id])
+}
