@@ -60,6 +60,10 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
 
+    // =====================================================
+    // DADOS PRINCIPAIS
+    // =====================================================
+
     const produtoId = Number(body.produtoId);
 
     const cliente = String(
@@ -87,16 +91,22 @@ export async function POST(req: Request) {
     if (Array.isArray(body.aparelhoIds)) {
       aparelhoIds = body.aparelhoIds
         .map((id: unknown) => Number(id))
-        .filter((id: number) => Number.isFinite(id));
+        .filter((id: number) =>
+          Number.isFinite(id)
+        );
     }
 
-    // Compatibilidade com versão antiga:
-    // se vier apenas aparelhoId, também funciona.
+    // =====================================================
+    // COMPATIBILIDADE COM VERSÃO ANTIGA
+    // =====================================================
+
     if (
       aparelhoIds.length === 0 &&
       body.aparelhoId
     ) {
-      const id = Number(body.aparelhoId);
+      const id = Number(
+        body.aparelhoId
+      );
 
       if (Number.isFinite(id)) {
         aparelhoIds = [id];
@@ -104,7 +114,7 @@ export async function POST(req: Request) {
     }
 
     // =====================================================
-    // PREÇO COMEÇA EM ZERO
+    // CUSTO COMEÇA EM ZERO
     // =====================================================
 
     const custo = 0;
@@ -116,7 +126,8 @@ export async function POST(req: Request) {
     if (!produtoId) {
       return NextResponse.json(
         {
-          error: "Escolha o aparelho.",
+          error:
+            "Escolha o aparelho.",
         },
         {
           status: 400,
@@ -253,7 +264,7 @@ export async function POST(req: Request) {
 
     const aparelhoErrado =
       aparelhos.find(
-        (aparelho) =>
+        (aparelho: any) =>
           aparelho.produtoId !==
           produtoId
       );
@@ -280,6 +291,7 @@ export async function POST(req: Request) {
           aparelhoId: {
             in: aparelhoIds,
           },
+
           status: {
             not: "Entregue",
           },
@@ -294,13 +306,17 @@ export async function POST(req: Request) {
         },
       });
 
+    // =====================================================
+    // SE JÁ EXISTIR ASSISTÊNCIA
+    // =====================================================
+
     if (
       assistenciasExistentes.length > 0
     ) {
       const imeis =
         assistenciasExistentes
           .map(
-            (item) =>
+            (item: any) =>
               item.aparelho?.imei
           )
           .filter(Boolean)
@@ -323,8 +339,8 @@ export async function POST(req: Request) {
 
     const assistencias =
       await prisma.$transaction(
-        async (tx) => {
-          const criadas = [];
+        async (tx: any) => {
+          const criadas: any[] = [];
 
           for (const aparelho of aparelhos) {
             const assistencia =
@@ -433,6 +449,10 @@ export async function DELETE(
 
     const id = Number(body.id);
 
+    // =====================================================
+    // VALIDAR ID
+    // =====================================================
+
     if (!id) {
       return NextResponse.json(
         {
@@ -445,11 +465,19 @@ export async function DELETE(
       );
     }
 
+    // =====================================================
+    // REMOVER
+    // =====================================================
+
     await prisma.assistencia.delete({
       where: {
         id,
       },
     });
+
+    // =====================================================
+    // RESPOSTA
+    // =====================================================
 
     return NextResponse.json({
       success: true,

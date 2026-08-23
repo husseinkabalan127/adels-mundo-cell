@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -19,6 +19,10 @@ model Usuario {
   senha     String
   role      Role     @default(FUNCIONARIO)
   ativo     Boolean  @default(true)
+
+  resetCode          String?
+  resetCodeExpiresAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -29,12 +33,25 @@ model Produto {
   quantidade Int      @default(0)
   createdAt  DateTime @default(now())
 
+  // =====================================================
+  // PREÇO DE VENDA
+  // =====================================================
+
+  // Preço em dólar
+  precoVendaUsd Float?
+
+  // Preço em real
+  precoVendaBrl Float?
+
+  // Tipo do preço: USD ou BRL
+  tipoPreco String?
+
   lotes         Lote[]
   aparelhos     Aparelho[]
   vendas        VendaItem[]
   vendasLegadas Venda[]       @relation("VendaProdutoLegado")
   garantias     Garantia[]
-  assistencias  Assistencia[]
+  assistencias Assistencia[]
 }
 
 model Lote {
@@ -74,16 +91,27 @@ model Venda {
   cliente     String
   taxa        Float?
   taxaFechada Boolean  @default(false)
-  createdAt   DateTime @default(now())
+
+  dataVenda DateTime @default(now())
+  createdAt DateTime @default(now())
 
   produtoId      Int?
   quantidade     Int?
   valorVenda     Float?
   precoCompraUsd Float?
 
+  // =====================================================
+  // CONTAS A RECEBER
+  // =====================================================
+
+  formaPagamento String? @default("Não informado")
+  estadoFatura   String? @default("Em aberto")
+  desconto       Float   @default(0)
+
   produto Produto? @relation("VendaProdutoLegado", fields: [produtoId], references: [id])
 
-  itens VendaItem[]
+  itens      VendaItem[]
+  pagamentos Pagamento[]
 }
 
 model VendaItem {
@@ -104,6 +132,20 @@ model VendaItem {
   produto   Produto @relation(fields: [produtoId], references: [id])
 
   aparelhos Aparelho[]
+}
+
+model Pagamento {
+  id Int @id @default(autoincrement())
+
+  valor      Float
+  desconto   Float  @default(0)
+  forma      String?
+  observacao String?
+
+  createdAt DateTime @default(now())
+
+  vendaId Int
+  venda   Venda @relation(fields: [vendaId], references: [id], onDelete: Cascade)
 }
 
 model Garantia {

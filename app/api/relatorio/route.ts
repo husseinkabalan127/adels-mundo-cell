@@ -2,18 +2,44 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 // =====================================================
-// تحويل تاريخ البرازيل إلى بداية اليوم
+// TYPES
 // =====================================================
 
-function inicioDoDia(data: string) {
+type ItemRelatorio = {
+  quantidade: number;
+  total: unknown;
+  custoTotal: unknown;
+  precoCompraUsd: unknown;
+  produto: {
+    nome: string;
+  } | null;
+  aparelhos: {
+    imei: string;
+  }[];
+};
+
+type VendaRelatorio = {
+  id: number;
+  cliente: string | null;
+  taxa: unknown;
+  taxaFechada: boolean | null;
+  createdAt: Date;
+  itens: ItemRelatorio[];
+};
+
+// =====================================================
+// CONVERTER DATA DO BRASIL — INÍCIO DO DIA
+// =====================================================
+
+function inicioDoDia(data: string): Date {
   return new Date(`${data}T00:00:00-03:00`);
 }
 
 // =====================================================
-// تحويل تاريخ البرازيل إلى نهاية اليوم
+// CONVERTER DATA DO BRASIL — FIM DO DIA
 // =====================================================
 
-function fimDoDia(data: string) {
+function fimDoDia(data: string): Date {
   return new Date(`${data}T23:59:59.999-03:00`);
 }
 
@@ -35,7 +61,12 @@ export async function GET(req: Request) {
     // FILTRO DE DATA
     // =================================================
 
-    const whereVenda: any = {};
+    const whereVenda: {
+      createdAt?: {
+        gte?: Date;
+        lte?: Date;
+      };
+    } = {};
 
     if (dataInicio || dataFim) {
       whereVenda.createdAt = {};
@@ -73,7 +104,7 @@ export async function GET(req: Request) {
     // VENDAS
     // =================================================
 
-    const vendas =
+    const vendasRaw =
       await prisma.venda.findMany({
         where: whereVenda,
 
@@ -97,201 +128,330 @@ export async function GET(req: Request) {
       });
 
     // =================================================
-    // PREPARAR LISTA
+    // CONVERTER PARA O TIPO DO RELATÓRIO
     // =================================================
 
-    const listaVendas = vendas.map(
-      (venda) => {
-        const quantidade =
-          venda.itens.reduce(
-            (total, item) =>
-              total + item.quantidade,
-            0
-          );
+    const vendas =
+      vendasRaw as unknown as VendaRelatorio[];
 
-        const valorVenda =
-          venda.itens.reduce(
-            (total, item) =>
-              total + Number(item.total ?? 0),
-            0
-          );
+    // =================================================
+    // PREPARAR LISTA DE VENDAS
+    // =================================================
 
-        const custoTotal =
-          venda.itens.reduce(
-            (total, item) =>
-              total +
-              Number(item.custoTotal ?? 0),
-            0
-          );
+    const listaVendas =
+      vendas.map(
+        (venda: VendaRelatorio) => {
+          // ===========================================
+          // QUANTIDADE
+          // ===========================================
 
-        const taxa =
-          venda.taxa !== null &&
-          venda.taxa !== undefined
-            ? Number(venda.taxa)
-            : null;
-
-        // =============================================
-        // LUCRO
-        // =============================================
-
-        let custoCalculado =
-          custoTotal;
-
-        if (
-          custoCalculado === 0 &&
-          taxa !== null
-        ) {
-          custoCalculado = 0;
-
-          for (const item of venda.itens) {
-            const precoUsd =
-              Number(
-                item.precoCompraUsd ?? 0
-              );
-
-            custoCalculado +=
-              precoUsd *
-              taxa *
-              item.quantidade;
-          }
-        }
-
-        const lucro =
-          valorVenda -
-          custoCalculado;
-
-        // =============================================
-        // USD MÉDIO
-        // =============================================
-
-        let precoCompraUsd:
-          number | null = null;
-
-        if (quantidade > 0) {
-          const somaUsd =
+          const quantidade =
             venda.itens.reduce(
-              (total, item) =>
-                total +
-                Number(
-                  item.precoCompraUsd ?? 0
-                ) *
-                item.quantidade,
+              (
+                total: number,
+                item: ItemRelatorio
+              ) => {
+                return (
+                  total +
+                  Number(
+                    item.quantidade ?? 0
+                  )
+                );
+              },
               0
             );
 
-          if (somaUsd > 0) {
-            precoCompraUsd =
-              somaUsd / quantidade;
+          // ===========================================
+          // VALOR DA VENDA
+          // ===========================================
+
+          const valorVenda =
+            venda.itens.reduce(
+              (
+                total: number,
+                item: ItemRelatorio
+              ) => {
+                return (
+                  total +
+                  Number(
+                    item.total ?? 0
+                  )
+                );
+              },
+              0
+            );
+
+          // ===========================================
+          // CUSTO TOTAL SALVO
+          // ===========================================
+
+          const custoTotalSalvo =
+            venda.itens.reduce(
+              (
+                total: number,
+                item: ItemRelatorio
+              ) => {
+                return (
+                  total +
+                  Number(
+                    item.custoTotal ?? 0
+                  )
+                );
+              },
+              0
+            );
+
+          // ===========================================
+          // TAXA
+          // ===========================================
+
+          const taxa =
+            venda.taxa !== null &&
+            venda.taxa !== undefined
+              ? Number(venda.taxa)
+              : null;
+
+          // ===========================================
+          // CALCULAR CUSTO
+          // ===========================================
+
+          let custoCalculado =
+            custoTotalSalvo;
+
+          // Se não existe custo salvo,
+          // calcula usando USD × taxa
+          if (
+            custoCalculado === 0 &&
+            taxa !== null
+          ) {
+            custoCalculado = 0;
+
+            venda.itens.forEach(
+              (
+                item: ItemRelatorio
+              ) => {
+                const precoUsd =
+                  Number(
+                    item.precoCompraUsd ??
+                      0
+                  );
+
+                custoCalculado +=
+                  precoUsd *
+                  taxa *
+                  Number(
+                    item.quantidade ?? 0
+                  );
+              }
+            );
           }
+
+          // ===========================================
+          // LUCRO
+          // ===========================================
+
+          const lucro =
+            valorVenda -
+            custoCalculado;
+
+          // ===========================================
+          // PREÇO USD MÉDIO
+          // ===========================================
+
+          let precoCompraUsd:
+            number | null = null;
+
+          if (quantidade > 0) {
+            const somaUsd =
+              venda.itens.reduce(
+                (
+                  total: number,
+                  item: ItemRelatorio
+                ) => {
+                  return (
+                    total +
+                    Number(
+                      item.precoCompraUsd ??
+                        0
+                    ) *
+                      Number(
+                        item.quantidade ??
+                          0
+                      )
+                  );
+                },
+                0
+              );
+
+            if (somaUsd > 0) {
+              precoCompraUsd =
+                somaUsd /
+                quantidade;
+            }
+          }
+
+          // ===========================================
+          // IMEIs
+          // ===========================================
+
+          const imeis =
+            venda.itens
+              .flatMap(
+                (
+                  item: ItemRelatorio
+                ) =>
+                  item.aparelhos
+              )
+              .map(
+                (
+                  aparelho: {
+                    imei: string;
+                  }
+                ) =>
+                  aparelho.imei
+              )
+              .filter(
+                (
+                  imei: string
+                ) => Boolean(imei)
+              );
+
+          // ===========================================
+          // PRODUTOS
+          // ===========================================
+
+          const produtosVenda =
+            venda.itens
+              .map(
+                (
+                  item: ItemRelatorio
+                ) =>
+                  item.produto?.nome
+              )
+              .filter(
+                (
+                  nome
+                ): nome is string =>
+                  Boolean(nome)
+              );
+
+          const produto =
+            produtosVenda.length > 0
+              ? produtosVenda.join(", ")
+              : null;
+
+          // ===========================================
+          // RETORNO
+          // ===========================================
+
+          return {
+            id: venda.id,
+
+            cliente:
+              venda.cliente ?? "",
+
+            quantidade,
+
+            valorVenda:
+              Number(valorVenda),
+
+            custo:
+              Number(custoCalculado),
+
+            custoTotal:
+              Number(custoCalculado),
+
+            lucro:
+              Number(lucro),
+
+            taxa,
+
+            taxaFechada:
+              venda.taxaFechada ??
+              false,
+
+            precoCompraUsd,
+
+            createdAt:
+              venda.createdAt,
+
+            produto,
+
+            imeis,
+          };
         }
-
-        // =============================================
-        // IMEIs
-        // =============================================
-
-        const imeis =
-          venda.itens
-            .flatMap(
-              (item) =>
-                item.aparelhos
-            )
-            .map(
-              (aparelho) =>
-                aparelho.imei
-            )
-            .filter(Boolean);
-
-        // =============================================
-        // PRODUTOS
-        // =============================================
-
-        const produtosVenda =
-          venda.itens
-            .map(
-              (item) =>
-                item.produto?.nome
-            )
-            .filter(Boolean);
-
-        const produto =
-          produtosVenda.length > 0
-            ? produtosVenda.join(", ")
-            : null;
-
-        // =============================================
-        // RETORNO
-        // =============================================
-
-        return {
-          id: venda.id,
-
-          cliente:
-            venda.cliente ?? "",
-
-          quantidade,
-
-          valorVenda:
-            Number(valorVenda),
-
-          custo:
-            Number(custoCalculado),
-
-          custoTotal:
-            Number(custoCalculado),
-
-          lucro:
-            Number(lucro),
-
-          taxa,
-
-          taxaFechada:
-            venda.taxaFechada ?? false,
-
-          precoCompraUsd,
-
-          createdAt:
-            venda.createdAt,
-
-          produto,
-
-          imeis,
-        };
-      }
-    );
+      );
 
     // =================================================
-    // TOTAIS
+    // TOTAL — VENDAS
     // =================================================
 
     const valorVendas =
       listaVendas.reduce(
-        (total, venda) =>
-          total +
-          Number(venda.valorVenda),
+        (
+          total: number,
+          venda
+        ) => {
+          return (
+            total +
+            Number(
+              venda.valorVenda
+            )
+          );
+        },
         0
       );
+
+    // =================================================
+    // TOTAL — CUSTO
+    // =================================================
 
     const custoTotal =
       listaVendas.reduce(
-        (total, venda) =>
-          total +
-          Number(venda.custo),
+        (
+          total: number,
+          venda
+        ) => {
+          return (
+            total +
+            Number(
+              venda.custo
+            )
+          );
+        },
         0
       );
 
+    // =================================================
+    // TOTAL — LUCRO
+    // =================================================
+
     const lucroTotal =
       listaVendas.reduce(
-        (total, venda) =>
-          total +
-          Number(venda.lucro),
+        (
+          total: number,
+          venda
+        ) => {
+          return (
+            total +
+            Number(
+              venda.lucro
+            )
+          );
+        },
         0
       );
+
+    // =================================================
+    // RESPOSTA
+    // =================================================
 
     return NextResponse.json({
       produtos,
 
       quantidadeEstoque:
-        estoque._sum.quantidade ?? 0,
+        estoque._sum.quantidade ??
+        0,
 
       vendas:
         listaVendas.length,
@@ -313,7 +473,9 @@ export async function GET(req: Request) {
     return NextResponse.json(
       {
         error:
-          "Erro ao carregar relatório.",
+          error instanceof Error
+            ? error.message
+            : "Erro ao carregar relatório.",
       },
       {
         status: 500,
@@ -425,12 +587,18 @@ export async function PATCH(req: Request) {
         },
       });
 
+    // =================================================
+    // NENHUMA VENDA
+    // =================================================
+
     if (vendas.length === 0) {
       return NextResponse.json(
         {
           success: false,
+
           message:
             "Nenhuma venda encontrada nesse período.",
+
           quantidade: 0,
         },
         {
@@ -440,6 +608,16 @@ export async function PATCH(req: Request) {
     }
 
     // =================================================
+    // IDS DAS VENDAS
+    // =================================================
+
+    const vendaIds =
+      vendas.map(
+        (venda: { id: number }) =>
+          venda.id
+      );
+
+    // =================================================
     // SALVAR TAXA
     // =================================================
 
@@ -447,16 +625,15 @@ export async function PATCH(req: Request) {
       await prisma.venda.updateMany({
         where: {
           id: {
-            in: vendas.map(
-              (venda) =>
-                venda.id
-            ),
+            in: vendaIds,
           },
         },
 
         data: {
           taxa,
-          taxaFechada: true,
+
+          taxaFechada:
+            true,
         },
       });
 
@@ -470,14 +647,16 @@ export async function PATCH(req: Request) {
       message:
         `Taxa ${taxa.toFixed(
           2
-        )} salva em ${resultado.count} venda(s).`,
+        )} salva em ${
+          resultado.count
+        } venda(s).`,
 
       quantidade:
         resultado.count,
 
       taxa,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error(
       "ERRO AO SALVAR TAXA:",
       error
@@ -486,8 +665,9 @@ export async function PATCH(req: Request) {
     return NextResponse.json(
       {
         error:
-          error?.message ||
-          "Erro ao salvar taxa.",
+          error instanceof Error
+            ? error.message
+            : "Erro ao salvar taxa.",
       },
       {
         status: 500,

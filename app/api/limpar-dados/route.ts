@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/app/lib/prisma";
+
+// =====================================================
+// POST — LIMPAR TODOS OS DADOS DO SISTEMA
+// =====================================================
 
 export async function POST(req: Request) {
   try {
@@ -7,12 +12,24 @@ export async function POST(req: Request) {
 
     const senha = String(body.senha || "");
 
+    // =====================================================
+    // VERIFICAR SENHA
+    // =====================================================
+
     if (!senha) {
       return NextResponse.json(
-        { error: "Informe a senha." },
-        { status: 400 }
+        {
+          error: "Informe a senha.",
+        },
+        {
+          status: 400,
+        }
       );
     }
+
+    // =====================================================
+    // SENHA CONFIGURADA NO .ENV
+    // =====================================================
 
     const senhaSistema =
       process.env.RESET_SYSTEM_PASSWORD;
@@ -23,37 +40,59 @@ export async function POST(req: Request) {
           error:
             "Senha de limpeza não configurada.",
         },
-        { status: 500 }
+        {
+          status: 500,
+        }
       );
     }
+
+    // =====================================================
+    // CONFERIR SENHA
+    // =====================================================
 
     if (senha !== senhaSistema) {
       return NextResponse.json(
-        { error: "Senha incorreta." },
-        { status: 401 }
+        {
+          error: "Senha incorreta.",
+        },
+        {
+          status: 401,
+        }
       );
     }
 
-    await prisma.$transaction(async (tx) => {
-      // Apagar somente os DADOS do sistema
+    // =====================================================
+    // APAGAR TODOS OS DADOS
+    // =====================================================
 
-      await tx.assistencia.deleteMany();
+    await prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        // Apagar somente os DADOS do sistema.
+        // A estrutura do banco continua intacta.
 
-      await tx.garantia.deleteMany();
+        await tx.assistencia.deleteMany();
 
-      await tx.aparelho.deleteMany();
+        await tx.garantia.deleteMany();
 
-      await tx.vendaItem.deleteMany();
+        await tx.aparelho.deleteMany();
 
-      await tx.venda.deleteMany();
+        await tx.vendaItem.deleteMany();
 
-      await tx.lote.deleteMany();
+        await tx.venda.deleteMany();
 
-      await tx.produto.deleteMany();
-    });
+        await tx.lote.deleteMany();
+
+        await tx.produto.deleteMany();
+      }
+    );
+
+    // =====================================================
+    // RESPOSTA
+    // =====================================================
 
     return NextResponse.json({
       success: true,
+
       message:
         "Todos os dados do sistema foram apagados.",
     });
@@ -68,7 +107,9 @@ export async function POST(req: Request) {
         error:
           "Erro ao limpar os dados do sistema.",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }

@@ -1,112 +1,83 @@
-import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 
-export type UserRole = "ADMIN" | "FUNCIONARIO";
+const SESSION_COOKIE = "adel_session";
 
-export type SessionUser = {
+export type UsuarioSessao = {
   id: number;
   nome: string;
   email: string;
-  role: UserRole;
+  role: "ADMIN" | "FUNCIONARIO";
 };
 
-const secret = process.env.AUTH_SECRET;
-
-if (!secret) {
-  throw new Error(
-    "AUTH_SECRET não foi configurado no arquivo .env.local"
-  );
-}
-
-const secretKey = new TextEncoder().encode(secret);
-
-const COOKIE_NAME = "adel_session";
-
-export async function criarSessao(user: SessionUser) {
-  const token = await new SignJWT({
-    id: user.id,
-    nome: user.nome,
-    email: user.email,
-    role: user.role,
-  })
-    .setProtectedHeader({
-      alg: "HS256",
-    })
-    .setIssuedAt()
-    .setExpirationTime("7d")
-    .sign(secretKey);
-
+export async function criarSessao(usuario: UsuarioSessao) {
   const cookieStore = await cookies();
 
-  cookieStore.set(COOKIE_NAME, token, {
+  cookieStore.set(SESSION_COOKIE, JSON.stringify(usuario), {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: 60 * 60 * 24 * 7,
   });
 }
 
-export async function pegarSessao(): Promise<SessionUser | null> {
+export async function obterSessao(): Promise<UsuarioSessao | null> {
+  const cookieStore = await cookies();
+
+  const cookie = cookieStore.get(SESSION_COOKIE);
+
+  if (!cookie?.value) {
+    return null;
+  }
+
   try {
-    const cookieStore = await cookies();
-
-    const token = cookieStore.get(COOKIE_NAME)?.value;
-
-    if (!token) {
-      return null;
-    }
-
-    const { payload } = await jwtVerify(
-      token,
-      secretKey
-    );
+    const usuario = JSON.parse(cookie.value);
 
     if (
-      typeof payload.id !== "number" ||
-      typeof payload.nome !== "string" ||
-      typeof payload.email !== "string" ||
-      (payload.role !== "ADMIN" &&
-        payload.role !== "FUNCIONARIO")
+      !usuario ||
+      typeof usuario.id !== "number" ||
+      typeof usuario.nome !== "string" ||
+      typeof usuario.email !== "string" ||
+      (usuario.role !== "ADMIN" &&
+        usuario.role !== "FUNCIONARIO")
     ) {
       return null;
     }
 
-    return {
-      id: payload.id,
-      nome: payload.nome,
-      email: payload.email,
-      role: payload.role,
-    };
+    return usuario as UsuarioSessao;
   } catch {
     return null;
   }
 }
 
-export async function exigirLogin() {
-  const user = await pegarSessao();
+export async function exigirLogin(): Promise<UsuarioSessao> {
+  const usuario = await obterSessao();
 
-  if (!user) {
+  if (!usuario) {
     throw new Error("Não autorizado.");
   }
 
-  return user;
+  return usuario;
 }
 
-export async function exigirAdmin() {
-  const user = await exigirLogin();
+export async function exigirAdmin(): Promise<UsuarioSessao> {
+  const usuario = await obterSessao();
 
-  if (user.role !== "ADMIN") {
+  if (!usuario) {
+    throw new Error("Não autorizado.");
+  }
+
+  if (usuario.role !== "ADMIN") {
     throw new Error(
       "Acesso permitido somente ao administrador."
     );
   }
 
-  return user;
+  return usuario;
 }
 
-export async function sairDaSessao() {
+export async function encerrarSessao() {
   const cookieStore = await cookies();
 
-  cookieStore.delete(COOKIE_NAME);
+  cookieStore.delete(SESSION_COOKIE);
 }

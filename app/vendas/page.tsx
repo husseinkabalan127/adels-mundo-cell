@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 type Aparelho = {
   id: number;
@@ -8,11 +13,13 @@ type Aparelho = {
   vendido: boolean;
   produtoId: number;
   loteId: number;
+
   produto?: {
     id: number;
     nome: string;
     quantidade: number;
   };
+
   lote?: {
     id: number;
     fornecedor?: string | null;
@@ -36,44 +43,125 @@ type VendaItemForm = {
 
 type Venda = {
   id: number;
+
   createdAt?: string;
+
   data?: string;
+
+  dataVenda?: string;
+
   cliente?: string | null;
+
   formaPagamento?: string | null;
+
   estadoFatura?: string | null;
+
   taxa?: number | null;
+
   total?: number | null;
+
   valorTotal?: number | null;
+
   itens?: any[];
 };
 
 export default function VendasPage() {
-  const [produtos, setProdutos] = useState<Produto[]>([]);
+  // =====================================================
+  // ESTOQUE
+  // =====================================================
 
-  const [cliente, setCliente] = useState("");
+  const [produtos, setProdutos] = useState<
+    Produto[]
+  >([]);
+
+  // =====================================================
+  // DADOS DA VENDA
+  // =====================================================
+
+  const [cliente, setCliente] =
+    useState("");
+
   const [formaPagamento, setFormaPagamento] =
     useState("Não informado");
 
   const [estadoFatura, setEstadoFatura] =
     useState("Não informado");
 
-  const [taxa, setTaxa] = useState("");
+  const [taxa, setTaxa] =
+    useState("");
 
-  const [itens, setItens] = useState<VendaItemForm[]>([
-    {
-      produtoId: "",
-      quantidade: 1,
-      valorUnitario: "",
-      imeis: [],
-    },
-  ]);
+  // =====================================================
+  // DATA DA VENDA
+  // =====================================================
 
-  const [imeiBusca, setImeiBusca] = useState("");
-  const [mensagem, setMensagem] = useState("");
-  const [erro, setErro] = useState("");
-  const [salvando, setSalvando] = useState(false);
+  function dataHoje() {
+    const agora = new Date();
 
-  const [vendas, setVendas] = useState<Venda[]>([]);
+    const ano =
+      agora.getFullYear();
+
+    const mes = String(
+      agora.getMonth() + 1
+    ).padStart(2, "0");
+
+    const dia = String(
+      agora.getDate()
+    ).padStart(2, "0");
+
+    return `${ano}-${mes}-${dia}`;
+  }
+
+  const [dataVenda, setDataVenda] =
+    useState(dataHoje());
+
+  // =====================================================
+  // ITENS
+  // =====================================================
+
+  const [itens, setItens] =
+    useState<VendaItemForm[]>([
+      {
+        produtoId: "",
+        quantidade: 1,
+        valorUnitario: "",
+        imeis: [],
+      },
+    ]);
+
+  // =====================================================
+  // BUSCA DE MODELO — INDEPENDENTE PARA CADA PRODUTO
+  // =====================================================
+
+  const [buscaModelo, setBuscaModelo] =
+    useState<Record<number, string>>({});
+
+  // =====================================================
+  // IMEI
+  // =====================================================
+
+  const [imeiBusca, setImeiBusca] =
+    useState("");
+
+  // =====================================================
+  // MENSAGENS
+  // =====================================================
+
+  const [mensagem, setMensagem] =
+    useState("");
+
+  const [erro, setErro] =
+    useState("");
+
+  const [salvando, setSalvando] =
+    useState(false);
+
+  // =====================================================
+  // VENDAS
+  // =====================================================
+
+  const [vendas, setVendas] =
+    useState<Venda[]>([]);
+
   const [carregandoVendas, setCarregandoVendas] =
     useState(false);
 
@@ -83,48 +171,73 @@ export default function VendasPage() {
   const imeiInputRef =
     useRef<HTMLInputElement>(null);
 
+  // =====================================================
+  // CARREGAR ESTOQUE
+  // =====================================================
+
   async function carregarEstoque() {
     try {
-      const res = await fetch("/api/estoque", {
-        cache: "no-store",
-      });
+      const res =
+        await fetch(
+          "/api/estoque",
+          {
+            cache: "no-store",
+          }
+        );
 
-      const data = await res.json();
+      const data =
+        await res.json();
 
       if (!res.ok) {
         throw new Error(
-          data.error || "Erro ao carregar estoque."
+          data.error ||
+            "Erro ao carregar estoque."
         );
       }
 
       setProdutos(data);
     } catch (e: any) {
       setErro(
-        e.message || "Erro ao carregar estoque."
+        e.message ||
+          "Erro ao carregar estoque."
       );
     }
   }
+
+  // =====================================================
+  // CARREGAR VENDAS
+  // =====================================================
 
   async function carregarVendas() {
     try {
       setCarregandoVendas(true);
 
-      const res = await fetch("/api/vendas", {
-        cache: "no-store",
-      });
+      const res =
+        await fetch(
+          "/api/vendas",
+          {
+            cache: "no-store",
+          }
+        );
 
-      const data = await res.json();
+      const data =
+        await res.json();
 
       if (!res.ok) {
         throw new Error(
-          data.error || "Erro ao carregar vendas."
+          data.error ||
+            "Erro ao carregar vendas."
         );
       }
 
       if (Array.isArray(data)) {
         setVendas(data);
-      } else if (Array.isArray(data.vendas)) {
-        setVendas(data.vendas);
+      } else if (
+        Array.isArray(data.vendas)
+      ) {
+        setVendas(
+          data.vendas
+        );
       } else {
         setVendas([]);
       }
@@ -132,91 +245,153 @@ export default function VendasPage() {
       console.error(e);
 
       setErro(
-        e.message || "Erro ao carregar vendas."
+        e.message ||
+          "Erro ao carregar vendas."
       );
     } finally {
       setCarregandoVendas(false);
     }
   }
 
+  // =====================================================
+  // CARREGAR AO ABRIR
+  // =====================================================
+
   useEffect(() => {
     carregarEstoque();
     carregarVendas();
   }, []);
 
-  const aparelhosDisponiveis = useMemo(() => {
-    return produtos.flatMap((produto) =>
-      (produto.aparelhos || [])
-        .filter((a) => !a.vendido)
-        .map((a) => ({
-          ...a,
-          produto: {
-            id: produto.id,
-            nome: produto.nome,
-            quantidade: produto.quantidade,
-          },
-        }))
-    );
-  }, [produtos]);
+  // =====================================================
+  // APARELHOS DISPONÍVEIS
+  // =====================================================
 
-  const aparelhoEncontrado = useMemo(() => {
-    const busca = imeiBusca.trim();
+  const aparelhosDisponiveis =
+    useMemo(() => {
+      return produtos.flatMap(
+        (produto) =>
+          (produto.aparelhos || [])
+            .filter(
+              (a) => !a.vendido
+            )
+            .map((a) => ({
+              ...a,
 
-    if (!busca) return null;
+              produto: {
+                id: produto.id,
+                nome: produto.nome,
+                quantidade:
+                  produto.quantidade,
+              },
+            }))
+      );
+    }, [produtos]);
 
-    return (
-      aparelhosDisponiveis.find(
-        (a) => a.imei === busca
-      ) || null
-    );
-  }, [imeiBusca, aparelhosDisponiveis]);
+  // =====================================================
+  // IMEI ENCONTRADO
+  // =====================================================
 
-  const resultadosBusca = useMemo(() => {
-    const busca = imeiBusca.trim();
+  const aparelhoEncontrado =
+    useMemo(() => {
+      const busca =
+        imeiBusca.trim();
 
-    if (!busca) return [];
+      if (!busca) {
+        return null;
+      }
 
-    return aparelhosDisponiveis
-      .filter((a) =>
-        a.imei.includes(busca)
-      )
-      .slice(0, 50);
-  }, [imeiBusca, aparelhosDisponiveis]);
+      return (
+        aparelhosDisponiveis.find(
+          (a) =>
+            a.imei === busca
+        ) || null
+      );
+    }, [
+      imeiBusca,
+      aparelhosDisponiveis,
+    ]);
 
-  const total = itens.reduce(
-    (soma, item) => {
-      const quantidade =
-        Number(item.quantidade) || 0;
+  // =====================================================
+  // RESULTADOS DE BUSCA IMEI
+  // =====================================================
 
-      const valor =
-        Number(
-          String(item.valorUnitario).replace(
-            ",",
-            "."
+  const resultadosBusca =
+    useMemo(() => {
+      const busca =
+        imeiBusca.trim();
+
+      if (!busca) {
+        return [];
+      }
+
+      return aparelhosDisponiveis
+        .filter((a) =>
+          a.imei.includes(
+            busca
           )
-        ) || 0;
+        )
+        .slice(0, 50);
+    }, [
+      imeiBusca,
+      aparelhosDisponiveis,
+    ]);
 
-      return soma + quantidade * valor;
-    },
-    0
-  );
+  // =====================================================
+  // TOTAL DA NOVA VENDA
+  // =====================================================
+
+  const total =
+    itens.reduce(
+      (soma, item) => {
+        const quantidade =
+          Number(
+            item.quantidade
+          ) || 0;
+
+        const valor =
+          Number(
+            String(
+              item.valorUnitario
+            ).replace(",", ".")
+          ) || 0;
+
+        return (
+          soma +
+          quantidade * valor
+        );
+      },
+      0
+    );
+
+  // =====================================================
+  // ATUALIZAR ITEM
+  // =====================================================
 
   function atualizarItem(
     index: number,
     changes: Partial<VendaItemForm>
   ) {
     setItens((atual) =>
-      atual.map((item, i) =>
-        i === index
-          ? { ...item, ...changes }
-          : item
+      atual.map(
+        (item, i) =>
+          i === index
+            ? {
+                ...item,
+                ...changes,
+              }
+            : item
       )
     );
   }
 
+  // =====================================================
+  // ADICIONAR MODELO
+  // =====================================================
+
   function adicionarModelo() {
     setItens((atual) => [
       ...atual,
+
       {
         produtoId: "",
         quantidade: 1,
@@ -226,63 +401,160 @@ export default function VendasPage() {
     ]);
   }
 
+  // =====================================================
+  // SELECIONAR MODELO PELA BUSCA
+  // =====================================================
+
+  function selecionarModelo(
+    index: number,
+    produto: Produto
+  ) {
+    atualizarItem(
+      index,
+      {
+        produtoId: produto.id,
+        imeis: [],
+        quantidade: 1,
+      }
+    );
+
+    // Modelo já foi selecionado: limpar a busca para fechar
+    // imediatamente a lista de sugestões.
+    setBuscaModelo((atual) => ({
+      ...atual,
+      [index]: "",
+    }));
+  }
+
+  // =====================================================
+  // RESULTADOS DA BUSCA DE MODELO
+  // =====================================================
+
+  function resultadosModelo(index: number) {
+    const busca =
+      (buscaModelo[index] || "")
+        .trim()
+        .toLowerCase();
+
+    if (!busca) {
+      return [];
+    }
+
+    return produtos
+      .filter(
+        (produto) =>
+          produto.quantidade > 0 &&
+          produto.id !== itens[index]?.produtoId &&
+          produto.nome
+            .toLowerCase()
+            .includes(busca)
+      )
+      .slice(0, 20);
+  }
+
+  // =====================================================
+  // ADICIONAR IMEI AO ITEM
+  // =====================================================
+
   function adicionarImeiAoItem(
     itemIndex: number,
     imei: string
   ) {
-    const valor = imei.trim();
+    const valor =
+      imei.trim();
 
-    if (!valor) return;
+    if (!valor) {
+      return;
+    }
 
     setItens((atual) =>
-      atual.map((item, i) => {
-        if (i !== itemIndex) return item;
+      atual.map(
+        (item, i) => {
+          if (
+            i !== itemIndex
+          ) {
+            return item;
+          }
 
-        if (item.imeis.includes(valor)) {
-          return item;
+          if (
+            item.imeis.includes(
+              valor
+            )
+          ) {
+            return item;
+          }
+
+          return {
+            ...item,
+
+            imeis: [
+              ...item.imeis,
+              valor,
+            ],
+
+            quantidade:
+              item.imeis.length +
+              1,
+          };
         }
-
-        return {
-          ...item,
-          imeis: [...item.imeis, valor],
-          quantidade: item.imeis.length + 1,
-        };
-      })
+      )
     );
   }
+
+  // =====================================================
+  // REMOVER IMEI
+  // =====================================================
 
   function removerImei(
     itemIndex: number,
     imei: string
   ) {
     setItens((atual) =>
-      atual.map((item, i) => {
-        if (i !== itemIndex) return item;
+      atual.map(
+        (item, i) => {
+          if (
+            i !== itemIndex
+          ) {
+            return item;
+          }
 
-        const novos = item.imeis.filter(
-          (x) => x !== imei
-        );
+          const novos =
+            item.imeis.filter(
+              (x) =>
+                x !== imei
+            );
 
-        return {
-          ...item,
-          imeis: novos,
-          quantidade: Math.max(
-            1,
-            novos.length
-          ),
-        };
-      })
+          return {
+            ...item,
+
+            imeis: novos,
+
+            quantidade:
+              novos.length > 0
+                ? novos.length
+                : 1,
+          };
+        }
+      )
     );
   }
+
+  // =====================================================
+  // ADICIONAR IMEI ENCONTRADO
+  // =====================================================
 
   function adicionarImeiEncontrado() {
     setErro("");
     setMensagem("");
 
-    const imei = imeiBusca.trim();
+    const imei =
+      imeiBusca.trim();
 
     if (!imei) {
-      setErro("Digite o IMEI para buscar.");
+      setErro(
+        "Digite o IMEI para buscar."
+      );
+
       return;
     }
 
@@ -290,30 +562,40 @@ export default function VendasPage() {
       setErro(
         "IMEI não encontrado ou já vendido."
       );
+
       return;
     }
 
-    let index = itens.findIndex(
-      (item) =>
-        item.produtoId ===
-        aparelhoEncontrado.produtoId
-    );
+    let index =
+      itens.findIndex(
+        (item) =>
+          item.produtoId ===
+          aparelhoEncontrado.produtoId
+      );
 
     if (index === -1) {
-      index = itens.findIndex(
-        (item) => item.produtoId === ""
-      );
+      index =
+        itens.findIndex(
+          (item) =>
+            item.produtoId === ""
+        );
     }
 
     if (index === -1) {
       setItens((atual) => [
         ...atual,
+
         {
           produtoId:
             aparelhoEncontrado.produtoId,
+
           quantidade: 1,
+
           valorUnitario: "",
-          imeis: [aparelhoEncontrado.imei],
+
+          imeis: [
+            aparelhoEncontrado.imei,
+          ],
         },
       ]);
     } else {
@@ -322,11 +604,17 @@ export default function VendasPage() {
         aparelhoEncontrado.imei
       );
 
-      if (itens[index].produtoId === "") {
-        atualizarItem(index, {
-          produtoId:
-            aparelhoEncontrado.produtoId,
-        });
+      if (
+        itens[index]
+          .produtoId === ""
+      ) {
+        atualizarItem(
+          index,
+          {
+            produtoId:
+              aparelhoEncontrado.produtoId,
+          }
+        );
       }
     }
 
@@ -337,30 +625,50 @@ export default function VendasPage() {
     }, 50);
   }
 
+  // =====================================================
+  // ENTER NO IMEI
+  // =====================================================
+
   function onImeiKeyDown(
     e: React.KeyboardEvent<HTMLInputElement>
   ) {
-    if (e.key === "Enter") {
+    if (
+      e.key === "Enter"
+    ) {
       e.preventDefault();
+
       adicionarImeiEncontrado();
     }
   }
 
   // =====================================================
-  // FORMATAR VALORES
+  // DINHEIRO
   // =====================================================
 
-  function dinheiro(valor: number) {
+  function dinheiro(
+    valor: number
+  ) {
     return `R$ ${valor
       .toFixed(2)
       .replace(".", ",")}`;
   }
 
-  function formatarData(data?: string) {
-    if (!data) return "-";
+  // =====================================================
+  // FORMATAR DATA
+  // =====================================================
+
+  function formatarData(
+    data?: string
+  ) {
+    if (!data) {
+      return "-";
+    }
 
     try {
-      return new Date(data).toLocaleString(
+      const d =
+        new Date(data);
+
+      return d.toLocaleDateString(
         "pt-BR"
       );
     } catch {
@@ -368,7 +676,90 @@ export default function VendasPage() {
     }
   }
 
-  function nomeProdutoDoItem(item: any) {
+  // =====================================================
+  // CHAVE DA DATA
+  // =====================================================
+
+  function chaveDataVenda(
+    venda: Venda
+  ) {
+    const data =
+      venda.dataVenda ||
+      venda.createdAt ||
+      venda.data;
+
+    if (!data) {
+      return "sem-data";
+    }
+
+    const d =
+      new Date(data);
+
+    if (
+      Number.isNaN(
+        d.getTime()
+      )
+    ) {
+      return "sem-data";
+    }
+
+    return `${d.getFullYear()}-${String(
+      d.getMonth() + 1
+    ).padStart(
+      2,
+      "0"
+    )}-${String(
+      d.getDate()
+    ).padStart(
+      2,
+      "0"
+    )}`;
+  }
+
+  // =====================================================
+  // FORMATAR GRUPO DO DIA
+  // =====================================================
+
+  function formatarDataGrupo(
+    chave: string
+  ) {
+    if (
+      chave ===
+      "sem-data"
+    ) {
+      return "Sem data";
+    }
+
+    const partes =
+      chave.split(
+        "-"
+      );
+
+    const ano =
+      Number(partes[0]);
+
+    const mes =
+      Number(partes[1]);
+
+    const dia =
+      Number(partes[2]);
+
+    return new Date(
+      ano,
+      mes - 1,
+      dia
+    ).toLocaleDateString(
+      "pt-BR"
+    );
+  }
+
+  // =====================================================
+  // NOME DO PRODUTO
+  // =====================================================
+
+  function nomeProdutoDoItem(
+    item: any
+  ) {
     return (
       item?.produto?.nome ||
       item?.produtoNome ||
@@ -377,52 +768,100 @@ export default function VendasPage() {
     );
   }
 
-  function imeisDoItem(item: any) {
-    if (Array.isArray(item?.aparelhos)) {
-      const imeis = item.aparelhos
-        .map((a: any) => a?.imei)
-        .filter(Boolean);
+  // =====================================================
+  // IMEIS DO ITEM
+  // =====================================================
 
-      if (imeis.length) {
-        return imeis.join(", ");
+  function imeisDoItem(
+    item: any
+  ) {
+    if (
+      Array.isArray(
+        item?.aparelhos
+      )
+    ) {
+      const imeis =
+        item.aparelhos
+          .map(
+            (a: any) =>
+              a?.imei
+          )
+          .filter(Boolean);
+
+      if (
+        imeis.length
+      ) {
+        return imeis.join(
+          ", "
+        );
       }
     }
 
-    if (Array.isArray(item?.imeis)) {
-      return item.imeis.join(", ");
+    if (
+      Array.isArray(
+        item?.imeis
+      )
+    ) {
+      return item.imeis.join(
+        ", "
+      );
     }
 
-    if (typeof item?.imei === "string") {
+    if (
+      typeof item?.imei ===
+      "string"
+    ) {
       return item.imei;
     }
 
     return "-";
   }
 
-  function totalDaVenda(venda: Venda) {
+  // =====================================================
+  // TOTAL DA VENDA
+  // =====================================================
+
+  function totalDaVenda(
+    venda: Venda
+  ) {
     if (
-      typeof venda.total === "number"
+      typeof venda.total ===
+      "number"
     ) {
       return venda.total;
     }
 
     if (
-      typeof venda.valorTotal === "number"
+      typeof venda.valorTotal ===
+      "number"
     ) {
       return venda.valorTotal;
     }
 
-    if (Array.isArray(venda.itens)) {
+    if (
+      Array.isArray(
+        venda.itens
+      )
+    ) {
       return venda.itens.reduce(
-        (soma: number, item: any) => {
+        (
+          soma: number,
+          item: any
+        ) => {
           if (
-            typeof item.total === "number"
+            typeof item.total ===
+            "number"
           ) {
-            return soma + item.total;
+            return (
+              soma +
+              item.total
+            );
           }
 
           const quantidade =
-            Number(item.quantidade) || 0;
+            Number(
+              item.quantidade
+            ) || 0;
 
           const valor =
             Number(
@@ -434,7 +873,8 @@ export default function VendasPage() {
 
           return (
             soma +
-            quantidade * valor
+            quantidade *
+              valor
           );
         },
         0
@@ -452,27 +892,50 @@ export default function VendasPage() {
     setErro("");
     setMensagem("");
 
-    for (const item of itens) {
-      if (!item.produtoId) {
+    if (!dataVenda) {
+      setErro(
+        "Selecione a data da venda."
+      );
+
+      return;
+    }
+
+    for (
+      const item of itens
+    ) {
+      if (
+        !item.produtoId
+      ) {
         setErro(
           "Selecione o modelo de cada produto."
         );
+
         return;
       }
 
       if (
         !item.imeis.length ||
         item.imeis.length !==
-          Number(item.quantidade)
+          Number(
+            item.quantidade
+          )
       ) {
         setErro(
           "A quantidade de IMEI precisa ser igual à quantidade do aparelho."
         );
+
         return;
       }
 
-      if (Number(item.quantidade) <= 0) {
-        setErro("Quantidade inválida.");
+      if (
+        Number(
+          item.quantidade
+        ) <= 0
+      ) {
+        setErro(
+          "Quantidade inválida."
+        );
+
         return;
       }
 
@@ -481,12 +944,16 @@ export default function VendasPage() {
         Number(
           String(
             item.valorUnitario
-          ).replace(",", ".")
+          ).replace(
+            ",",
+            "."
+          )
         ) < 0
       ) {
         setErro(
           "Informe o preço de venda."
         );
+
         return;
       }
     }
@@ -494,51 +961,73 @@ export default function VendasPage() {
     setSalvando(true);
 
     try {
-      const res = await fetch(
-        "/api/vendas",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            cliente,
+      const res =
+        await fetch(
+          "/api/vendas",
+          {
+            method: "POST",
 
-            taxa:
-              taxa === ""
-                ? null
-                : Number(
-                    String(taxa).replace(
-                      ",",
-                      "."
-                    )
-                  ),
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
 
-            itens: itens.map((item) => ({
-              produtoId:
-                Number(item.produtoId),
+            body: JSON.stringify({
+              cliente,
 
-              quantidade:
-                Number(item.quantidade),
+              dataVenda,
 
-              valorUnitario:
-                Number(
-                  String(
-                    item.valorUnitario
-                  ).replace(",", ".")
-                ) || 0,
+              taxa:
+                taxa === ""
+                  ? null
+                  : Number(
+                      String(
+                        taxa
+                      ).replace(
+                        ",",
+                        "."
+                      )
+                    ),
 
-              imeis: item.imeis,
-            })),
+              itens:
+                itens.map(
+                  (
+                    item
+                  ) => ({
+                    produtoId:
+                      Number(
+                        item.produtoId
+                      ),
 
-            formaPagamento,
-            estadoFatura,
-          }),
-        }
-      );
+                    quantidade:
+                      Number(
+                        item.quantidade
+                      ),
 
-      const data = await res.json();
+                    valorUnitario:
+                      Number(
+                        String(
+                          item.valorUnitario
+                        ).replace(
+                          ",",
+                          "."
+                        )
+                      ) || 0,
+
+                    imeis:
+                      item.imeis,
+                  })
+                ),
+
+              formaPagamento,
+
+              estadoFatura,
+            }),
+          }
+        );
+
+      const data =
+        await res.json();
 
       if (!res.ok) {
         throw new Error(
@@ -553,6 +1042,7 @@ export default function VendasPage() {
       );
 
       setCliente("");
+
       setTaxa("");
 
       setFormaPagamento(
@@ -561,6 +1051,10 @@ export default function VendasPage() {
 
       setEstadoFatura(
         "Não informado"
+      );
+
+      setDataVenda(
+        dataHoje()
       );
 
       setItens([
@@ -574,16 +1068,19 @@ export default function VendasPage() {
 
       setImeiBusca("");
 
+      setBuscaModelo({});
+
       await carregarEstoque();
+
       await carregarVendas();
 
-      /*
-       * Se a API devolver o ID da venda,
-       * abre a fatura automaticamente.
-       */
-      if (data.venda?.id) {
+      if (
+        data.venda?.id
+      ) {
         setTimeout(() => {
-          abrirFatura(data.venda);
+          abrirFatura(
+            data.venda
+          );
         }, 300);
       }
 
@@ -604,33 +1101,45 @@ export default function VendasPage() {
   // EXCLUIR VENDA
   // =====================================================
 
-  async function excluirVenda(vendaId: number) {
-    const confirmar = window.confirm(
-      "Tem certeza que deseja excluir esta venda?\n\nOs aparelhos e os IMEIs desta venda serão devolvidos ao estoque."
-    );
+  async function excluirVenda(
+    vendaId: number
+  ) {
+    const confirmar =
+      window.confirm(
+        "Tem certeza que deseja excluir esta venda?\n\nOs aparelhos e os IMEIs desta venda serão devolvidos ao estoque."
+      );
 
-    if (!confirmar) return;
+    if (!confirmar) {
+      return;
+    }
 
     setErro("");
     setMensagem("");
-    setExcluindoVendaId(vendaId);
+
+    setExcluindoVendaId(
+      vendaId
+    );
 
     try {
-      const res = await fetch(
-        "/api/vendas",
-        {
-          method: "DELETE",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            vendaId,
-          }),
-        }
-      );
+      const res =
+        await fetch(
+          "/api/vendas",
+          {
+            method: "DELETE",
 
-      const data = await res.json();
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              vendaId,
+            }),
+          }
+        );
+
+      const data =
+        await res.json();
 
       if (!res.ok) {
         throw new Error(
@@ -645,6 +1154,7 @@ export default function VendasPage() {
       );
 
       await carregarEstoque();
+
       await carregarVendas();
     } catch (e: any) {
       setErro(
@@ -652,7 +1162,9 @@ export default function VendasPage() {
           "Erro ao excluir venda."
       );
     } finally {
-      setExcluindoVendaId(null);
+      setExcluindoVendaId(
+        null
+      );
     }
   }
 
@@ -660,9 +1172,13 @@ export default function VendasPage() {
   // ABRIR FATURA
   // =====================================================
 
-  function abrirFatura(venda: Venda) {
+  function abrirFatura(
+    venda: Venda
+  ) {
     const itensVenda =
-      Array.isArray(venda.itens)
+      Array.isArray(
+        venda.itens
+      )
         ? venda.itens
         : [];
 
@@ -670,18 +1186,22 @@ export default function VendasPage() {
       totalDaVenda(venda);
 
     const numeroFatura =
-      String(venda.id).padStart(
+      String(
+        venda.id
+      ).padStart(
         6,
         "0"
       );
 
-    const dataVenda =
+    const dataVendaTexto =
       formatarData(
-        venda.createdAt ||
+        venda.dataVenda ||
+          venda.createdAt ||
           venda.data
       );
 
-    let produtosHtml = "";
+    let produtosHtml =
+      "";
 
     itensVenda.forEach(
       (item: any) => {
@@ -702,13 +1222,18 @@ export default function VendasPage() {
           typeof item.total ===
           "number"
             ? item.total
-            : quantidade * valor;
+            : quantidade *
+              valor;
 
         const nome =
-          nomeProdutoDoItem(item);
+          nomeProdutoDoItem(
+            item
+          );
 
         const imeis =
-          imeisDoItem(item);
+          imeisDoItem(
+            item
+          );
 
         produtosHtml += `
           <tr>
@@ -736,7 +1261,9 @@ export default function VendasPage() {
       }
     );
 
-    if (!produtosHtml) {
+    if (
+      !produtosHtml
+    ) {
       produtosHtml = `
         <tr>
           <td colspan="4">
@@ -748,8 +1275,11 @@ export default function VendasPage() {
 
     const html = `
       <!DOCTYPE html>
+
       <html lang="pt-BR">
+
       <head>
+
         <meta charset="UTF-8">
 
         <title>
@@ -757,6 +1287,7 @@ export default function VendasPage() {
         </title>
 
         <style>
+
           * {
             box-sizing: border-box;
           }
@@ -892,6 +1423,7 @@ export default function VendasPage() {
           }
 
           @media print {
+
             body {
               padding: 0;
             }
@@ -899,13 +1431,17 @@ export default function VendasPage() {
             .buttons {
               display: none;
             }
+
           }
+
         </style>
+
       </head>
 
       <body>
 
         <div class="buttons">
+
           <button
             class="print"
             onclick="window.print()"
@@ -919,6 +1455,7 @@ export default function VendasPage() {
           >
             Fechar
           </button>
+
         </div>
 
         <div class="invoice">
@@ -926,23 +1463,31 @@ export default function VendasPage() {
           <div class="top">
 
             <div>
-              <h1>Adel's Mundo Cell</h1>
+
+              <h1>
+                Adel's Mundo Cell
+              </h1>
 
               <div class="store">
                 Venda de aparelhos e acessórios
               </div>
+
             </div>
 
             <div class="invoice-number">
-              <div>FATURA</div>
+
+              <div>
+                FATURA
+              </div>
 
               <strong>
                 #${numeroFatura}
               </strong>
 
               <div>
-                ${dataVenda}
+                ${dataVendaTexto}
               </div>
+
             </div>
 
           </div>
@@ -989,18 +1534,27 @@ export default function VendasPage() {
           <table>
 
             <thead>
+
               <tr>
-                <th>Produto / IMEI</th>
+
+                <th>
+                  Produto / IMEI
+                </th>
+
                 <th style="text-align:center">
                   Qtd.
                 </th>
+
                 <th style="text-align:right">
                   Preço
                 </th>
+
                 <th style="text-align:right">
                   Total
                 </th>
+
               </tr>
+
             </thead>
 
             <tbody>
@@ -1012,32 +1566,49 @@ export default function VendasPage() {
           <div class="total">
 
             <div class="total-row">
-              <span>Subtotal</span>
 
               <span>
-                ${dinheiro(totalVenda)}
+                Subtotal
               </span>
+
+              <span>
+                ${dinheiro(
+                  totalVenda
+                )}
+              </span>
+
             </div>
 
             <div class="total-row grand-total">
-              <span>Total</span>
 
               <span>
-                ${dinheiro(totalVenda)}
+                Total
               </span>
+
+              <span>
+                ${dinheiro(
+                  totalVenda
+                )}
+              </span>
+
             </div>
 
           </div>
 
           <div class="footer">
+
             Obrigado pela preferência!
+
             <br>
+
             Adel's Mundo Cell
+
           </div>
 
         </div>
 
       </body>
+
       </html>
     `;
 
@@ -1052,33 +1623,45 @@ export default function VendasPage() {
       setErro(
         "O navegador bloqueou a abertura da fatura. Permita pop-ups para este site."
       );
+
       return;
     }
 
     janela.document.open();
-    janela.document.write(html);
+
+    janela.document.write(
+      html
+    );
+
     janela.document.close();
   }
 
   // =====================================================
-  // ENVIAR WHATSAPP
+  // WHATSAPP
   // =====================================================
 
-  function enviarWhatsApp(venda: Venda) {
+  function enviarWhatsApp(
+    venda: Venda
+  ) {
     const itensVenda =
-      Array.isArray(venda.itens)
+      Array.isArray(
+        venda.itens
+      )
         ? venda.itens
         : [];
 
     const numeroFatura =
-      String(venda.id).padStart(
+      String(
+        venda.id
+      ).padStart(
         6,
         "0"
       );
 
-    const dataVenda =
+    const dataVendaTexto =
       formatarData(
-        venda.createdAt ||
+        venda.dataVenda ||
+          venda.createdAt ||
           venda.data
       );
 
@@ -1093,7 +1676,7 @@ export default function VendasPage() {
       }\n`;
 
     texto +=
-      `📅 Data: ${dataVenda}\n`;
+      `📅 Data: ${dataVendaTexto}\n`;
 
     texto +=
       `💳 Pagamento: ${
@@ -1111,7 +1694,10 @@ export default function VendasPage() {
       `*Produtos:*\n`;
 
     itensVenda.forEach(
-      (item: any, index: number) => {
+      (
+        item: any,
+        index: number
+      ) => {
         const quantidade =
           Number(
             item.quantidade
@@ -1129,13 +1715,18 @@ export default function VendasPage() {
           typeof item.total ===
           "number"
             ? item.total
-            : quantidade * valor;
+            : quantidade *
+              valor;
 
         const nome =
-          nomeProdutoDoItem(item);
+          nomeProdutoDoItem(
+            item
+          );
 
         const imeis =
-          imeisDoItem(item);
+          imeisDoItem(
+            item
+          );
 
         texto +=
           `\n${index + 1}. *${nome}*\n`;
@@ -1177,14 +1768,80 @@ export default function VendasPage() {
   }
 
   // =====================================================
-  // TOTAL
+  // AGRUPAR VENDAS POR DIA
   // =====================================================
 
-  const totalVendas = vendas.reduce(
-    (soma, venda) =>
-      soma + totalDaVenda(venda),
-    0
-  );
+  const vendasPorDia =
+    vendas.reduce(
+      (
+        grupos: Record<
+          string,
+          Venda[]
+        >,
+        venda
+      ) => {
+        const chave =
+          chaveDataVenda(
+            venda
+          );
+
+        if (
+          !grupos[chave]
+        ) {
+          grupos[chave] =
+            [];
+        }
+
+        grupos[chave].push(
+          venda
+        );
+
+        return grupos;
+      },
+      {}
+    );
+
+  const diasOrdenados =
+    Object.keys(
+      vendasPorDia
+    ).sort((a, b) =>
+      b.localeCompare(a)
+    );
+
+  // =====================================================
+  // TOTAL DO DIA
+  // =====================================================
+
+  function totalDoDia(
+    vendasDoDia: Venda[]
+  ) {
+    return vendasDoDia.reduce(
+      (total, venda) =>
+        total +
+        totalDaVenda(
+          venda
+        ),
+      0
+    );
+  }
+
+  // =====================================================
+  // TOTAL GERAL
+  // =====================================================
+
+  const totalVendas =
+    vendas.reduce(
+      (soma, venda) =>
+        soma +
+        totalDaVenda(
+          venda
+        ),
+      0
+    );
+
+  // =====================================================
+  // TELA
+  // =====================================================
 
   return (
     <main
@@ -1210,7 +1867,8 @@ export default function VendasPage() {
             "flex-start",
           marginBottom: 24,
           gap: 20,
-          flexWrap: "wrap",
+          flexWrap:
+            "wrap",
         }}
       >
 
@@ -1234,6 +1892,8 @@ export default function VendasPage() {
           </p>
 
         </div>
+
+        {/* TAXA */}
 
         <div
           style={{
@@ -1287,9 +1947,11 @@ export default function VendasPage() {
             display: "flex",
             justifyContent:
               "space-between",
-            alignItems: "center",
+            alignItems:
+              "center",
             gap: 15,
-            flexWrap: "wrap",
+            flexWrap:
+              "wrap",
           }}
         >
 
@@ -1308,18 +1970,57 @@ export default function VendasPage() {
 
         </div>
 
-        {/* CLIENTE */}
+        {/* ================================================= */}
+        {/* DATA + CLIENTE + PAGAMENTO + ESTADO */}
+        {/* ================================================= */}
 
         <div
           style={{
             display: "grid",
             gridTemplateColumns:
-              "repeat(3, minmax(0, 1fr))",
+              "repeat(4, minmax(0, 1fr))",
             gap: 14,
           }}
         >
 
+          {/* DATA */}
+
           <label>
+
+            Data da venda
+
+            <input
+              type="date"
+              value={
+                dataVenda
+              }
+              onChange={(e) =>
+                setDataVenda(
+                  e.target.value
+                )
+              }
+              style={
+                inputStyle
+              }
+            />
+
+            <small
+              style={{
+                color: "#666",
+                display:
+                  "block",
+                marginTop: 5,
+              }}
+            >
+              Você pode colocar uma data anterior.
+            </small>
+
+          </label>
+
+          {/* CLIENTE */}
+
+          <label>
+
             Cliente (opcional)
 
             <input
@@ -1330,12 +2031,17 @@ export default function VendasPage() {
                 )
               }
               placeholder="Nome do cliente"
-              style={inputStyle}
+              style={
+                inputStyle
+              }
             />
 
           </label>
 
+          {/* PAGAMENTO */}
+
           <label>
+
             Forma de pagamento
 
             <select
@@ -1347,7 +2053,9 @@ export default function VendasPage() {
                   e.target.value
                 )
               }
-              style={inputStyle}
+              style={
+                inputStyle
+              }
             >
 
               <option>
@@ -1374,7 +2082,10 @@ export default function VendasPage() {
 
           </label>
 
+          {/* ESTADO */}
+
           <label>
+
             Estado da fatura
 
             <select
@@ -1386,7 +2097,9 @@ export default function VendasPage() {
                   e.target.value
                 )
               }
-              style={inputStyle}
+              style={
+                inputStyle
+              }
             >
 
               <option>
@@ -1407,10 +2120,15 @@ export default function VendasPage() {
 
         </div>
 
+        {/* ================================================= */}
         {/* PRODUTOS */}
+        {/* ================================================= */}
 
         {itens.map(
-          (item, index) => {
+          (
+            item,
+            index
+          ) => {
 
             const produto =
               produtos.find(
@@ -1457,71 +2175,110 @@ export default function VendasPage() {
                   }}
                 >
 
-                  <label>
+                  {/* MODELO */}
+
+                  <label style={{ position: "relative" }}>
+
                     Modelo
 
-                    <select
+                    <input
                       value={
-                        item.produtoId
+                        buscaModelo[index] ||
+                        (item.produtoId
+                          ? produtos.find(
+                              (p) =>
+                                p.id === item.produtoId
+                            )?.nome || ""
+                          : "")
                       }
-                      onChange={(e) =>
-                        atualizarItem(
-                          index,
-                          {
-                            produtoId:
-                              e.target
-                                .value
-                                ? Number(
-                                    e.target
-                                      .value
-                                  )
-                                : "",
+                      onChange={(e) => {
+                        const valor = e.target.value;
 
+                        setBuscaModelo((atual) => ({
+                          ...atual,
+                          [index]: valor,
+                        }));
+
+                        if (item.produtoId) {
+                          atualizarItem(index, {
+                            produtoId: "",
                             imeis: [],
-
                             quantidade: 1,
-                          }
-                        )
-                      }
-                      style={
-                        inputStyle
-                      }
-                    >
+                          });
+                        }
+                      }}
+                      placeholder="Digite o modelo..."
+                      autoComplete="off"
+                      style={inputStyle}
+                    />
 
-                      <option value="">
-                        Selecione o modelo
-                      </option>
-
-                      {produtos
-                        .filter(
-                          (p) =>
-                            p.quantidade >
-                            0
-                        )
-                        .map(
-                          (p) => (
-                            <option
-                              key={
-                                p.id
+                    {buscaModelo[index] && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          zIndex: 50,
+                          left: 0,
+                          right: 0,
+                          top: "100%",
+                          marginTop: 4,
+                          background: "#fff",
+                          border: "1px solid #d8d8d8",
+                          borderRadius: 8,
+                          boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
+                          maxHeight: 260,
+                          overflowY: "auto",
+                        }}
+                      >
+                        {resultadosModelo(index).length > 0 ? (
+                          resultadosModelo(index).map((p) => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() =>
+                                selecionarModelo(index, p)
                               }
-                              value={
-                                p.id
-                              }
+                              style={{
+                                display: "block",
+                                width: "100%",
+                                textAlign: "left",
+                                border: 0,
+                                borderBottom: "1px solid #eee",
+                                background: "#fff",
+                                padding: "11px 12px",
+                                cursor: "pointer",
+                              }}
                             >
-                              {p.nome} —
-                              estoque:{" "}
-                              {
-                                p.quantidade
-                              }
-                            </option>
-                          )
+                              <strong>{p.nome}</strong>
+                              <div
+                                style={{
+                                  marginTop: 3,
+                                  color: "#666",
+                                  fontSize: 12,
+                                }}
+                              >
+                                Estoque: {p.quantidade}
+                              </div>
+                            </button>
+                          ))
+                        ) : (
+                          <div
+                            style={{
+                              padding: 12,
+                              color: "#777",
+                            }}
+                          >
+                            Nenhum modelo encontrado.
+                          </div>
                         )}
-
-                    </select>
+                      </div>
+                    )}
 
                   </label>
 
+                  {/* QUANTIDADE */}
+
                   <label>
+
                     Quantidade
 
                     <input
@@ -1534,13 +2291,16 @@ export default function VendasPage() {
                       value={
                         item.quantidade
                       }
-                      onChange={(e) =>
+                      onChange={(
+                        e
+                      ) =>
                         atualizarItem(
                           index,
                           {
                             quantidade:
                               Number(
-                                e.target
+                                e
+                                  .target
                                   .value
                               ) || 1,
                           }
@@ -1553,19 +2313,25 @@ export default function VendasPage() {
 
                   </label>
 
+                  {/* PREÇO */}
+
                   <label>
+
                     Preço por aparelho
 
                     <input
                       value={
                         item.valorUnitario
                       }
-                      onChange={(e) =>
+                      onChange={(
+                        e
+                      ) =>
                         atualizarItem(
                           index,
                           {
                             valorUnitario:
-                              e.target
+                              e
+                                .target
                                 .value,
                           }
                         )
@@ -1578,6 +2344,8 @@ export default function VendasPage() {
                     />
 
                   </label>
+
+                  {/* TOTAL */}
 
                   <div>
 
@@ -1612,7 +2380,9 @@ export default function VendasPage() {
 
                 </div>
 
+                {/* ================================================= */}
                 {/* IMEI */}
+                {/* ================================================= */}
 
                 <div
                   style={{
@@ -1635,7 +2405,9 @@ export default function VendasPage() {
                       value={
                         imeiBusca
                       }
-                      onChange={(e) =>
+                      onChange={(
+                        e
+                      ) =>
                         setImeiBusca(
                           e.target.value.replace(
                             /\s/g,
@@ -1687,44 +2459,72 @@ export default function VendasPage() {
                           >
 
                             <thead>
+
                               <tr>
 
-                                <th style={th}>
+                                <th
+                                  style={
+                                    th
+                                  }
+                                >
                                   IMEI
                                 </th>
 
-                                <th style={th}>
+                                <th
+                                  style={
+                                    th
+                                  }
+                                >
                                   Modelo
                                 </th>
 
-                                <th style={th}>
+                                <th
+                                  style={
+                                    th
+                                  }
+                                >
                                   Status
                                 </th>
 
-                                <th style={th}>
+                                <th
+                                  style={
+                                    th
+                                  }
+                                >
                                   Ação
                                 </th>
 
                               </tr>
+
                             </thead>
 
                             <tbody>
 
                               {resultadosBusca.map(
-                                (a) => (
+                                (
+                                  a
+                                ) => (
                                   <tr
                                     key={
                                       a.id
                                     }
                                   >
 
-                                    <td style={td}>
+                                    <td
+                                      style={
+                                        td
+                                      }
+                                    >
                                       {
                                         a.imei
                                       }
                                     </td>
 
-                                    <td style={td}>
+                                    <td
+                                      style={
+                                        td
+                                      }
+                                    >
                                       {
                                         a
                                           .produto
@@ -1732,7 +2532,12 @@ export default function VendasPage() {
                                       }
                                     </td>
 
-                                    <td style={td}>
+                                    <td
+                                      style={
+                                        td
+                                      }
+                                    >
+
                                       <span
                                         style={{
                                           color:
@@ -1743,9 +2548,14 @@ export default function VendasPage() {
                                       >
                                         Disponível
                                       </span>
+
                                     </td>
 
-                                    <td style={td}>
+                                    <td
+                                      style={
+                                        td
+                                      }
+                                    >
 
                                       <button
                                         type="button"
@@ -1791,7 +2601,9 @@ export default function VendasPage() {
                                                 {
                                                   produtoId:
                                                     a.produtoId,
+
                                                   quantidade: 1,
+
                                                   imeis: [
                                                     a.imei,
                                                   ],
@@ -1858,7 +2670,9 @@ export default function VendasPage() {
 
                 </div>
 
-                {/* IMEIS */}
+                {/* ================================================= */}
+                {/* IMEIS ADICIONADOS */}
+                {/* ================================================= */}
 
                 <div
                   style={{
@@ -1880,7 +2694,8 @@ export default function VendasPage() {
 
                     <p
                       style={{
-                        color: "#777",
+                        color:
+                          "#777",
                       }}
                     >
                       Nenhum IMEI adicionado ainda.
@@ -1900,10 +2715,14 @@ export default function VendasPage() {
                     >
 
                       {item.imeis.map(
-                        (imei) => (
+                        (
+                          imei
+                        ) => (
 
                           <span
-                            key={imei}
+                            key={
+                              imei
+                            }
                             style={{
                               border:
                                 "1px solid #ddd",
@@ -1954,7 +2773,9 @@ export default function VendasPage() {
           }
         )}
 
+        {/* ================================================= */}
         {/* ERRO */}
+        {/* ================================================= */}
 
         {erro && (
           <div
@@ -1963,7 +2784,8 @@ export default function VendasPage() {
               padding: 12,
               background:
                 "#fff1f0",
-              color: "#b42318",
+              color:
+                "#b42318",
               borderRadius: 8,
             }}
           >
@@ -1971,7 +2793,9 @@ export default function VendasPage() {
           </div>
         )}
 
+        {/* ================================================= */}
         {/* SUCESSO */}
+        {/* ================================================= */}
 
         {mensagem && (
           <div
@@ -1980,7 +2804,8 @@ export default function VendasPage() {
               padding: 12,
               background:
                 "#eefaf1",
-              color: "#16823b",
+              color:
+                "#16823b",
               borderRadius: 8,
             }}
           >
@@ -1988,14 +2813,17 @@ export default function VendasPage() {
           </div>
         )}
 
+        {/* ================================================= */}
         {/* BOTÕES */}
+        {/* ================================================= */}
 
         <div
           style={{
             display: "flex",
             gap: 10,
             marginTop: 20,
-            flexWrap: "wrap",
+            flexWrap:
+              "wrap",
           }}
         >
 
@@ -2004,7 +2832,9 @@ export default function VendasPage() {
             onClick={
               adicionarModelo
             }
-            style={blueButton}
+            style={
+              blueButton
+            }
           >
             + Adicionar outro modelo
           </button>
@@ -2014,8 +2844,12 @@ export default function VendasPage() {
             onClick={
               registrarVenda
             }
-            disabled={salvando}
-            style={blackButton}
+            disabled={
+              salvando
+            }
+            style={
+              blackButton
+            }
           >
             {salvando
               ? "Salvando..."
@@ -2027,7 +2861,7 @@ export default function VendasPage() {
       </section>
 
       {/* ================================================= */}
-      {/* HISTÓRICO */}
+      {/* HISTÓRICO POR DIA */}
       {/* ================================================= */}
 
       <section
@@ -2037,7 +2871,8 @@ export default function VendasPage() {
             "1px solid #e5e5e5",
           borderRadius: 12,
           padding: 20,
-          background: "#fff",
+          background:
+            "#fff",
         }}
       >
 
@@ -2046,9 +2881,11 @@ export default function VendasPage() {
             display: "flex",
             justifyContent:
               "space-between",
-            alignItems: "center",
+            alignItems:
+              "center",
             gap: 15,
-            flexWrap: "wrap",
+            flexWrap:
+              "wrap",
           }}
         >
 
@@ -2060,24 +2897,26 @@ export default function VendasPage() {
                 fontSize: 22,
               }}
             >
-              Vendas registradas
+              📅 Vendas por dia
             </h2>
 
             <p
               style={{
                 margin:
                   "6px 0 0",
-                color: "#666",
+                color:
+                  "#666",
               }}
             >
-              Aqui aparecem as vendas que você registrou.
+              As vendas aparecem agrupadas pela data real da venda.
             </p>
 
           </div>
 
           <div
             style={{
-              padding: "12px 16px",
+              padding:
+                "12px 16px",
               borderRadius: 10,
               background:
                 "#eef1f4",
@@ -2085,8 +2924,10 @@ export default function VendasPage() {
           >
 
             <strong>
-              Total:{" "}
-              {dinheiro(totalVendas)}
+              Total geral:{" "}
+              {dinheiro(
+                totalVendas
+              )}
             </strong>
 
           </div>
@@ -2098,13 +2939,15 @@ export default function VendasPage() {
           <p
             style={{
               marginTop: 20,
-              color: "#666",
+              color:
+                "#666",
             }}
           >
             Carregando vendas...
           </p>
 
-        ) : vendas.length === 0 ? (
+        ) : vendas.length ===
+          0 ? (
 
           <div
             style={{
@@ -2113,8 +2956,10 @@ export default function VendasPage() {
               border:
                 "1px dashed #ccc",
               borderRadius: 10,
-              color: "#777",
-              textAlign: "center",
+              color:
+                "#777",
+              textAlign:
+                "center",
             }}
           >
             Nenhuma venda registrada ainda.
@@ -2125,67 +2970,45 @@ export default function VendasPage() {
           <div
             style={{
               marginTop: 20,
-              overflowX: "auto",
+              display:
+                "flex",
+              flexDirection:
+                "column",
+              gap: 25,
             }}
           >
 
-            <table
-              style={{
-                width: "100%",
-                borderCollapse:
-                  "collapse",
-                minWidth: 1200,
-              }}
-            >
+            {diasOrdenados.map(
+              (dia) => {
 
-              <thead>
+                const vendasDoDia =
+                  vendasPorDia[
+                    dia
+                  ];
 
-                <tr>
+                const totalDia =
+                  totalDoDia(
+                    vendasDoDia
+                  );
 
-                  <th style={th}>
-                    Data
-                  </th>
+                // =====================================
+                // MODELOS DO DIA
+                // =====================================
 
-                  <th style={th}>
-                    Cliente
-                  </th>
+                const modelosDoDia: Record<
+                  string,
+                  {
+                    nome: string;
+                    quantidade: number;
+                    total: number;
+                    imeis: string[];
+                  }
+                > = {};
 
-                  <th style={th}>
-                    Produto
-                  </th>
-
-                  <th style={th}>
-                    IMEI
-                  </th>
-
-                  <th style={th}>
-                    Qtd.
-                  </th>
-
-                  <th style={th}>
-                    Total
-                  </th>
-
-                  <th style={th}>
-                    Pagamento
-                  </th>
-
-                  <th style={th}>
-                    Fatura
-                  </th>
-
-                  <th style={th}>
-                    Ações
-                  </th>
-
-                </tr>
-
-              </thead>
-
-              <tbody>
-
-                {vendas.map(
-                  (venda) => {
+                vendasDoDia.forEach(
+                  (
+                    venda
+                  ) => {
 
                     const itensVenda =
                       Array.isArray(
@@ -2194,151 +3017,19 @@ export default function VendasPage() {
                         ? venda.itens
                         : [];
 
-                    if (
-                      itensVenda.length ===
-                      0
-                    ) {
-
-                      return (
-                        <tr
-                          key={
-                            venda.id
-                          }
-                        >
-
-                          <td style={td}>
-                            {formatarData(
-                              venda.createdAt ||
-                                venda.data
-                            )}
-                          </td>
-
-                          <td style={td}>
-                            {venda.cliente ||
-                              "-"}
-                          </td>
-
-                          <td style={td}>
-                            -
-                          </td>
-
-                          <td style={td}>
-                            -
-                          </td>
-
-                          <td style={td}>
-                            -
-                          </td>
-
-                          <td
-                            style={{
-                              ...td,
-                              fontWeight:
-                                700,
-                            }}
-                          >
-                            {dinheiro(
-                              totalDaVenda(
-                                venda
-                              )
-                            )}
-                          </td>
-
-                          <td style={td}>
-                            {venda.formaPagamento ||
-                              "-"}
-                          </td>
-
-                          <td style={td}>
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                abrirFatura(
-                                  venda
-                                )
-                              }
-                              style={
-                                invoiceButton
-                              }
-                            >
-                              🧾 Fatura
-                            </button>
-
-                          </td>
-
-                          <td style={td}>
-
-                            <div
-                              style={{
-                                display:
-                                  "flex",
-                                gap: 6,
-                                flexWrap:
-                                  "wrap",
-                              }}
-                            >
-
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  enviarWhatsApp(
-                                    venda
-                                  )
-                                }
-                                style={
-                                  whatsappButton
-                                }
-                              >
-                                📲 WhatsApp
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  excluirVenda(
-                                    venda.id
-                                  )
-                                }
-                                disabled={
-                                  excluindoVendaId ===
-                                  venda.id
-                                }
-                                style={
-                                  deleteButton
-                                }
-                              >
-                                {excluindoVendaId ===
-                                venda.id
-                                  ? "Excluindo..."
-                                  : "Excluir"}
-                              </button>
-
-                            </div>
-
-                          </td>
-
-                        </tr>
-                      );
-                    }
-
-                    return itensVenda.map(
+                    itensVenda.forEach(
                       (
-                        item: any,
-                        itemIndex: number
+                        item: any
                       ) => {
+
+                        const nome =
+                          nomeProdutoDoItem(
+                            item
+                          );
 
                         const quantidade =
                           Number(
                             item.quantidade
-                          ) || 0;
-
-                        const valor =
-                          Number(
-                            item.valorUnitario ??
-                              item.preco ??
-                              item.valor ??
-                              0
                           ) || 0;
 
                         const subtotal =
@@ -2346,184 +3037,689 @@ export default function VendasPage() {
                           "number"
                             ? item.total
                             : quantidade *
-                              valor;
+                              (
+                                Number(
+                                  item.valorUnitario ??
+                                    item.preco ??
+                                    item.valor ??
+                                    0
+                                ) || 0
+                              );
 
-                        return (
-                          <tr
-                            key={`${venda.id}-${itemIndex}`}
+                        if (
+                          !modelosDoDia[
+                            nome
+                          ]
+                        ) {
+
+                          modelosDoDia[
+                            nome
+                          ] = {
+                            nome,
+                            quantidade:
+                              0,
+                            total:
+                              0,
+                            imeis:
+                              [],
+                          };
+
+                        }
+
+                        modelosDoDia[
+                          nome
+                        ].quantidade +=
+                          quantidade;
+
+                        modelosDoDia[
+                          nome
+                        ].total +=
+                          subtotal;
+
+                        if (
+                          Array.isArray(
+                            item.aparelhos
+                          )
+                        ) {
+
+                          item.aparelhos.forEach(
+                            (
+                              aparelho: any
+                            ) => {
+
+                              if (
+                                aparelho?.imei
+                              ) {
+
+                                modelosDoDia[
+                                  nome
+                                ].imeis.push(
+                                  aparelho.imei
+                                );
+
+                              }
+
+                            }
+                          );
+
+                        }
+
+                      }
+                    );
+
+                  }
+                );
+
+                return (
+                  <div
+                    key={
+                      dia
+                    }
+                    style={{
+                      border:
+                        "1px solid #ddd",
+                      borderRadius:
+                        14,
+                      overflow:
+                        "hidden",
+                    }}
+                  >
+
+                    {/* CABEÇALHO DO DIA */}
+
+                    <div
+                      style={{
+                        padding: 18,
+                        background:
+                          "#f5f7fa",
+                        borderBottom:
+                          "1px solid #ddd",
+                        display:
+                          "flex",
+                        justifyContent:
+                          "space-between",
+                        alignItems:
+                          "center",
+                        gap: 15,
+                        flexWrap:
+                          "wrap",
+                      }}
+                    >
+
+                      <div>
+
+                        <div
+                          style={{
+                            fontSize:
+                              20,
+                            fontWeight:
+                              700,
+                          }}
+                        >
+                          📅{" "}
+                          {
+                            formatarDataGrupo(
+                              dia
+                            )
+                          }
+                        </div>
+
+                        <div
+                          style={{
+                            marginTop:
+                              5,
+                            color:
+                              "#666",
+                            fontSize:
+                              14,
+                          }}
+                        >
+                          {
+                            vendasDoDia.length
+                          }{" "}
+                          venda
+                          {vendasDoDia.length !==
+                          1
+                            ? "s"
+                            : ""}
+                        </div>
+
+                      </div>
+
+                      <div
+                        style={{
+                          fontSize:
+                            20,
+                          fontWeight:
+                            700,
+                          color:
+                            "#16823b",
+                        }}
+                      >
+                        {dinheiro(
+                          totalDia
+                        )}
+                      </div>
+
+                    </div>
+
+                    {/* MODELOS VENDIDOS */}
+
+                    <div
+                      style={{
+                        padding:
+                          18,
+                      }}
+                    >
+
+                      <h3
+                        style={{
+                          marginTop:
+                            0,
+                          marginBottom:
+                            14,
+                          fontSize:
+                            17,
+                        }}
+                      >
+                        📱 Aparelhos vendidos neste dia
+                      </h3>
+
+                      {
+                        Object.values(
+                          modelosDoDia
+                        ).length ===
+                        0 ? (
+
+                          <p
+                            style={{
+                              color:
+                                "#777",
+                            }}
+                          >
+                            Nenhum aparelho encontrado.
+                          </p>
+
+                        ) : (
+
+                          <div
+                            style={{
+                              display:
+                                "flex",
+                              flexDirection:
+                                "column",
+                              gap:
+                                10,
+                            }}
                           >
 
-                            <td style={td}>
-                              {formatarData(
-                                venda.createdAt ||
-                                  venda.data
-                              )}
-                            </td>
-
-                            <td style={td}>
-                              {venda.cliente ||
-                                "-"}
-                            </td>
-
-                            <td
-                              style={{
-                                ...td,
-                                fontWeight:
-                                  600,
-                              }}
-                            >
-                              {nomeProdutoDoItem(
-                                item
-                              )}
-                            </td>
-
-                            <td
-                              style={{
-                                ...td,
-                                fontSize:
-                                  12,
-                              }}
-                            >
-                              {imeisDoItem(
-                                item
-                              )}
-                            </td>
-
-                            <td style={td}>
-                              {
-                                quantidade
-                              }
-                            </td>
-
-                            <td
-                              style={{
-                                ...td,
-                                fontWeight:
-                                  700,
-                              }}
-                            >
-                              {dinheiro(
-                                subtotal
-                              )}
-                            </td>
-
-                            <td style={td}>
-                              {venda.formaPagamento ||
-                                "-"}
-                            </td>
-
-                            {itemIndex ===
-                            0 ? (
-
-                              <td
-                                rowSpan={
-                                  itensVenda.length
-                                }
-                                style={{
-                                  ...td,
-                                  verticalAlign:
-                                    "middle",
-                                  textAlign:
-                                    "center",
-                                }}
-                              >
-
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    abrirFatura(
-                                      venda
-                                    )
-                                  }
-                                  style={
-                                    invoiceButton
-                                  }
-                                >
-                                  🧾 Fatura
-                                </button>
-
-                              </td>
-
-                            ) : null}
-
-                            {itemIndex ===
-                            0 ? (
-
-                              <td
-                                rowSpan={
-                                  itensVenda.length
-                                }
-                                style={{
-                                  ...td,
-                                  verticalAlign:
-                                    "middle",
-                                }}
-                              >
+                            {Object.values(
+                              modelosDoDia
+                            ).map(
+                              (
+                                modelo
+                              ) => (
 
                                 <div
+                                  key={
+                                    modelo.nome
+                                  }
                                   style={{
-                                    display:
-                                      "flex",
-                                    gap: 6,
-                                    flexDirection:
-                                      "column",
+                                    border:
+                                      "1px solid #eee",
+                                    borderRadius:
+                                      10,
+                                    padding:
+                                      14,
+                                    background:
+                                      "#fafafa",
                                   }}
                                 >
 
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      enviarWhatsApp(
-                                        venda
-                                      )
-                                    }
-                                    style={
-                                      whatsappButton
-                                    }
+                                  <div
+                                    style={{
+                                      display:
+                                        "flex",
+                                      justifyContent:
+                                        "space-between",
+                                      alignItems:
+                                        "center",
+                                      gap:
+                                        15,
+                                      flexWrap:
+                                        "wrap",
+                                    }}
                                   >
-                                    📲 WhatsApp
-                                  </button>
 
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      excluirVenda(
-                                        venda.id
-                                      )
-                                    }
-                                    disabled={
-                                      excluindoVendaId ===
-                                      venda.id
-                                    }
-                                    style={
-                                      deleteButton
-                                    }
-                                  >
-                                    {excluindoVendaId ===
-                                    venda.id
-                                      ? "Excluindo..."
-                                      : "Excluir"}
-                                  </button>
+                                    <div>
+
+                                      <strong
+                                        style={{
+                                          fontSize:
+                                            16,
+                                        }}
+                                      >
+                                        📱{" "}
+                                        {
+                                          modelo.nome
+                                        }
+                                      </strong>
+
+                                      <div
+                                        style={{
+                                          marginTop:
+                                            5,
+                                          color:
+                                            "#555",
+                                        }}
+                                      >
+                                        Quantidade:{" "}
+                                        <strong>
+                                          {
+                                            modelo.quantidade
+                                          }
+                                        </strong>
+                                      </div>
+
+                                    </div>
+
+                                    <strong>
+                                      {dinheiro(
+                                        modelo.total
+                                      )}
+                                    </strong>
+
+                                  </div>
+
+                                  {modelo.imeis.length >
+                                    0 && (
+
+                                    <div
+                                      style={{
+                                        marginTop:
+                                          10,
+                                        paddingTop:
+                                          10,
+                                        borderTop:
+                                          "1px solid #eee",
+                                        fontSize:
+                                          12,
+                                        color:
+                                          "#555",
+                                        wordBreak:
+                                          "break-all",
+                                      }}
+                                    >
+
+                                      <strong>
+                                        IMEI:
+                                      </strong>{" "}
+
+                                      {
+                                        modelo.imeis.join(
+                                          ", "
+                                        )
+                                      }
+
+                                    </div>
+
+                                  )}
 
                                 </div>
 
-                              </td>
+                              )
+                            )}
 
-                            ) : null}
+                          </div>
 
-                          </tr>
-                        );
-                      }
-                    );
-                  }
-                )}
+                        )}
 
-              </tbody>
+                      {/* =====================================
+                          VENDAS INDIVIDUAIS
+                      ===================================== */}
 
-            </table>
+                      <h3
+                        style={{
+                          marginTop:
+                            25,
+                          marginBottom:
+                            14,
+                          fontSize:
+                            17,
+                        }}
+                      >
+                        🧾 Vendas registradas
+                      </h3>
+
+                      <div
+                        style={{
+                          overflowX:
+                            "auto",
+                        }}
+                      >
+
+                        <table
+                          style={{
+                            width:
+                              "100%",
+                            borderCollapse:
+                              "collapse",
+                            minWidth:
+                              900,
+                          }}
+                        >
+
+                          <thead>
+
+                            <tr>
+
+                              <th
+                                style={
+                                  th
+                                }
+                              >
+                                Fatura
+                              </th>
+
+                              <th
+                                style={
+                                  th
+                                }
+                              >
+                                Cliente
+                              </th>
+
+                              <th
+                                style={
+                                  th
+                                }
+                              >
+                                Produtos
+                              </th>
+
+                              <th
+                                style={
+                                  th
+                                }
+                              >
+                                Total
+                              </th>
+
+                              <th
+                                style={
+                                  th
+                                }
+                              >
+                                Pagamento
+                              </th>
+
+                              <th
+                                style={
+                                  th
+                                }
+                              >
+                                Ações
+                              </th>
+
+                            </tr>
+
+                          </thead>
+
+                          <tbody>
+
+                            {vendasDoDia.map(
+                              (
+                                venda
+                              ) => {
+
+                                const itensVenda =
+                                  Array.isArray(
+                                    venda.itens
+                                  )
+                                    ? venda.itens
+                                    : [];
+
+                                return (
+                                  <tr
+                                    key={
+                                      venda.id
+                                    }
+                                  >
+
+                                    <td
+                                      style={
+                                        td
+                                      }
+                                    >
+                                      #
+                                      {String(
+                                        venda.id
+                                      ).padStart(
+                                        6,
+                                        "0"
+                                      )}
+                                    </td>
+
+                                    <td
+                                      style={
+                                        td
+                                      }
+                                    >
+                                      {
+                                        venda.cliente ||
+                                        "-"
+                                      }
+                                    </td>
+
+                                    <td
+                                      style={
+                                        td
+                                      }
+                                    >
+
+                                      {itensVenda.map(
+                                        (
+                                          item: any,
+                                          index: number
+                                        ) => (
+
+                                          <div
+                                            key={
+                                              index
+                                            }
+                                            style={{
+                                              marginBottom:
+                                                5,
+                                            }}
+                                          >
+
+                                            <strong>
+                                              {
+                                                nomeProdutoDoItem(
+                                                  item
+                                                )
+                                              }
+                                            </strong>
+
+                                            {" × "}
+
+                                            {
+                                              item.quantidade
+                                            }
+
+                                          </div>
+
+                                        )
+                                      )}
+
+                                    </td>
+
+                                    <td
+                                      style={{
+                                        ...td,
+                                        fontWeight:
+                                          700,
+                                      }}
+                                    >
+                                      {dinheiro(
+                                        totalDaVenda(
+                                          venda
+                                        )
+                                      )}
+                                    </td>
+
+                                    <td
+                                      style={
+                                        td
+                                      }
+                                    >
+                                      {
+                                        venda.formaPagamento ||
+                                        "-"
+                                      }
+                                    </td>
+
+                                    <td
+                                      style={
+                                        td
+                                      }
+                                    >
+
+                                      <div
+                                        style={{
+                                          display:
+                                            "flex",
+                                          gap:
+                                            6,
+                                          flexWrap:
+                                            "wrap",
+                                        }}
+                                      >
+
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            abrirFatura(
+                                              venda
+                                            )
+                                          }
+                                          style={
+                                            invoiceButton
+                                          }
+                                        >
+                                          🧾 Fatura
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            enviarWhatsApp(
+                                              venda
+                                            )
+                                          }
+                                          style={
+                                            whatsappButton
+                                          }
+                                        >
+                                          📲 WhatsApp
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            excluirVenda(
+                                              venda.id
+                                            )
+                                          }
+                                          disabled={
+                                            excluindoVendaId ===
+                                            venda.id
+                                          }
+                                          style={
+                                            deleteButton
+                                          }
+                                        >
+                                          {excluindoVendaId ===
+                                          venda.id
+                                            ? "Excluindo..."
+                                            : "Excluir"}
+                                        </button>
+
+                                      </div>
+
+                                    </td>
+
+                                  </tr>
+                                );
+                              }
+                            )}
+
+                          </tbody>
+
+                        </table>
+
+                      </div>
+
+                    </div>
+
+                    {/* TOTAL DO DIA */}
+
+                    <div
+                      style={{
+                        padding:
+                          18,
+                        borderTop:
+                          "1px solid #ddd",
+                        background:
+                          "#fafafa",
+                        display:
+                          "flex",
+                        justifyContent:
+                          "flex-end",
+                      }}
+                    >
+
+                      <div
+                        style={{
+                          fontSize:
+                            18,
+                        }}
+                      >
+
+                        <span
+                          style={{
+                            color:
+                              "#555",
+                            marginRight:
+                              10,
+                          }}
+                        >
+                          Total do dia:
+                        </span>
+
+                        <strong
+                          style={{
+                            color:
+                              "#16823b",
+                            fontSize:
+                              22,
+                          }}
+                        >
+                          {dinheiro(
+                            totalDia
+                          )}
+                        </strong>
+
+                      </div>
+
+                    </div>
+
+                  </div>
+                );
+              }
+            )}
 
           </div>
-
         )}
 
       </section>
@@ -2536,91 +3732,168 @@ export default function VendasPage() {
 /* ESTILOS */
 /* ================================================= */
 
-const inputStyle: React.CSSProperties = {
-  display: "block",
-  width: "100%",
-  boxSizing: "border-box",
-  marginTop: 6,
-  padding: "11px 12px",
-  border:
-    "1px solid #d8d8d8",
-  borderRadius: 8,
-  background: "#fff",
-  fontSize: 14,
-};
+const inputStyle: React.CSSProperties =
+  {
+    display: "block",
 
-const blueButton: React.CSSProperties = {
-  border: 0,
-  borderRadius: 8,
-  padding: "10px 14px",
-  background: "#1769e0",
-  color: "#fff",
-  fontWeight: 700,
-  cursor: "pointer",
-  whiteSpace: "nowrap",
-};
+    width: "100%",
 
-const smallBlueButton: React.CSSProperties = {
-  ...blueButton,
-  padding: "7px 11px",
-  fontSize: 13,
-};
+    boxSizing:
+      "border-box",
 
-const blackButton: React.CSSProperties = {
-  border: 0,
-  borderRadius: 8,
-  padding: "10px 16px",
-  background: "#202124",
-  color: "#fff",
-  fontWeight: 700,
-  cursor: "pointer",
-};
+    marginTop: 6,
 
-const invoiceButton: React.CSSProperties = {
-  border: 0,
-  borderRadius: 8,
-  padding: "8px 12px",
-  background: "#1769e0",
-  color: "#fff",
-  fontWeight: 700,
-  cursor: "pointer",
-  whiteSpace: "nowrap",
-};
+    padding:
+      "11px 12px",
 
-const whatsappButton: React.CSSProperties = {
-  border: 0,
-  borderRadius: 8,
-  padding: "8px 12px",
-  background: "#16823b",
-  color: "#fff",
-  fontWeight: 700,
-  cursor: "pointer",
-  whiteSpace: "nowrap",
-};
+    border:
+      "1px solid #d8d8d8",
 
-const deleteButton: React.CSSProperties = {
-  border: 0,
-  borderRadius: 8,
-  padding: "8px 12px",
-  background: "#c62828",
-  color: "#fff",
-  fontWeight: 700,
-  cursor: "pointer",
-  whiteSpace: "nowrap",
-};
+    borderRadius: 8,
 
-const th: React.CSSProperties = {
-  textAlign: "left",
-  padding: 9,
-  borderBottom:
-    "1px solid #ddd",
-  fontSize: 13,
-  background: "#f7f7f7",
-};
+    background: "#fff",
 
-const td: React.CSSProperties = {
-  padding: 9,
-  borderBottom:
-    "1px solid #eee",
-  fontSize: 13,
-};
+    fontSize: 14,
+  };
+
+const blueButton: React.CSSProperties =
+  {
+    border: 0,
+
+    borderRadius: 8,
+
+    padding:
+      "10px 14px",
+
+    background:
+      "#1769e0",
+
+    color: "#fff",
+
+    fontWeight: 700,
+
+    cursor: "pointer",
+
+    whiteSpace:
+      "nowrap",
+  };
+
+const smallBlueButton: React.CSSProperties =
+  {
+    ...blueButton,
+
+    padding:
+      "7px 11px",
+
+    fontSize: 13,
+  };
+
+const blackButton: React.CSSProperties =
+  {
+    border: 0,
+
+    borderRadius: 8,
+
+    padding:
+      "10px 16px",
+
+    background:
+      "#202124",
+
+    color: "#fff",
+
+    fontWeight: 700,
+
+    cursor: "pointer",
+  };
+
+const invoiceButton: React.CSSProperties =
+  {
+    border: 0,
+
+    borderRadius: 8,
+
+    padding:
+      "8px 12px",
+
+    background:
+      "#1769e0",
+
+    color: "#fff",
+
+    fontWeight: 700,
+
+    cursor: "pointer",
+
+    whiteSpace:
+      "nowrap",
+  };
+
+const whatsappButton: React.CSSProperties =
+  {
+    border: 0,
+
+    borderRadius: 8,
+
+    padding:
+      "8px 12px",
+
+    background:
+      "#16823b",
+
+    color: "#fff",
+
+    fontWeight: 700,
+
+    cursor: "pointer",
+
+    whiteSpace:
+      "nowrap",
+  };
+
+const deleteButton: React.CSSProperties =
+  {
+    border: 0,
+
+    borderRadius: 8,
+
+    padding:
+      "8px 12px",
+
+    background:
+      "#c62828",
+
+    color: "#fff",
+
+    fontWeight: 700,
+
+    cursor: "pointer",
+
+    whiteSpace:
+      "nowrap",
+  };
+
+const th: React.CSSProperties =
+  {
+    textAlign: "left",
+
+    padding: 9,
+
+    borderBottom:
+      "1px solid #ddd",
+
+    fontSize: 13,
+
+    background:
+      "#f7f7f7",
+  };
+
+const td: React.CSSProperties =
+  {
+    padding: 9,
+
+    borderBottom:
+      "1px solid #eee",
+
+    fontSize: 13,
+  };

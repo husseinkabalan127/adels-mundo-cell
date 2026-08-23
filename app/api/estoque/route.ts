@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 
 // =====================================================
-// GET — جلب المخزون
+// GET - Buscar estoque completo
 // =====================================================
 
 export async function GET() {
@@ -13,203 +12,298 @@ export async function GET() {
       orderBy: {
         createdAt: "desc",
       },
+
       include: {
+        // =================================================
+        // LOTES
+        // IMPORTANTE:
+        // trazer aparelhos dentro de cada lote
+        // para a página poder usar lote.aparelhos.filter()
+        // =================================================
         lotes: {
           orderBy: {
             createdAt: "desc",
           },
+
           include: {
-            aparelhos: true,
+            aparelhos: {
+              orderBy: {
+                createdAt: "desc",
+              },
+            },
           },
         },
-        aparelhos: true,
+
+        // =================================================
+        // TODOS OS APARELHOS DO PRODUTO
+        // =================================================
+        aparelhos: {
+          orderBy: {
+            createdAt: "desc",
+          },
+        },
       },
     });
 
     return NextResponse.json(produtos);
   } catch (error) {
-    console.error("GET /api/estoque:", error);
+    console.error(
+      "ERRO AO BUSCAR ESTOQUE:",
+      error
+    );
 
     return NextResponse.json(
       {
-        error: "Erro ao carregar estoque.",
+        error:
+          error instanceof Error
+            ? error.message
+            : "Erro ao buscar estoque.",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
 
 // =====================================================
-// POST — إضافة أجهزة للمخزون
+// POST - Cadastrar aparelhos no estoque
 // =====================================================
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    const nome = String(body.nome || "").trim();
+    // =================================================
+    // DADOS
+    // =================================================
+
+    const nome = String(
+      body.nome || ""
+    ).trim();
 
     const fornecedor = String(
       body.fornecedor || ""
     ).trim();
 
     const quantidade = Number(
-      body.quantidade || 1
+      body.quantidade
     );
 
-    // PREÇO USD OPCIONAL
     const precoCompraUsd =
+      body.precoCompraUsd === "" ||
       body.precoCompraUsd === null ||
-      body.precoCompraUsd === undefined ||
-      body.precoCompraUsd === ""
+      body.precoCompraUsd === undefined
         ? null
-        : Number(body.precoCompraUsd);
+        : Number(
+            String(
+              body.precoCompraUsd
+            ).replace(",", ".")
+          );
 
-    const imeis = Array.isArray(body.imeis)
+    const imeis = Array.isArray(
+      body.imeis
+    )
       ? body.imeis
-          .map((item: unknown) =>
-            String(item).trim()
+          .map(
+            (imei: unknown) =>
+              String(imei).trim()
           )
           .filter(Boolean)
       : [];
+
+    // =================================================
+    // VALIDAÇÕES
+    // =================================================
 
     if (!nome) {
       return NextResponse.json(
         {
           error:
-            "Informe o modelo do aparelho.",
+            "Digite o nome do aparelho.",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
-    if (!fornecedor) {
+    if (!Number.isFinite(quantidade)) {
       return NextResponse.json(
         {
           error:
-            "Informe de onde veio o aparelho / fornecedor.",
+            "Digite uma quantidade válida.",
         },
-        { status: 400 }
-      );
-    }
-
-    if (!imeis.length) {
-      return NextResponse.json(
         {
-          error:
-            "Informe pelo menos um IMEI.",
-        },
-        { status: 400 }
-      );
-    }
-
-    // PREÇO USD NÃO É OBRIGATÓRIO
-    if (
-      precoCompraUsd !== null &&
-      (!Number.isFinite(precoCompraUsd) ||
-        precoCompraUsd < 0)
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Preço de compra USD inválido.",
-        },
-        { status: 400 }
+          status: 400,
+        }
       );
     }
 
     if (
-      !Number.isFinite(quantidade) ||
+      !Number.isInteger(
+        quantidade
+      ) ||
       quantidade <= 0
     ) {
       return NextResponse.json(
         {
-          error: "Quantidade inválida.",
+          error:
+            "A quantidade deve ser um número inteiro maior que zero.",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
     // =================================================
-    // IMEI DUPLICADO NA MESMA ENTRADA
+    // IMEI
     // =================================================
 
-    const imeisUnicos = new Set(imeis);
+    if (
+      imeis.length !== quantidade
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "A quantidade de IMEI deve ser igual à quantidade de aparelhos.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
 
     if (
-      imeisUnicos.size !== imeis.length
+      imeis.some(
+        (imei: string) =>
+          !imei
+      )
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Digite o IMEI de todos os aparelhos.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // =================================================
+    // IMEI REPETIDO DENTRO DA MESMA ENTRADA
+    // =================================================
+
+    const imeisUnicos =
+      new Set(imeis);
+
+    if (
+      imeisUnicos.size !==
+      imeis.length
     ) {
       return NextResponse.json(
         {
           error:
             "Não pode haver IMEI repetido.",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
     // =================================================
-    // QUANTIDADE = NÚMERO DE IMEIS
+    // PREÇO USD
     // =================================================
 
-    if (imeis.length !== quantidade) {
+    if (
+      precoCompraUsd !== null &&
+      (
+        !Number.isFinite(
+          precoCompraUsd
+        ) ||
+        precoCompraUsd < 0
+      )
+    ) {
       return NextResponse.json(
         {
           error:
-            "A quantidade de IMEI não corresponde à quantidade informada.",
+            "Preço de compra USD inválido.",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
     // =================================================
-    // VERIFICAR IMEI JÁ EXISTENTE
+    // VERIFICAR IMEI JÁ CADASTRADO
     // =================================================
 
-    const existentes =
+    const aparelhosExistentes =
       await prisma.aparelho.findMany({
         where: {
           imei: {
             in: imeis,
           },
         },
+
         select: {
           imei: true,
         },
       });
 
-    if (existentes.length > 0) {
+    if (
+      aparelhosExistentes.length >
+      0
+    ) {
       const repetidos =
-        existentes.map(
-          (item) => item.imei
-        );
+        aparelhosExistentes
+          .map(
+            (
+              item: {
+                imei: string;
+              }
+            ) => item.imei
+          )
+          .join(", ");
 
       return NextResponse.json(
         {
-          error: `IMEI já cadastrado: ${repetidos.join(
-            ", "
-          )}`,
+          error:
+            `Este(s) IMEI(s) já está(ão) cadastrado(s): ${repetidos}`,
         },
-        { status: 409 }
+        {
+          status: 400,
+        }
       );
     }
 
     // =================================================
-    // SALVAR
+    // TRANSACTION
     // =================================================
 
     const resultado =
       await prisma.$transaction(
-        async (tx) => {
+        async (
+          tx: Prisma.TransactionClient
+        ) => {
+          // =============================================
+          // PROCURAR PRODUTO
+          // =============================================
+
           let produto =
             await tx.produto.findFirst({
               where: {
-                nome: {
-                  equals: nome,
-                  mode: "insensitive",
-                },
+                nome: nome,
               },
             });
+
+          // =============================================
+          // CRIAR PRODUTO SE NÃO EXISTIR
+          // =============================================
 
           if (!produto) {
             produto =
@@ -221,139 +315,253 @@ export async function POST(req: Request) {
               });
           }
 
+          // =============================================
+          // CRIAR LOTE
+          // =============================================
+
           const lote =
             await tx.lote.create({
               data: {
-                fornecedor,
-
-                // Pode ser NULL
+                quantidade,
                 precoCompraUsd,
-
-                quantidade: imeis.length,
-                produtoId: produto.id,
+                fornecedor:
+                  fornecedor || null,
+                produtoId:
+                  produto.id,
               },
             });
 
+          // =============================================
+          // CRIAR APARELHOS / IMEIS
+          // =============================================
+
           await tx.aparelho.createMany({
             data: imeis.map(
-              (imei: string) => ({
+              (
+                imei: string
+              ) => ({
                 imei,
                 vendido: false,
                 loteId: lote.id,
-                produtoId: produto.id,
+                produtoId:
+                  produto.id,
               })
             ),
           });
 
-          await tx.produto.update({
-            where: {
-              id: produto.id,
-            },
-            data: {
-              quantidade: {
-                increment: imeis.length,
+          // =============================================
+          // ATUALIZAR ESTOQUE DO PRODUTO
+          // =============================================
+
+          const produtoAtualizado =
+            await tx.produto.update({
+              where: {
+                id: produto.id,
               },
-            },
-          });
+
+              data: {
+                quantidade: {
+                  increment:
+                    quantidade,
+                },
+              },
+
+              include: {
+                lotes: {
+                  include: {
+                    aparelhos:
+                      true,
+                  },
+                },
+
+                aparelhos: true,
+              },
+            });
+
+          // =============================================
+          // BUSCAR LOTE COMPLETO
+          // =============================================
+
+          const loteCompleto =
+            await tx.lote.findUnique({
+              where: {
+                id: lote.id,
+              },
+
+              include: {
+                aparelhos: true,
+              },
+            });
 
           return {
-            produtoId: produto.id,
-            loteId: lote.id,
-            quantidadeAdicionada:
-              imeis.length,
+            produto:
+              produtoAtualizado,
+
+            lote:
+              loteCompleto,
           };
         }
       );
 
+    // =================================================
+    // RESPOSTA
+    // =================================================
+
     return NextResponse.json(
       {
         success: true,
+
         message:
-          "Aparelho(s) cadastrado(s) com sucesso!",
-        ...resultado,
+          "Aparelhos cadastrados com sucesso!",
+
+        produto:
+          resultado.produto,
+
+        lote:
+          resultado.lote,
       },
-      { status: 201 }
+      {
+        status: 201,
+      }
     );
-  } catch (error: any) {
+  } catch (error) {
     console.error(
-      "POST /api/estoque:",
+      "ERRO AO CADASTRAR APARELHOS:",
       error
     );
-
-    if (error?.code === "P2002") {
-      return NextResponse.json(
-        {
-          error:
-            "Esse IMEI já está cadastrado no sistema.",
-        },
-        { status: 409 }
-      );
-    }
 
     return NextResponse.json(
       {
         error:
-          "Erro ao cadastrar aparelho no estoque.",
+          error instanceof Error
+            ? error.message
+            : "Erro ao cadastrar aparelhos.",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
 
 // =====================================================
-// PATCH — تعديل IMEI أو إضافة سعر USD لاحقًا
+// PATCH
+// =====================================================
+// 1. Atualizar preço de compra USD do lote
+//
+// body:
+// {
+//   action: "atualizarPreco",
+//   loteId: 1,
+//   precoCompraUsd: 850
+// }
+//
+// 2. Trocar IMEI
+//
+// body:
+// {
+//   imeiAntigo: "123456789",
+//   imeiNovo: "987654321"
+// }
 // =====================================================
 
-export async function PATCH(req: Request) {
+export async function PATCH(
+  req: Request
+) {
   try {
-    const body = await req.json();
+    const body =
+      await req.json();
 
     // =================================================
-    // ADICIONAR / ALTERAR PREÇO USD DE UM LOTE
+    // AÇÃO 1 — ATUALIZAR PREÇO USD
     // =================================================
 
     if (
-      body.action === "atualizarPreco"
+      body.action ===
+      "atualizarPreco"
     ) {
-      const loteId = Number(
-        body.loteId
-      );
+      const loteId =
+        Number(
+          body.loteId
+        );
 
       const precoCompraUsd =
-        body.precoCompraUsd === null ||
-        body.precoCompraUsd === undefined ||
-        body.precoCompraUsd === ""
+        body.precoCompraUsd ===
+          null ||
+        body.precoCompraUsd ===
+          undefined ||
+        body.precoCompraUsd ===
+          ""
           ? null
-          : Number(body.precoCompraUsd);
+          : Number(
+              String(
+                body.precoCompraUsd
+              ).replace(
+                ",",
+                "."
+              )
+            );
+
+      // ===============================================
+      // VALIDAR LOTE
+      // ===============================================
 
       if (
-        !Number.isInteger(loteId) ||
+        !Number.isInteger(
+          loteId
+        ) ||
         loteId <= 0
       ) {
         return NextResponse.json(
           {
             error:
-              "Lote inválido.",
+              "ID do lote inválido.",
           },
-          { status: 400 }
+          {
+            status: 400,
+          }
+        );
+      }
+
+      // ===============================================
+      // VALIDAR PREÇO
+      // ===============================================
+
+      if (
+        precoCompraUsd ===
+        null
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Informe o preço de compra USD.",
+          },
+          {
+            status: 400,
+          }
         );
       }
 
       if (
-        precoCompraUsd !== null &&
-        (!Number.isFinite(
+        !Number.isFinite(
           precoCompraUsd
         ) ||
-          precoCompraUsd < 0)
+        precoCompraUsd < 0
       ) {
         return NextResponse.json(
           {
             error:
               "Preço de compra USD inválido.",
           },
-          { status: 400 }
+          {
+            status: 400,
+          }
         );
       }
+
+      // ===============================================
+      // VERIFICAR LOTE
+      // ===============================================
 
       const lote =
         await prisma.lote.findUnique({
@@ -368,39 +576,61 @@ export async function PATCH(req: Request) {
             error:
               "Lote não encontrado.",
           },
-          { status: 404 }
+          {
+            status: 404,
+          }
         );
       }
+
+      // ===============================================
+      // ATUALIZAR PREÇO
+      // ===============================================
 
       const loteAtualizado =
         await prisma.lote.update({
           where: {
             id: loteId,
           },
+
           data: {
             precoCompraUsd,
+          },
+
+          include: {
+            aparelhos: true,
           },
         });
 
       return NextResponse.json({
         success: true,
+
         message:
-          "Preço de compra atualizado com sucesso!",
-        lote: loteAtualizado,
+          "Preço de compra USD atualizado com sucesso.",
+
+        lote:
+          loteAtualizado,
       });
     }
 
     // =================================================
-    // TROCAR IMEI
+    // AÇÃO 2 — TROCAR IMEI
     // =================================================
 
-    const imeiAntigo = String(
-      body.imeiAntigo || ""
-    ).trim();
+    const imeiAntigo =
+      String(
+        body.imeiAntigo ||
+          ""
+      ).trim();
 
-    const imeiNovo = String(
-      body.imeiNovo || ""
-    ).trim();
+    const imeiNovo =
+      String(
+        body.imeiNovo ||
+          ""
+      ).trim();
+
+    // ===============================================
+    // VALIDAR IMEIS
+    // ===============================================
 
     if (!imeiAntigo) {
       return NextResponse.json(
@@ -408,7 +638,9 @@ export async function PATCH(req: Request) {
           error:
             "Informe o IMEI antigo.",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
@@ -418,191 +650,229 @@ export async function PATCH(req: Request) {
           error:
             "Informe o IMEI novo.",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
-    if (imeiAntigo === imeiNovo) {
+    if (
+      imeiAntigo === imeiNovo
+    ) {
       return NextResponse.json(
         {
           error:
-            "O IMEI novo não pode ser igual ao antigo.",
+            "O IMEI novo deve ser diferente do IMEI antigo.",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
-    const aparelhoAntigo =
-      await prisma.aparelho.findUnique({
-        where: {
-          imei: imeiAntigo,
-        },
-        include: {
-          produto: true,
-          lote: true,
-        },
-      });
+    // ===============================================
+    // PROCURAR IMEI ANTIGO
+    // ===============================================
 
-    if (!aparelhoAntigo) {
+    const aparelho =
+      await prisma.aparelho.findUnique(
+        {
+          where: {
+            imei: imeiAntigo,
+          },
+        }
+      );
+
+    if (!aparelho) {
       return NextResponse.json(
         {
           error:
             "IMEI antigo não encontrado.",
         },
-        { status: 404 }
+        {
+          status: 404,
+        }
       );
     }
 
-    if (aparelhoAntigo.vendido) {
+    // ===============================================
+    // NÃO PERMITIR TROCAR IMEI DE APARELHO VENDIDO
+    // ===============================================
+
+    if (
+      aparelho.vendido
+    ) {
       return NextResponse.json(
         {
           error:
-            "Esse aparelho já foi vendido.",
+            "Não é possível trocar o IMEI de um aparelho que já foi vendido.",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
-    const aparelhoNovoExistente =
-      await prisma.aparelho.findUnique({
+    // ===============================================
+    // VERIFICAR IMEI NOVO
+    // ===============================================
+
+    const imeiNovoExistente =
+      await prisma.aparelho.findUnique(
+        {
+          where: {
+            imei: imeiNovo,
+          },
+        }
+      );
+
+    if (
+      imeiNovoExistente
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "O IMEI novo já está cadastrado no estoque.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // ===============================================
+    // TROCAR IMEI
+    // ===============================================
+
+    const aparelhoAtualizado =
+      await prisma.aparelho.update({
         where: {
+          id: aparelho.id,
+        },
+
+        data: {
           imei: imeiNovo,
         },
       });
 
-    if (aparelhoNovoExistente) {
-      return NextResponse.json(
-        {
-          error:
-            "O IMEI novo já está cadastrado no sistema.",
-        },
-        { status: 409 }
-      );
-    }
-
-    const resultado =
-      await prisma.$transaction(
-        async (tx) => {
-          await tx.aparelho.delete({
-            where: {
-              id: aparelhoAntigo.id,
-            },
-          });
-
-          const aparelhoNovo =
-            await tx.aparelho.create({
-              data: {
-                imei: imeiNovo,
-                vendido: false,
-                loteId:
-                  aparelhoAntigo.loteId,
-                produtoId:
-                  aparelhoAntigo.produtoId,
-              },
-            });
-
-          return aparelhoNovo;
-        }
-      );
-
     return NextResponse.json({
       success: true,
+
       message:
-        "Aparelho trocado com sucesso!",
-      aparelho: {
-        id: resultado.id,
-        imei: resultado.imei,
-        produtoId:
-          resultado.produtoId,
-        loteId:
-          resultado.loteId,
-      },
+        "IMEI trocado com sucesso.",
+
+      aparelho:
+        aparelhoAtualizado,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error(
-      "PATCH /api/estoque:",
+      "ERRO NO PATCH DO ESTOQUE:",
       error
     );
-
-    if (error?.code === "P2002") {
-      return NextResponse.json(
-        {
-          error:
-            "O IMEI novo já está cadastrado.",
-        },
-        { status: 409 }
-      );
-    }
 
     return NextResponse.json(
       {
         error:
-          "Erro ao alterar estoque.",
+          error instanceof Error
+            ? error.message
+            : "Erro ao atualizar estoque.",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
 
 // =====================================================
-// DELETE — حذف المنتج مع باسوورد
-// PASSWORD = 11111
+// DELETE - Excluir produto
 // =====================================================
 
-export async function DELETE(req: Request) {
+export async function DELETE(
+  req: Request
+) {
   try {
-    const body = await req.json();
+    const body =
+      await req.json();
 
-    const produtoId = Number(
-      body.produtoId
-    );
+    const produtoId =
+      Number(
+        body.produtoId ??
+          body.id
+      );
 
-    const senha = String(
-      body.senha || ""
-    );
+    const senha =
+      String(
+        body.senha ||
+          ""
+      ).trim();
 
-    const senhaCorreta = "11111";
+    // =================================================
+    // VALIDAR ID
+    // =================================================
 
-    if (!senha) {
+    if (
+      !Number.isInteger(
+        produtoId
+      ) ||
+      produtoId <= 0
+    ) {
       return NextResponse.json(
         {
           error:
-            "Informe a senha.",
+            "ID do produto inválido.",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
-    if (senha !== senhaCorreta) {
+    // =================================================
+    // SENHA
+    // =================================================
+    // IMPORTANTE:
+    // mantenha aqui a mesma senha que você já
+    // estava usando no sistema.
+    // =================================================
+
+    const SENHA_EXCLUSAO =
+      process.env.ESTOQUE_DELETE_PASSWORD ||
+      "1234";
+
+    if (
+      senha !==
+      SENHA_EXCLUSAO
+    ) {
       return NextResponse.json(
         {
           error:
             "Senha incorreta.",
         },
-        { status: 401 }
+        {
+          status: 403,
+        }
       );
     }
 
-    if (!Number.isInteger(produtoId)) {
-      return NextResponse.json(
-        {
-          error:
-            "Produto inválido.",
-        },
-        { status: 400 }
-      );
-    }
+    // =================================================
+    // PROCURAR PRODUTO
+    // =================================================
 
     const produto =
-      await prisma.produto.findUnique({
-        where: {
-          id: produtoId,
-        },
-        include: {
-          aparelhos: true,
-          lotes: true,
-        },
-      });
+      await prisma.produto.findUnique(
+        {
+          where: {
+            id: produtoId,
+          },
+
+          include: {
+            aparelhos: true,
+
+            lotes: true,
+          },
+        }
+      );
 
     if (!produto) {
       return NextResponse.json(
@@ -610,76 +880,108 @@ export async function DELETE(req: Request) {
           error:
             "Produto não encontrado.",
         },
-        { status: 404 }
+        {
+          status: 404,
+        }
       );
     }
 
-    // لا نحذف إذا في جهاز مباع
+    // =================================================
+    // NÃO EXCLUIR PRODUTO COM APARELHO VENDIDO
+    // =================================================
+
     const aparelhoVendido =
       produto.aparelhos.some(
-        (aparelho) =>
+        (
+          aparelho
+        ) =>
           aparelho.vendido
       );
 
-    if (aparelhoVendido) {
+    if (
+      aparelhoVendido
+    ) {
       return NextResponse.json(
         {
           error:
-            "Não é possível excluir este produto porque existe aparelho vendido.",
+            "Não é possível excluir este produto porque existem aparelhos vendidos vinculados a ele.",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
+    // =================================================
+    // EXCLUIR TUDO EM TRANSACTION
+    // =================================================
+
     await prisma.$transaction(
-      async (tx) => {
-        await tx.aparelho.deleteMany({
-          where: {
-            produtoId: produtoId,
-          },
-        });
+      async (
+        tx: Prisma.TransactionClient
+      ) => {
+        // =============================================
+        // APARELHOS
+        // =============================================
 
-        await tx.lote.deleteMany({
-          where: {
-            produtoId: produtoId,
-          },
-        });
+        await tx.aparelho.deleteMany(
+          {
+            where: {
+              produtoId:
+                produtoId,
+            },
+          }
+        );
 
-        await tx.produto.delete({
-          where: {
-            id: produtoId,
-          },
-        });
+        // =============================================
+        // LOTES
+        // =============================================
+
+        await tx.lote.deleteMany(
+          {
+            where: {
+              produtoId:
+                produtoId,
+            },
+          }
+        );
+
+        // =============================================
+        // PRODUTO
+        // =============================================
+
+        await tx.produto.delete(
+          {
+            where: {
+              id: produtoId,
+            },
+          }
+        );
       }
     );
 
     return NextResponse.json({
       success: true,
+
       message:
         "Produto excluído do estoque.",
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error(
-      "DELETE /api/estoque:",
+      "ERRO AO EXCLUIR PRODUTO:",
       error
     );
-
-    if (error?.code === "P2003") {
-      return NextResponse.json(
-        {
-          error:
-            "Não foi possível excluir porque existem registros relacionados.",
-        },
-        { status: 400 }
-      );
-    }
 
     return NextResponse.json(
       {
         error:
-          "Erro ao excluir produto do estoque.",
+          error instanceof Error
+            ? error.message
+            : "Erro ao excluir produto.",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }

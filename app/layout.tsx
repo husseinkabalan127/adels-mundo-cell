@@ -32,7 +32,7 @@ export default function RootLayout({
 
         {/* SIDEBAR */}
 
-        <aside className="fixed left-0 top-0 z-50 h-screen w-64 bg-white border-r shadow-lg">
+        <aside className="fixed left-0 top-0 z-50 h-screen w-64 border-r bg-white shadow-lg">
 
           {/* LOGO */}
 
@@ -51,6 +51,8 @@ export default function RootLayout({
 
             <div className="space-y-2">
 
+              {/* DASHBOARD */}
+
               <Link
                 href="/dashboard"
                 className="flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-gray-700 hover:bg-gray-100"
@@ -58,6 +60,8 @@ export default function RootLayout({
                 <span>📊</span>
                 <span>Dashboard</span>
               </Link>
+
+              {/* ESTOQUE */}
 
               <Link
                 href="/estoque"
@@ -67,6 +71,18 @@ export default function RootLayout({
                 <span>Estoque</span>
               </Link>
 
+              {/* TELEFONES SEM PREÇO */}
+
+              <Link
+                href="/telefones-sem-preco"
+                className="flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-gray-700 hover:bg-gray-100"
+              >
+                <span>🏷️</span>
+                <span>Telefones sem preço</span>
+              </Link>
+
+              {/* VENDAS */}
+
               <Link
                 href="/vendas"
                 className="flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-gray-700 hover:bg-gray-100"
@@ -74,6 +90,18 @@ export default function RootLayout({
                 <span>💰</span>
                 <span>Vendas</span>
               </Link>
+
+              {/* CONTAS A RECEBER */}
+
+              <Link
+                href="/contas-a-receber"
+                className="flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-gray-700 hover:bg-gray-100"
+              >
+                <span>💳</span>
+                <span>Contas a Receber</span>
+              </Link>
+
+              {/* CONSULTA IMEI */}
 
               <Link
                 href="/consulta-imei"
@@ -83,6 +111,8 @@ export default function RootLayout({
                 <span>Consulta IMEI</span>
               </Link>
 
+              {/* ASSISTÊNCIA */}
+
               <Link
                 href="/assistencias"
                 className="flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-gray-700 hover:bg-gray-100"
@@ -90,6 +120,8 @@ export default function RootLayout({
                 <span>🔧</span>
                 <span>Assistência</span>
               </Link>
+
+              {/* RELATÓRIO */}
 
               <Link
                 href="/relatorio"
@@ -107,6 +139,16 @@ export default function RootLayout({
               >
                 <span>⚙️</span>
                 <span>Configurações</span>
+              </Link>
+
+              {/* USUÁRIOS */}
+
+              <Link
+                href="/usuarios"
+                className="flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-gray-700 hover:bg-gray-100"
+              >
+                <span>👥</span>
+                <span>Usuários</span>
               </Link>
 
             </div>

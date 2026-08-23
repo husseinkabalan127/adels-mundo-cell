@@ -12,11 +12,11 @@ type Aparelho = {
 
 type Lote = {
   id: number;
-  fornecedor: string;
+  fornecedor: string | null;
   precoCompraUsd: number | null;
   quantidade: number;
   createdAt: string;
-  aparelhos: Aparelho[];
+  aparelhos?: Aparelho[];
 };
 
 type Produto = {
@@ -24,8 +24,8 @@ type Produto = {
   nome: string;
   quantidade: number;
   createdAt: string;
-  lotes: Lote[];
-  aparelhos: Aparelho[];
+  lotes?: Lote[];
+  aparelhos?: Aparelho[];
 };
 
 export default function EstoquePage() {
@@ -103,7 +103,9 @@ export default function EstoquePage() {
         );
       }
 
-      setProdutos(data);
+      setProdutos(
+        Array.isArray(data) ? data : []
+      );
     } catch (error: any) {
       setErro(
         error.message ||
@@ -164,7 +166,6 @@ export default function EstoquePage() {
 
   // =====================================================
   // ENTER NO IMEI
-  // ADICIONA NOVA LINHA AUTOMATICAMENTE
   // =====================================================
 
   function handleImeiKeyDown(
@@ -180,13 +181,17 @@ export default function EstoquePage() {
     setImeis((lista) => {
       const novaLista = [...lista];
 
-      const imeiAtual = novaLista[index].trim();
+      const imeiAtual =
+        novaLista[index]?.trim();
 
       if (!imeiAtual) {
         return novaLista;
       }
 
-      if (index === novaLista.length - 1) {
+      if (
+        index ===
+        novaLista.length - 1
+      ) {
         novaLista.push("");
 
         setQuantidade(
@@ -258,9 +263,8 @@ export default function EstoquePage() {
       return;
     }
 
-    const imeisUnicos = new Set(
-      imeisLimpos
-    );
+    const imeisUnicos =
+      new Set(imeisLimpos);
 
     if (
       imeisUnicos.size !==
@@ -299,7 +303,8 @@ export default function EstoquePage() {
         }
       );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       if (!response.ok) {
         throw new Error(
@@ -330,7 +335,7 @@ export default function EstoquePage() {
   }
 
   // =====================================================
-  // ADICIONAR / ALTERAR PREÇO USD DEPOIS
+  // ADICIONAR / ALTERAR PREÇO USD
   // =====================================================
 
   function abrirPrecoLote(lote: Lote) {
@@ -347,21 +352,26 @@ export default function EstoquePage() {
   }
 
   async function salvarPrecoLote() {
-    if (lotePrecoAberto === null) {
+    if (
+      lotePrecoAberto === null
+    ) {
       return;
     }
 
     setMensagem("");
     setErro("");
 
-    if (precoLote.trim() === "") {
+    if (
+      precoLote.trim() === ""
+    ) {
       setErro(
         "Informe o preço de compra em USD."
       );
       return;
     }
 
-    const valor = Number(precoLote);
+    const valor =
+      Number(precoLote);
 
     if (
       !Number.isFinite(valor) ||
@@ -389,12 +399,14 @@ export default function EstoquePage() {
               "atualizarPreco",
             loteId:
               lotePrecoAberto,
-            precoCompraUsd: valor,
+            precoCompraUsd:
+              valor,
           }),
         }
       );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       if (!response.ok) {
         throw new Error(
@@ -426,12 +438,16 @@ export default function EstoquePage() {
   // =====================================================
 
   async function excluirProduto() {
-    if (!produtoParaExcluir) {
+    if (
+      !produtoParaExcluir
+    ) {
       return;
     }
 
     if (!senha.trim()) {
-      setErro("Informe a senha.");
+      setErro(
+        "Informe a senha."
+      );
       return;
     }
 
@@ -456,7 +472,8 @@ export default function EstoquePage() {
         }
       );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       if (!response.ok) {
         throw new Error(
@@ -525,7 +542,8 @@ export default function EstoquePage() {
         }
       );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       if (!response.ok) {
         throw new Error(
@@ -562,29 +580,34 @@ export default function EstoquePage() {
   }
 
   // =====================================================
-  // PRODUTOS QUE AINDA POSSUEM APARELHOS
+  // PRODUTOS DISPONÍVEIS
   // =====================================================
 
-  const produtosDisponiveis = produtos.filter(
-    (produto) =>
-      produto.aparelhos.some(
-        (aparelho) => !aparelho.vendido
-      )
-  );
+  const produtosDisponiveis =
+    produtos.filter(
+      (produto) =>
+        (produto.aparelhos || []).some(
+          (aparelho) =>
+            !aparelho.vendido
+        )
+    );
 
   // =====================================================
   // TOTAL ESTOQUE
-  // CONTA SOMENTE APARELHOS NÃO VENDIDOS
   // =====================================================
 
-  const totalEstoque = produtos.reduce(
-    (total, produto) =>
-      total +
-      produto.aparelhos.filter(
-        (aparelho) => !aparelho.vendido
-      ).length,
-    0
-  );
+  const totalEstoque =
+    produtos.reduce(
+      (total, produto) =>
+        total +
+        (produto.aparelhos || [])
+          .filter(
+            (aparelho) =>
+              !aparelho.vendido
+          )
+          .length,
+      0
+    );
 
   // =====================================================
   // TELA
@@ -606,6 +629,7 @@ export default function EstoquePage() {
           margin: "0 auto",
         }}
       >
+
         {/* =================================================
             CABEÇALHO
         ================================================== */}
@@ -717,7 +741,9 @@ export default function EstoquePage() {
           </h2>
 
           <form
-            onSubmit={adicionarEstoque}
+            onSubmit={
+              adicionarEstoque
+            }
           >
             <div
               style={{
@@ -727,6 +753,7 @@ export default function EstoquePage() {
                 gap: "15px",
               }}
             >
+
               {/* MODELO */}
 
               <div>
@@ -742,7 +769,9 @@ export default function EstoquePage() {
                     )
                   }
                   placeholder="Ex: iPhone 17 Pro Max"
-                  style={inputStyle}
+                  style={
+                    inputStyle
+                  }
                 />
               </div>
 
@@ -761,7 +790,9 @@ export default function EstoquePage() {
                     )
                   }
                   placeholder="Fornecedor"
-                  style={inputStyle}
+                  style={
+                    inputStyle
+                  }
                 />
               </div>
 
@@ -775,13 +806,17 @@ export default function EstoquePage() {
                 <input
                   type="number"
                   min="1"
-                  value={quantidade}
+                  value={
+                    quantidade
+                  }
                   onChange={(e) =>
                     alterarQuantidade(
                       e.target.value
                     )
                   }
-                  style={inputStyle}
+                  style={
+                    inputStyle
+                  }
                 />
               </div>
 
@@ -805,7 +840,9 @@ export default function EstoquePage() {
                     )
                   }
                   placeholder="Opcional — pode colocar depois"
-                  style={inputStyle}
+                  style={
+                    inputStyle
+                  }
                 />
 
                 <small
@@ -854,7 +891,10 @@ export default function EstoquePage() {
                 }}
               >
                 {imeis.map(
-                  (imei, index) => (
+                  (
+                    imei,
+                    index
+                  ) => (
                     <input
                       id={`imei-${index}`}
                       key={index}
@@ -872,7 +912,9 @@ export default function EstoquePage() {
                         )
                       }
                       placeholder={`IMEI ${index + 1}`}
-                      style={inputStyle}
+                      style={
+                        inputStyle
+                      }
                     />
                   )
                 )}
@@ -883,13 +925,16 @@ export default function EstoquePage() {
 
             <button
               type="submit"
-              disabled={salvando}
+              disabled={
+                salvando
+              }
               style={{
                 ...primaryButton,
                 marginTop: "20px",
-                opacity: salvando
-                  ? 0.6
-                  : 1,
+                opacity:
+                  salvando
+                    ? 0.6
+                    : 1,
               }}
             >
               {salvando
@@ -930,36 +975,49 @@ export default function EstoquePage() {
             }}
           >
             <input
-              value={imeiAntigo}
+              value={
+                imeiAntigo
+              }
               onChange={(e) =>
                 setImeiAntigo(
                   e.target.value
                 )
               }
               placeholder="IMEI antigo"
-              style={inputStyle}
+              style={
+                inputStyle
+              }
             />
 
             <input
-              value={imeiNovo}
+              value={
+                imeiNovo
+              }
               onChange={(e) =>
                 setImeiNovo(
                   e.target.value
                 )
               }
               placeholder="IMEI novo"
-              style={inputStyle}
+              style={
+                inputStyle
+              }
             />
 
             <button
               type="button"
-              onClick={trocarImei}
-              disabled={trocandoImei}
+              onClick={
+                trocarImei
+              }
+              disabled={
+                trocandoImei
+              }
               style={{
                 ...secondaryButton,
-                opacity: trocandoImei
-                  ? 0.6
-                  : 1,
+                opacity:
+                  trocandoImei
+                    ? 0.6
+                    : 1,
               }}
             >
               {trocandoImei
@@ -985,7 +1043,8 @@ export default function EstoquePage() {
           <h2
             style={{
               marginTop: 0,
-              marginBottom: "20px",
+              marginBottom:
+                "20px",
             }}
           >
             Produtos em estoque
@@ -995,7 +1054,8 @@ export default function EstoquePage() {
             <p>
               Carregando estoque...
             </p>
-          ) : produtosDisponiveis.length === 0 ? (
+          ) : produtosDisponiveis.length ===
+            0 ? (
             <p
               style={{
                 color: "#666",
@@ -1012,27 +1072,43 @@ export default function EstoquePage() {
             >
               {produtosDisponiveis.map(
                 (produto) => {
+
                   const aparelhosDisponiveis =
-                    produto.aparelhos.filter(
-                      (aparelho) =>
+                    (
+                      produto.aparelhos ||
+                      []
+                    ).filter(
+                      (
+                        aparelho
+                      ) =>
                         !aparelho.vendido
                     );
 
+                  const lotes =
+                    produto.lotes ||
+                    [];
+
                   return (
                     <div
-                      key={produto.id}
+                      key={
+                        produto.id
+                      }
                       style={{
                         border:
                           "1px solid #e5e7eb",
-                        borderRadius: "12px",
-                        padding: "20px",
+                        borderRadius:
+                          "12px",
+                        padding:
+                          "20px",
                       }}
                     >
+
                       {/* PRODUTO HEADER */}
 
                       <div
                         style={{
-                          display: "flex",
+                          display:
+                            "flex",
                           justifyContent:
                             "space-between",
                           alignItems:
@@ -1051,7 +1127,9 @@ export default function EstoquePage() {
                                 "21px",
                             }}
                           >
-                            {produto.nome}
+                            {
+                              produto.nome
+                            }
                           </h3>
 
                           <div
@@ -1147,39 +1225,55 @@ export default function EstoquePage() {
                           LOTES
                       ================================================== */}
 
-                      {produto.lotes &&
-                        produto.lotes
-                          .length >
-                          0 && (
-                          <details
+                      {lotes.length >
+                        0 && (
+                        <details
+                          style={{
+                            marginTop:
+                              "18px",
+                          }}
+                        >
+                          <summary
                             style={{
-                              marginTop:
-                                "18px",
+                              cursor:
+                                "pointer",
+                              fontWeight:
+                                700,
                             }}
                           >
-                            <summary
-                              style={{
-                                cursor:
-                                  "pointer",
-                                fontWeight:
-                                  700,
-                              }}
-                            >
-                              Ver compras /
-                              fornecedores
-                            </summary>
+                            Ver compras /
+                            fornecedores
+                          </summary>
 
-                            <div
-                              style={{
-                                marginTop:
-                                  "12px",
-                                display:
-                                  "grid",
-                                gap: "10px",
-                              }}
-                            >
-                              {produto.lotes.map(
-                                (lote) => (
+                          <div
+                            style={{
+                              marginTop:
+                                "12px",
+                              display:
+                                "grid",
+                              gap: "10px",
+                            }}
+                          >
+                            {lotes.map(
+                              (
+                                lote
+                              ) => {
+
+                                const aparelhosDoLote =
+                                  (
+                                    lote.aparelhos ||
+                                    []
+                                  );
+
+                                const aparelhosDisponiveisDoLote =
+                                  aparelhosDoLote.filter(
+                                    (
+                                      aparelho
+                                    ) =>
+                                      !aparelho.vendido
+                                  );
+
+                                return (
                                   <div
                                     key={
                                       lote.id
@@ -1195,6 +1289,7 @@ export default function EstoquePage() {
                                         "1px solid #e5e7eb",
                                     }}
                                   >
+
                                     {/* FORNECEDOR */}
 
                                     <div>
@@ -1202,7 +1297,8 @@ export default function EstoquePage() {
                                         Fornecedor:
                                       </strong>{" "}
                                       {
-                                        lote.fornecedor
+                                        lote.fornecedor ||
+                                        "-"
                                       }
                                     </div>
 
@@ -1218,12 +1314,7 @@ export default function EstoquePage() {
                                         Quantidade:
                                       </strong>{" "}
                                       {
-                                        lote.aparelhos.filter(
-                                          (
-                                            aparelho
-                                          ) =>
-                                            !aparelho.vendido
-                                        ).length
+                                        aparelhosDisponiveisDoLote.length
                                       }
                                     </div>
 
@@ -1335,6 +1426,7 @@ export default function EstoquePage() {
                                               "Enter"
                                             ) {
                                               e.preventDefault();
+
                                               salvarPrecoLote();
                                             }
                                           }}
@@ -1384,6 +1476,7 @@ export default function EstoquePage() {
                                               setLotePrecoAberto(
                                                 null
                                               );
+
                                               setPrecoLote(
                                                 ""
                                               );
@@ -1398,11 +1491,12 @@ export default function EstoquePage() {
                                       </div>
                                     )}
                                   </div>
-                                )
-                              )}
-                            </div>
-                          </details>
-                        )}
+                                );
+                              }
+                            )}
+                          </div>
+                        </details>
+                      )}
                     </div>
                   );
                 }
@@ -1470,7 +1564,9 @@ export default function EstoquePage() {
                   "18px",
               }}
             >
-              {produtoParaExcluir.nome}
+              {
+                produtoParaExcluir.nome
+              }
             </div>
 
             <label>
@@ -1495,7 +1591,8 @@ export default function EstoquePage() {
               }}
               onKeyDown={(e) => {
                 if (
-                  e.key === "Enter"
+                  e.key ===
+                  "Enter"
                 ) {
                   excluirProduto();
                 }
@@ -1514,6 +1611,7 @@ export default function EstoquePage() {
                   setProdutoParaExcluir(
                     null
                   );
+
                   setSenha("");
                 }}
                 style={{
@@ -1529,7 +1627,9 @@ export default function EstoquePage() {
                 onClick={
                   excluirProduto
                 }
-                disabled={excluindo}
+                disabled={
+                  excluindo
+                }
                 style={{
                   ...deleteButton,
                   flex: 1,
@@ -1561,7 +1661,8 @@ const inputStyle: React.CSSProperties =
     boxSizing: "border-box",
     padding: "12px",
     marginTop: "7px",
-    border: "1px solid #d1d5db",
+    border:
+      "1px solid #d1d5db",
     borderRadius: "8px",
     fontSize: "15px",
     outline: "none",
@@ -1604,7 +1705,8 @@ const deleteButton: React.CSSProperties =
 
 const cancelButton: React.CSSProperties =
   {
-    border: "1px solid #d1d5db",
+    border:
+      "1px solid #d1d5db",
     background: "#fff",
     color: "#333",
     padding: "10px 15px",

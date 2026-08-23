@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 // =====================================================
@@ -11,12 +12,14 @@ export async function GET() {
       orderBy: {
         createdAt: "desc",
       },
+
       include: {
         lotes: {
           orderBy: {
             createdAt: "desc",
           },
         },
+
         aparelhos: {
           orderBy: {
             createdAt: "desc",
@@ -56,18 +59,32 @@ export async function POST(req: Request) {
 
     const quantidade = Number(body.quantidade);
 
-    // Preço de compra é OPCIONAL
+    // =================================================
+    // PREÇO DE COMPRA USD - OPCIONAL
+    // =================================================
+
     const precoCompraUsd =
       body.precoCompraUsd === "" ||
       body.precoCompraUsd === null ||
       body.precoCompraUsd === undefined
         ? null
-        : Number(body.precoCompraUsd);
+        : Number(
+            String(body.precoCompraUsd).replace(
+              ",",
+              "."
+            )
+          );
+
+    // =================================================
+    // IMEIS
+    // =================================================
 
     const imeis = Array.isArray(body.imeis)
-      ? body.imeis.map((imei: unknown) =>
-          String(imei).trim()
-        )
+      ? body.imeis
+          .map((imei: unknown) =>
+            String(imei).trim()
+          )
+          .filter(Boolean)
       : [];
 
     // =================================================
@@ -77,7 +94,8 @@ export async function POST(req: Request) {
     if (!nome) {
       return NextResponse.json(
         {
-          error: "Digite o nome do aparelho.",
+          error:
+            "Digite o nome do aparelho.",
         },
         {
           status: 400,
@@ -85,10 +103,14 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!quantidade || quantidade <= 0) {
+    if (
+      !Number.isInteger(quantidade) ||
+      quantidade <= 0
+    ) {
       return NextResponse.json(
         {
-          error: "Digite uma quantidade válida.",
+          error:
+            "Digite uma quantidade válida.",
         },
         {
           status: 400,
@@ -96,7 +118,10 @@ export async function POST(req: Request) {
       );
     }
 
+    // =================================================
     // IMEI É OBRIGATÓRIO
+    // =================================================
+
     if (imeis.length !== quantidade) {
       return NextResponse.json(
         {
@@ -109,8 +134,15 @@ export async function POST(req: Request) {
       );
     }
 
-    // Nenhum IMEI pode ficar vazio
-    if (imeis.some((imei: string) => !imei)) {
+    // =================================================
+    // NENHUM IMEI VAZIO
+    // =================================================
+
+    if (
+      imeis.some(
+        (imei: string) => !imei
+      )
+    ) {
       return NextResponse.json(
         {
           error:
@@ -122,10 +154,15 @@ export async function POST(req: Request) {
       );
     }
 
-    // Não permitir IMEI repetido
+    // =================================================
+    // IMEI REPETIDO NA MESMA ENTRADA
+    // =================================================
+
     const imeisUnicos = new Set(imeis);
 
-    if (imeisUnicos.size !== imeis.length) {
+    if (
+      imeisUnicos.size !== imeis.length
+    ) {
       return NextResponse.json(
         {
           error:
@@ -137,10 +174,15 @@ export async function POST(req: Request) {
       );
     }
 
-    // Se preço foi informado, precisa ser válido
+    // =================================================
+    // VALIDAR PREÇO USD
+    // =================================================
+
     if (
       precoCompraUsd !== null &&
-      (!Number.isFinite(precoCompraUsd) ||
+      (!Number.isFinite(
+        precoCompraUsd
+      ) ||
         precoCompraUsd < 0)
     ) {
       return NextResponse.json(
@@ -165,15 +207,22 @@ export async function POST(req: Request) {
             in: imeis,
           },
         },
+
         select: {
           imei: true,
         },
       });
 
-    if (aparelhosExistentes.length > 0) {
+    if (
+      aparelhosExistentes.length > 0
+    ) {
       const repetidos =
         aparelhosExistentes
-          .map((item) => item.imei)
+          .map(
+            (item: {
+              imei: string;
+            }) => item.imei
+          )
           .join(", ");
 
       return NextResponse.json(
@@ -192,83 +241,123 @@ export async function POST(req: Request) {
     // =================================================
 
     const resultado =
-      await prisma.$transaction(async (tx) => {
-        let produto =
-          await tx.produto.findFirst({
-            where: {
-              nome: {
-                equals: nome,
-                mode: "insensitive",
-              },
-            },
-          });
+      await prisma.$transaction(
+        async (
+          tx: Prisma.TransactionClient
+        ) => {
 
-        // Se o modelo ainda não existe,
-        // criar um novo produto
-        if (!produto) {
-          produto =
-            await tx.produto.create({
-              data: {
-                nome,
-                quantidade: 0,
+          // =================================================
+          // PROCURAR MODELO
+          // =================================================
+
+          let produto =
+            await tx.produto.findFirst({
+              where: {
+                nome: nome,
               },
             });
-        }
 
-        // =================================================
-        // CRIAR LOTE
-        // =================================================
+          // =================================================
+          // PROCURAR IGNORANDO MAIÚSCULAS/MINÚSCULAS
+          // =================================================
 
-        const lote = await tx.lote.create({
-          data: {
-            quantidade,
-            precoCompraUsd,
-            fornecedor:
-              fornecedor || null,
-            produtoId: produto.id,
-          },
-        });
+          if (!produto) {
+            const produtos =
+              await tx.produto.findMany();
 
-        // =================================================
-        // CRIAR APARELHOS / IMEIs
-        // =================================================
+            produto =
+              produtos.find(
+                (item) =>
+                  item.nome.trim().toLowerCase() ===
+                  nome.trim().toLowerCase()
+              ) || null;
+          }
 
-        await tx.aparelho.createMany({
-          data: imeis.map(
-            (imei: string) => ({
-              imei,
-              vendido: false,
-              loteId: lote.id,
-              produtoId: produto!.id,
-            })
-          ),
-        });
+          // =================================================
+          // SE O MODELO AINDA NÃO EXISTE,
+          // CRIAR NOVO PRODUTO
+          // =================================================
 
-        // =================================================
-        // ATUALIZAR ESTOQUE
-        // =================================================
+          if (!produto) {
+            produto =
+              await tx.produto.create({
+                data: {
+                  nome,
+                  quantidade: 0,
+                },
+              });
+          }
 
-        const produtoAtualizado =
-          await tx.produto.update({
-            where: {
-              id: produto.id,
-            },
-            data: {
-              quantidade: {
-                increment: quantidade,
+          // =================================================
+          // CRIAR LOTE
+          // =================================================
+
+          const lote =
+            await tx.lote.create({
+              data: {
+                quantidade,
+
+                precoCompraUsd,
+
+                fornecedor:
+                  fornecedor || null,
+
+                produtoId:
+                  produto.id,
               },
-            },
-            include: {
-              lotes: true,
-              aparelhos: true,
-            },
+            });
+
+          // =================================================
+          // CRIAR APARELHOS / IMEIS
+          // =================================================
+
+          await tx.aparelho.createMany({
+            data: imeis.map(
+              (imei: string) => ({
+                imei,
+
+                vendido: false,
+
+                loteId: lote.id,
+
+                produtoId:
+                  produto.id,
+              })
+            ),
           });
 
-        return {
-          produto: produtoAtualizado,
-          lote,
-        };
-      });
+          // =================================================
+          // ATUALIZAR ESTOQUE
+          // =================================================
+
+          const produtoAtualizado =
+            await tx.produto.update({
+              where: {
+                id: produto.id,
+              },
+
+              data: {
+                quantidade: {
+                  increment:
+                    quantidade,
+                },
+              },
+
+              include: {
+                lotes: true,
+
+                aparelhos: true,
+              },
+            });
+
+          return {
+            produto:
+              produtoAtualizado,
+
+            lote,
+          };
+        }
+      );
 
     // =================================================
     // RESPOSTA
@@ -277,10 +366,15 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         success: true,
+
         message:
           "Aparelhos cadastrados com sucesso!",
-        produto: resultado.produto,
-        lote: resultado.lote,
+
+        produto:
+          resultado.produto,
+
+        lote:
+          resultado.lote,
       },
       {
         status: 201,

@@ -2,15 +2,16 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 // =====================================================
-// GET — جلب كل المبيعات
+// GET — JUNTAR TODAS AS VENDAS
 // =====================================================
 
 export async function GET() {
   try {
     const vendas = await prisma.venda.findMany({
       orderBy: {
-        createdAt: "desc",
+        dataVenda: "desc",
       },
+
       include: {
         itens: {
           include: {
@@ -18,16 +19,122 @@ export async function GET() {
             aparelhos: true,
           },
         },
+
+        pagamentos: {
+          orderBy: {
+            createdAt: "asc",
+          },
+        },
       },
     });
 
-    return NextResponse.json(vendas);
+    // =================================================
+    // PREPARAR DADOS PARA O DASHBOARD
+    // =================================================
+
+    const vendasPreparadas = vendas.map((venda) => {
+      // ------------------------------------------------
+      // TOTAL DA VENDA
+      // ------------------------------------------------
+
+      const valorVenda = venda.itens.reduce(
+        (total, item) => {
+          return (
+            total +
+            Number(item.total || 0)
+          );
+        },
+        0
+      );
+
+      // ------------------------------------------------
+      // QUANTIDADE DE APARELHOS
+      // ------------------------------------------------
+
+      const quantidade = venda.itens.reduce(
+        (total, item) => {
+          return (
+            total +
+            Number(item.quantidade || 0)
+          );
+        },
+        0
+      );
+
+      // ------------------------------------------------
+      // CUSTO TOTAL EM USD
+      // ------------------------------------------------
+
+      const custoTotalUsd =
+        venda.itens.reduce(
+          (total, item) => {
+            return (
+              total +
+              Number(item.custoTotal || 0)
+            );
+          },
+          0
+        );
+
+      // ------------------------------------------------
+      // TAXA DA VENDA
+      // ------------------------------------------------
+
+      const taxa =
+        venda.taxa !== null &&
+        venda.taxa !== undefined
+          ? Number(venda.taxa)
+          : null;
+
+      // ------------------------------------------------
+      // CUSTO EM REAIS
+      // ------------------------------------------------
+
+      const custoTotalReais =
+        taxa !== null &&
+        Number.isFinite(taxa)
+          ? custoTotalUsd * taxa
+          : 0;
+
+      // ------------------------------------------------
+      // LUCRO
+      // ------------------------------------------------
+
+      const lucro =
+        taxa !== null &&
+        Number.isFinite(taxa)
+          ? valorVenda - custoTotalReais
+          : 0;
+
+      return {
+        ...venda,
+
+        // Campos usados pelo Dashboard
+        valorVenda,
+
+        quantidade,
+
+        custoTotalUsd,
+
+        custoTotalReais,
+
+        lucro,
+      };
+    });
+
+    return NextResponse.json(
+      vendasPreparadas
+    );
   } catch (error) {
-    console.error("ERRO AO BUSCAR VENDAS:", error);
+    console.error(
+      "ERRO AO BUSCAR VENDAS:",
+      error
+    );
 
     return NextResponse.json(
       {
-        error: "Erro ao buscar vendas.",
+        error:
+          "Erro ao buscar vendas.",
       },
       {
         status: 500,
@@ -44,8 +151,78 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    const cliente =
-      String(body.cliente || "").trim();
+    const cliente = String(
+      body.cliente || ""
+    ).trim();
+
+    // =================================================
+    // DATA DA VENDA
+    // =================================================
+
+    let dataVenda = new Date();
+
+    if (body.dataVenda) {
+      const dataTexto = String(
+        body.dataVenda
+      ).trim();
+
+      if (
+        !/^\d{4}-\d{2}-\d{2}$/.test(
+          dataTexto
+        )
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Data da venda inválida.",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      const [
+        ano,
+        mes,
+        dia,
+      ] = dataTexto
+        .split("-")
+        .map(Number);
+
+      dataVenda = new Date(
+        ano,
+        mes - 1,
+        dia,
+        12,
+        0,
+        0,
+        0
+      );
+
+      if (
+        dataVenda.getFullYear() !==
+          ano ||
+        dataVenda.getMonth() !==
+          mes - 1 ||
+        dataVenda.getDate() !==
+          dia
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Data da venda inválida.",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+    }
+
+    // =================================================
+    // TAXA
+    // =================================================
 
     const taxa =
       body.taxa === null ||
@@ -53,10 +230,19 @@ export async function POST(req: Request) {
       body.taxa === ""
         ? null
         : Number(
-            String(body.taxa).replace(",", ".")
+            String(body.taxa).replace(
+              ",",
+              "."
+            )
           );
 
-    const itens = Array.isArray(body.itens)
+    // =================================================
+    // ITENS
+    // =================================================
+
+    const itens = Array.isArray(
+      body.itens
+    )
       ? body.itens
       : [];
 
@@ -64,10 +250,10 @@ export async function POST(req: Request) {
     // VALIDAÇÕES
     // =================================================
 
-    // Cliente é opcional
     if (
       taxa !== null &&
-      (!Number.isFinite(taxa) || taxa < 0)
+      (!Number.isFinite(taxa) ||
+        taxa < 0)
     ) {
       return NextResponse.json(
         {
@@ -92,106 +278,157 @@ export async function POST(req: Request) {
     }
 
     // =================================================
-    // VALIDAR ITENS
+    // PREPARAR ITENS
     // =================================================
 
-    const itensPreparados = itens.map(
-      (item: any, index: number) => {
-        const produtoId = Number(
-          item.produtoId
-        );
+    const itensPreparados =
+      itens.map(
+        (
+          item: any,
+          index: number
+        ) => {
+          const produtoId =
+            Number(
+              item.produtoId
+            );
 
-        const quantidade = Number(
-          item.quantidade
-        );
+          const quantidade =
+            Number(
+              item.quantidade
+            );
 
-        const valorUnitario = Number(
-          String(
-            item.valorUnitario
-          ).replace(",", ".")
-        );
-
-        const imeis = Array.isArray(
-          item.imeis
-        )
-          ? item.imeis
-              .map((imei: unknown) =>
-                String(imei).trim()
+          const valorUnitario =
+            Number(
+              String(
+                item.valorUnitario
+              ).replace(
+                ",",
+                "."
               )
-              .filter(Boolean)
-          : [];
+            );
 
-        if (
-          !Number.isInteger(produtoId) ||
-          produtoId <= 0
-        ) {
-          throw new Error(
-            `Produto inválido no item ${index + 1}.`
-          );
+          const imeis =
+            Array.isArray(
+              item.imeis
+            )
+              ? item.imeis
+                  .map(
+                    (
+                      imei: unknown
+                    ) =>
+                      String(
+                        imei
+                      ).trim()
+                  )
+                  .filter(Boolean)
+              : [];
+
+          // -------------------------------------------
+          // PRODUTO
+          // -------------------------------------------
+
+          if (
+            !Number.isInteger(
+              produtoId
+            ) ||
+            produtoId <= 0
+          ) {
+            throw new Error(
+              `Produto inválido no item ${
+                index + 1
+              }.`
+            );
+          }
+
+          // -------------------------------------------
+          // QUANTIDADE
+          // -------------------------------------------
+
+          if (
+            !Number.isInteger(
+              quantidade
+            ) ||
+            quantidade <= 0
+          ) {
+            throw new Error(
+              `Quantidade inválida no item ${
+                index + 1
+              }.`
+            );
+          }
+
+          // -------------------------------------------
+          // PREÇO
+          // -------------------------------------------
+
+          if (
+            !Number.isFinite(
+              valorUnitario
+            ) ||
+            valorUnitario < 0
+          ) {
+            throw new Error(
+              `Preço de venda inválido no item ${
+                index + 1
+              }.`
+            );
+          }
+
+          // -------------------------------------------
+          // IMEI
+          // -------------------------------------------
+
+          if (
+            imeis.length !==
+            quantidade
+          ) {
+            throw new Error(
+              `A quantidade de IMEI do item ${
+                index + 1
+              } não corresponde à quantidade.`
+            );
+          }
+
+          // -------------------------------------------
+          // IMEI REPETIDO
+          // -------------------------------------------
+
+          const imeisUnicos =
+            new Set(imeis);
+
+          if (
+            imeisUnicos.size !==
+            imeis.length
+          ) {
+            throw new Error(
+              `Não pode haver IMEI repetido no item ${
+                index + 1
+              }.`
+            );
+          }
+
+          return {
+            produtoId,
+            quantidade,
+            valorUnitario,
+            imeis,
+          };
         }
+      );
 
-        if (
-          !Number.isInteger(quantidade) ||
-          quantidade <= 0
-        ) {
-          throw new Error(
-            `Quantidade inválida no item ${index + 1}.`
-          );
-        }
-
-        if (
-          !Number.isFinite(
-            valorUnitario
-          ) ||
-          valorUnitario < 0
-        ) {
-          throw new Error(
-            `Preço de venda inválido no item ${index + 1}.`
-          );
-        }
-
-        // Cada aparelho vendido precisa ter IMEI
-        if (imeis.length !== quantidade) {
-          throw new Error(
-            `A quantidade de IMEI do item ${index + 1} não corresponde à quantidade.`
-          );
-        }
-
-        // Não repetir IMEI dentro do mesmo item
-        const imeisUnicos = new Set(
-          imeis
-        );
-
-        if (
-          imeisUnicos.size !==
-          imeis.length
-        ) {
-          throw new Error(
-            `Não pode haver IMEI repetido no item ${index + 1}.`
-          );
-        }
-
-        return {
-          produtoId,
-          quantidade,
-          valorUnitario,
-          imeis,
-        };
-      }
-    );
-
-    // =================================================
-    // NÃO PERMITIR O MESMO IMEI EM DOIS ITENS
-    // =================================================
+    // =====================================================
+    // NÃO PERMITIR MESMO IMEI EM DOIS ITENS
+    // =====================================================
 
     const todosImeis =
       itensPreparados.flatMap(
-        (item: any) => item.imeis
+        (item: {
+          imeis: string[];
+        }) => item.imeis
       );
 
-    const imeisUnicos = new Set(
-      todosImeis
-    );
+    const imeisUnicos =
+      new Set(todosImeis);
 
     if (
       imeisUnicos.size !==
@@ -208,49 +445,72 @@ export async function POST(req: Request) {
       );
     }
 
-    // =================================================
+    // =====================================================
     // TRANSACTION
-    // =================================================
+    // =====================================================
 
     const resultado =
       await prisma.$transaction(
-        async (tx) => {
-          // ---------------------------------------------
-          // Criar venda
-          // ---------------------------------------------
+        async (tx: any) => {
+          // -------------------------------------------
+          // CRIAR VENDA
+          // -------------------------------------------
 
           const venda =
             await tx.venda.create({
               data: {
                 cliente,
+
                 taxa,
+
                 taxaFechada: false,
+
+                dataVenda,
+
+                formaPagamento:
+                  "Não informado",
+
+                estadoFatura:
+                  "Em aberto",
+
+                desconto: 0,
               },
             });
 
           let totalVenda = 0;
 
-          // ---------------------------------------------
-          // Processar cada produto
-          // ---------------------------------------------
+          // -------------------------------------------
+          // PROCESSAR CADA ITEM
+          // -------------------------------------------
 
-          for (const item of itensPreparados) {
+          for (
+            const item of
+              itensPreparados
+          ) {
+            // -----------------------------------------
+            // BUSCAR PRODUTO
+            // -----------------------------------------
+
             const produto =
-              await tx.produto.findUnique({
-                where: {
-                  id: item.produtoId,
-                },
-                include: {
-                  aparelhos: {
-                    where: {
-                      vendido: false,
-                    },
-                    include: {
-                      lote: true,
+              await tx.produto.findUnique(
+                {
+                  where: {
+                    id: item.produtoId,
+                  },
+
+                  include: {
+                    aparelhos: {
+                      where: {
+                        vendido: false,
+                      },
+
+                      include: {
+                        lote: true,
+                      },
                     },
                   },
-                },
-              });
+                }
+              );
 
             if (!produto) {
               throw new Error(
@@ -258,9 +518,9 @@ export async function POST(req: Request) {
               );
             }
 
-            // -------------------------------------------
-            // Conferir estoque
-            // -------------------------------------------
+            // -----------------------------------------
+            // CONFERIR ESTOQUE
+            // -----------------------------------------
 
             if (
               produto.quantidade <
@@ -271,24 +531,33 @@ export async function POST(req: Request) {
               );
             }
 
-            // -------------------------------------------
-            // Procurar IMEIs
-            // -------------------------------------------
+            // -----------------------------------------
+            // BUSCAR IMEIS
+            // -----------------------------------------
 
             const aparelhos =
-              await tx.aparelho.findMany({
-                where: {
-                  imei: {
-                    in: item.imeis,
+              await tx.aparelho.findMany(
+                {
+                  where: {
+                    imei: {
+                      in: item.imeis,
+                    },
+
+                    produtoId:
+                      item.produtoId,
+
+                    vendido: false,
                   },
-                  produtoId:
-                    item.produtoId,
-                  vendido: false,
-                },
-                include: {
-                  lote: true,
-                },
-              });
+
+                  include: {
+                    lote: true,
+                  },
+                }
+              );
+
+            // -----------------------------------------
+            // CONFERIR IMEIS
+            // -----------------------------------------
 
             if (
               aparelhos.length !==
@@ -299,26 +568,35 @@ export async function POST(req: Request) {
               );
             }
 
-            // -------------------------------------------
-            // Calcular custo USD
-            // -------------------------------------------
+            // -----------------------------------------
+            // CALCULAR CUSTO USD
+            // -----------------------------------------
 
             let custoTotal = 0;
 
-            for (const aparelho of aparelhos) {
+            for (
+              const aparelho of
+                aparelhos
+            ) {
               if (
                 aparelho.lote
-                  .precoCompraUsd !==
-                null &&
+                  ?.precoCompraUsd !==
+                  null &&
                 aparelho.lote
-                  .precoCompraUsd !==
-                undefined
+                  ?.precoCompraUsd !==
+                  undefined
               ) {
                 custoTotal +=
-                  aparelho.lote
-                    .precoCompraUsd;
+                  Number(
+                    aparelho.lote
+                      .precoCompraUsd
+                  );
               }
             }
+
+            // -----------------------------------------
+            // TOTAL DO ITEM
+            // -----------------------------------------
 
             const total =
               item.quantidade *
@@ -326,65 +604,77 @@ export async function POST(req: Request) {
 
             totalVenda += total;
 
-            // -------------------------------------------
-            // Criar item da venda
-            // -------------------------------------------
+            // -----------------------------------------
+            // CRIAR ITEM DA VENDA
+            // -----------------------------------------
 
             const vendaItem =
-              await tx.vendaItem.create({
-                data: {
-                  quantidade:
-                    item.quantidade,
+              await tx.vendaItem.create(
+                {
+                  data: {
+                    quantidade:
+                      item.quantidade,
 
-                  valorUnitario:
-                    item.valorUnitario,
+                    valorUnitario:
+                      item.valorUnitario,
 
-                  total,
+                    total,
 
-                  precoCompraUsd:
-                    item.quantidade > 0
-                      ? custoTotal /
-                        item.quantidade
-                      : null,
+                    precoCompraUsd:
+                      item.quantidade >
+                      0
+                        ? custoTotal /
+                          item.quantidade
+                        : null,
 
-                  custoTotal:
                     custoTotal,
 
-                  vendaId: venda.id,
+                    vendaId:
+                      venda.id,
 
-                  produtoId:
-                    item.produtoId,
+                    produtoId:
+                      item.produtoId,
+                  },
+                }
+              );
+
+            // -----------------------------------------
+            // MARCAR APARELHOS COMO VENDIDOS
+            // -----------------------------------------
+
+            await tx.aparelho.updateMany(
+              {
+                where: {
+                  id: {
+                    in: aparelhos.map(
+                      (
+                        aparelho: {
+                          id: number;
+                        }
+                      ) =>
+                        aparelho.id
+                    ),
+                  },
                 },
-              });
 
-            // -------------------------------------------
-            // Marcar aparelhos como vendidos
-            // -------------------------------------------
+                data: {
+                  vendido: true,
 
-            await tx.aparelho.updateMany({
-              where: {
-                id: {
-                  in: aparelhos.map(
-                    (aparelho) =>
-                      aparelho.id
-                  ),
+                  vendaItemId:
+                    vendaItem.id,
                 },
-              },
-              data: {
-                vendido: true,
-                vendaItemId:
-                  vendaItem.id,
-              },
-            });
+              }
+            );
 
-            // -------------------------------------------
-            // Diminuir estoque
-            // -------------------------------------------
+            // -----------------------------------------
+            // DIMINUIR ESTOQUE
+            // -----------------------------------------
 
             await tx.produto.update({
               where: {
                 id: produto.id,
               },
+
               data: {
                 quantidade: {
                   decrement:
@@ -394,44 +684,62 @@ export async function POST(req: Request) {
             });
           }
 
-          // ---------------------------------------------
-          // Retornar venda completa
-          // ---------------------------------------------
+          // -------------------------------------------
+          // BUSCAR VENDA COMPLETA
+          // -------------------------------------------
 
           const vendaCompleta =
-            await tx.venda.findUnique({
-              where: {
-                id: venda.id,
-              },
-              include: {
-                itens: {
-                  include: {
-                    produto: true,
-                    aparelhos: true,
+            await tx.venda.findUnique(
+              {
+                where: {
+                  id: venda.id,
+                },
+
+                include: {
+                  itens: {
+                    include: {
+                      produto: true,
+                      aparelhos: true,
+                    },
+                  },
+
+                  pagamentos: {
+                    orderBy: {
+                      createdAt:
+                        "asc",
+                    },
                   },
                 },
-              },
-            });
+              }
+            );
 
           return {
-            venda: vendaCompleta,
+            venda:
+              vendaCompleta,
+
             totalVenda,
           };
         }
       );
 
+    // =================================================
+    // RESPOSTA
+    // =================================================
+
     return NextResponse.json(
       {
         success: true,
+
         message:
           "Venda registrada com sucesso!",
+
         ...resultado,
       },
       {
         status: 201,
       }
     );
-  } catch (error: any) {
+  } catch (error) {
     console.error(
       "ERRO AO CRIAR VENDA:",
       error
@@ -440,8 +748,9 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         error:
-          error?.message ||
-          "Erro ao registrar venda.",
+          error instanceof Error
+            ? error.message
+            : "Erro ao registrar venda.",
       },
       {
         status: 400,
@@ -451,21 +760,25 @@ export async function POST(req: Request) {
 }
 
 // =====================================================
-// DELETE — CANCELAR VENDA E DEVOLVER AO ESTOQUE
+// DELETE — CANCELAR VENDA
 // =====================================================
 
 export async function DELETE(
   req: Request
 ) {
   try {
-    const body = await req.json();
+    const body =
+      await req.json();
 
     const vendaId = Number(
-      body.vendaId ?? body.id
+      body.vendaId ??
+        body.id
     );
 
     if (
-      !Number.isInteger(vendaId) ||
+      !Number.isInteger(
+        vendaId
+      ) ||
       vendaId <= 0
     ) {
       return NextResponse.json(
@@ -479,25 +792,28 @@ export async function DELETE(
       );
     }
 
-    // =================================================
-    // TRANSACTION
-    // =================================================
-
     await prisma.$transaction(
-      async (tx) => {
+      async (tx: any) => {
+        // -------------------------------------------
+        // BUSCAR VENDA
+        // -------------------------------------------
+
         const venda =
-          await tx.venda.findUnique({
-            where: {
-              id: vendaId,
-            },
-            include: {
-              itens: {
-                include: {
-                  aparelhos: true,
+          await tx.venda.findUnique(
+            {
+              where: {
+                id: vendaId,
+              },
+
+              include: {
+                itens: {
+                  include: {
+                    aparelhos: true,
+                  },
                 },
               },
-            },
-          });
+            }
+          );
 
         if (!venda) {
           throw new Error(
@@ -505,56 +821,76 @@ export async function DELETE(
           );
         }
 
-        // ---------------------------------------------
-        // Devolver aparelhos ao estoque
-        // ---------------------------------------------
+        // -------------------------------------------
+        // DEVOLVER APARELHOS AO ESTOQUE
+        // -------------------------------------------
 
-        for (const item of venda.itens) {
+        for (
+          const item of
+            venda.itens
+        ) {
           const quantidade =
             item.aparelhos.length;
 
-          if (quantidade > 0) {
-            await tx.aparelho.updateMany({
-              where: {
-                id: {
-                  in: item.aparelhos.map(
-                    (aparelho) =>
-                      aparelho.id
-                  ),
+          if (
+            quantidade > 0
+          ) {
+            await tx.aparelho.updateMany(
+              {
+                where: {
+                  id: {
+                    in: item.aparelhos.map(
+                      (
+                        aparelho: {
+                          id: number;
+                        }
+                      ) =>
+                        aparelho.id
+                    ),
+                  },
                 },
-              },
-              data: {
-                vendido: false,
-                vendaItemId: null,
-              },
-            });
 
-            await tx.produto.update({
-              where: {
-                id: item.produtoId,
-              },
-              data: {
-                quantidade: {
-                  increment: quantidade,
+                data: {
+                  vendido: false,
+
+                  vendaItemId:
+                    null,
                 },
-              },
-            });
+              }
+            );
+
+            await tx.produto.update(
+              {
+                where: {
+                  id: item.produtoId,
+                },
+
+                data: {
+                  quantidade: {
+                    increment:
+                      quantidade,
+                  },
+                },
+              }
+            );
           }
         }
 
-        // ---------------------------------------------
-        // Apagar itens
-        // ---------------------------------------------
+        // -------------------------------------------
+        // DELETAR ITENS
+        // -------------------------------------------
 
-        await tx.vendaItem.deleteMany({
-          where: {
-            vendaId: vendaId,
-          },
-        });
+        await tx.vendaItem.deleteMany(
+          {
+            where: {
+              vendaId,
+            },
+          }
+        );
 
-        // ---------------------------------------------
-        // Apagar venda
-        // ---------------------------------------------
+        // -------------------------------------------
+        // DELETAR VENDA
+        // -------------------------------------------
 
         await tx.venda.delete({
           where: {
@@ -566,10 +902,11 @@ export async function DELETE(
 
     return NextResponse.json({
       success: true,
+
       message:
         "Venda cancelada e aparelhos devolvidos ao estoque.",
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error(
       "ERRO AO CANCELAR VENDA:",
       error
@@ -578,8 +915,9 @@ export async function DELETE(
     return NextResponse.json(
       {
         error:
-          error?.message ||
-          "Erro ao cancelar venda.",
+          error instanceof Error
+            ? error.message
+            : "Erro ao cancelar venda.",
       },
       {
         status: 400,
