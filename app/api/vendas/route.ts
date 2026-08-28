@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { obterSessao } from "@/lib/auth";
 
 // =====================================================
 // GET — JUNTAR TODAS AS VENDAS
@@ -7,6 +9,19 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   try {
+    const usuario = await obterSessao();
+
+    if (!usuario) {
+      return NextResponse.json(
+        {
+          error: "Não autorizado.",
+        },
+        {
+          status: 401,
+        }
+      );
+    }
+
     const vendas = await prisma.venda.findMany({
       orderBy: {
         dataVenda: "desc",
@@ -28,57 +43,27 @@ export async function GET() {
       },
     });
 
-    // =================================================
-    // PREPARAR DADOS PARA O DASHBOARD
-    // =================================================
-
     const vendasPreparadas = vendas.map((venda) => {
-      // ------------------------------------------------
-      // TOTAL DA VENDA
-      // ------------------------------------------------
-
       const valorVenda = venda.itens.reduce(
         (total, item) => {
-          return (
-            total +
-            Number(item.total || 0)
-          );
+          return total + Number(item.total || 0);
         },
         0
       );
-
-      // ------------------------------------------------
-      // QUANTIDADE DE APARELHOS
-      // ------------------------------------------------
 
       const quantidade = venda.itens.reduce(
         (total, item) => {
-          return (
-            total +
-            Number(item.quantidade || 0)
-          );
+          return total + Number(item.quantidade || 0);
         },
         0
       );
 
-      // ------------------------------------------------
-      // CUSTO TOTAL EM USD
-      // ------------------------------------------------
-
-      const custoTotalUsd =
-        venda.itens.reduce(
-          (total, item) => {
-            return (
-              total +
-              Number(item.custoTotal || 0)
-            );
-          },
-          0
-        );
-
-      // ------------------------------------------------
-      // TAXA DA VENDA
-      // ------------------------------------------------
+      const custoTotalUsd = venda.itens.reduce(
+        (total, item) => {
+          return total + Number(item.custoTotal || 0);
+        },
+        0
+      );
 
       const taxa =
         venda.taxa !== null &&
@@ -86,45 +71,28 @@ export async function GET() {
           ? Number(venda.taxa)
           : null;
 
-      // ------------------------------------------------
-      // CUSTO EM REAIS
-      // ------------------------------------------------
-
       const custoTotalReais =
-        taxa !== null &&
-        Number.isFinite(taxa)
+        taxa !== null && Number.isFinite(taxa)
           ? custoTotalUsd * taxa
           : 0;
 
-      // ------------------------------------------------
-      // LUCRO
-      // ------------------------------------------------
-
       const lucro =
-        taxa !== null &&
-        Number.isFinite(taxa)
+        taxa !== null && Number.isFinite(taxa)
           ? valorVenda - custoTotalReais
           : 0;
 
       return {
         ...venda,
 
-        // Campos usados pelo Dashboard
         valorVenda,
-
         quantidade,
-
         custoTotalUsd,
-
         custoTotalReais,
-
         lucro,
       };
     });
 
-    return NextResponse.json(
-      vendasPreparadas
-    );
+    return NextResponse.json(vendasPreparadas);
   } catch (error) {
     console.error(
       "ERRO AO BUSCAR VENDAS:",
@@ -133,8 +101,7 @@ export async function GET() {
 
     return NextResponse.json(
       {
-        error:
-          "Erro ao buscar vendas.",
+        error: "Erro ao buscar vendas.",
       },
       {
         status: 500,
@@ -149,7 +116,24 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
+    const usuario = await obterSessao();
+
+    if (!usuario) {
+      return NextResponse.json(
+        {
+          error: "Não autorizado.",
+        },
+        {
+          status: 401,
+        }
+      );
+    }
+
     const body = await req.json();
+
+    // =================================================
+    // CLIENTE
+    // =================================================
 
     const cliente = String(
       body.cliente || ""
@@ -173,8 +157,7 @@ export async function POST(req: Request) {
       ) {
         return NextResponse.json(
           {
-            error:
-              "Data da venda inválida.",
+            error: "Data da venda inválida.",
           },
           {
             status: 400,
@@ -182,13 +165,8 @@ export async function POST(req: Request) {
         );
       }
 
-      const [
-        ano,
-        mes,
-        dia,
-      ] = dataTexto
-        .split("-")
-        .map(Number);
+      const [ano, mes, dia] =
+        dataTexto.split("-").map(Number);
 
       dataVenda = new Date(
         ano,
@@ -201,17 +179,13 @@ export async function POST(req: Request) {
       );
 
       if (
-        dataVenda.getFullYear() !==
-          ano ||
-        dataVenda.getMonth() !==
-          mes - 1 ||
-        dataVenda.getDate() !==
-          dia
+        dataVenda.getFullYear() !== ano ||
+        dataVenda.getMonth() !== mes - 1 ||
+        dataVenda.getDate() !== dia
       ) {
         return NextResponse.json(
           {
-            error:
-              "Data da venda inválida.",
+            error: "Data da venda inválida.",
           },
           {
             status: 400,
@@ -237,12 +211,30 @@ export async function POST(req: Request) {
           );
 
     // =================================================
+    // ESTADO DA FATURA
+    // =================================================
+
+    const estadoFatura = String(
+      body.estadoFatura ??
+        body.estadoDaFatura ??
+        "Em aberto"
+    ).trim();
+
+    // =================================================
+    // FORMA DE PAGAMENTO
+    // =================================================
+
+    const formaPagamento = String(
+      body.formaPagamento ??
+        body.formaDePagamento ??
+        "Não informado"
+    ).trim();
+
+    // =================================================
     // ITENS
     // =================================================
 
-    const itens = Array.isArray(
-      body.itens
-    )
+    const itens = Array.isArray(body.itens)
       ? body.itens
       : [];
 
@@ -252,8 +244,7 @@ export async function POST(req: Request) {
 
     if (
       taxa !== null &&
-      (!Number.isFinite(taxa) ||
-        taxa < 0)
+      (!Number.isFinite(taxa) || taxa < 0)
     ) {
       return NextResponse.json(
         {
@@ -281,51 +272,38 @@ export async function POST(req: Request) {
     // PREPARAR ITENS
     // =================================================
 
-    const itensPreparados =
-      itens.map(
+    let itensPreparados;
+
+    try {
+      itensPreparados = itens.map(
         (
           item: any,
           index: number
         ) => {
-          const produtoId =
-            Number(
-              item.produtoId
-            );
+          const produtoId = Number(
+            item.produtoId
+          );
 
-          const quantidade =
-            Number(
-              item.quantidade
-            );
+          const quantidade = Number(
+            item.quantidade
+          );
 
-          const valorUnitario =
-            Number(
-              String(
-                item.valorUnitario
-              ).replace(
-                ",",
-                "."
-              )
-            );
+          const valorUnitario = Number(
+            String(
+              item.valorUnitario
+            ).replace(",", ".")
+          );
 
-          const imeis =
-            Array.isArray(
-              item.imeis
-            )
-              ? item.imeis
-                  .map(
-                    (
-                      imei: unknown
-                    ) =>
-                      String(
-                        imei
-                      ).trim()
-                  )
-                  .filter(Boolean)
-              : [];
-
-          // -------------------------------------------
-          // PRODUTO
-          // -------------------------------------------
+          const imeis = Array.isArray(
+            item.imeis
+          )
+            ? item.imeis
+                .map(
+                  (imei: unknown) =>
+                    String(imei).trim()
+                )
+                .filter(Boolean)
+            : [];
 
           if (
             !Number.isInteger(
@@ -340,10 +318,6 @@ export async function POST(req: Request) {
             );
           }
 
-          // -------------------------------------------
-          // QUANTIDADE
-          // -------------------------------------------
-
           if (
             !Number.isInteger(
               quantidade
@@ -356,10 +330,6 @@ export async function POST(req: Request) {
               }.`
             );
           }
-
-          // -------------------------------------------
-          // PREÇO
-          // -------------------------------------------
 
           if (
             !Number.isFinite(
@@ -374,10 +344,6 @@ export async function POST(req: Request) {
             );
           }
 
-          // -------------------------------------------
-          // IMEI
-          // -------------------------------------------
-
           if (
             imeis.length !==
             quantidade
@@ -388,10 +354,6 @@ export async function POST(req: Request) {
               } não corresponde à quantidade.`
             );
           }
-
-          // -------------------------------------------
-          // IMEI REPETIDO
-          // -------------------------------------------
 
           const imeisUnicos =
             new Set(imeis);
@@ -415,16 +377,31 @@ export async function POST(req: Request) {
           };
         }
       );
+    } catch (error) {
+      return NextResponse.json(
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : "Dados da venda inválidos.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
 
-    // =====================================================
+    // =================================================
     // NÃO PERMITIR MESMO IMEI EM DOIS ITENS
-    // =====================================================
+    // =================================================
 
     const todosImeis =
       itensPreparados.flatMap(
-        (item: {
-          imeis: string[];
-        }) => item.imeis
+        (
+          item: {
+            imeis: string[];
+          }
+        ) => item.imeis
       );
 
     const imeisUnicos =
@@ -445,17 +422,15 @@ export async function POST(req: Request) {
       );
     }
 
-    // =====================================================
+    // =================================================
     // TRANSACTION
-    // =====================================================
+    // =================================================
 
     const resultado =
       await prisma.$transaction(
-        async (tx: any) => {
-          // -------------------------------------------
-          // CRIAR VENDA
-          // -------------------------------------------
-
+        async (
+          tx: Prisma.TransactionClient
+        ) => {
           const venda =
             await tx.venda.create({
               data: {
@@ -463,15 +438,14 @@ export async function POST(req: Request) {
 
                 taxa,
 
-                taxaFechada: false,
+                taxaFechada:
+                  false,
 
                 dataVenda,
 
-                formaPagamento:
-                  "Não informado",
+                formaPagamento,
 
-                estadoFatura:
-                  "Em aberto",
+                estadoFatura,
 
                 desconto: 0,
               },
@@ -479,48 +453,33 @@ export async function POST(req: Request) {
 
           let totalVenda = 0;
 
-          // -------------------------------------------
-          // PROCESSAR CADA ITEM
-          // -------------------------------------------
-
           for (
-            const item of
-              itensPreparados
+            const item of itensPreparados
           ) {
-            // -----------------------------------------
-            // BUSCAR PRODUTO
-            // -----------------------------------------
-
             const produto =
-              await tx.produto.findUnique(
-                {
-                  where: {
-                    id: item.produtoId,
-                  },
+              await tx.produto.findUnique({
+                where: {
+                  id: item.produtoId,
+                },
 
-                  include: {
-                    aparelhos: {
-                      where: {
-                        vendido: false,
-                      },
+                include: {
+                  aparelhos: {
+                    where: {
+                      vendido: false,
+                    },
 
-                      include: {
-                        lote: true,
-                      },
+                    include: {
+                      lote: true,
                     },
                   },
-                }
-              );
+                },
+              });
 
             if (!produto) {
               throw new Error(
                 "Produto não encontrado."
               );
             }
-
-            // -----------------------------------------
-            // CONFERIR ESTOQUE
-            // -----------------------------------------
 
             if (
               produto.quantidade <
@@ -531,33 +490,23 @@ export async function POST(req: Request) {
               );
             }
 
-            // -----------------------------------------
-            // BUSCAR IMEIS
-            // -----------------------------------------
-
             const aparelhos =
-              await tx.aparelho.findMany(
-                {
-                  where: {
-                    imei: {
-                      in: item.imeis,
-                    },
-
-                    produtoId:
-                      item.produtoId,
-
-                    vendido: false,
+              await tx.aparelho.findMany({
+                where: {
+                  imei: {
+                    in: item.imeis,
                   },
 
-                  include: {
-                    lote: true,
-                  },
-                }
-              );
+                  produtoId:
+                    item.produtoId,
 
-            // -----------------------------------------
-            // CONFERIR IMEIS
-            // -----------------------------------------
+                  vendido: false,
+                },
+
+                include: {
+                  lote: true,
+                },
+              });
 
             if (
               aparelhos.length !==
@@ -568,15 +517,10 @@ export async function POST(req: Request) {
               );
             }
 
-            // -----------------------------------------
-            // CALCULAR CUSTO USD
-            // -----------------------------------------
-
             let custoTotal = 0;
 
             for (
-              const aparelho of
-                aparelhos
+              const aparelho of aparelhos
             ) {
               if (
                 aparelho.lote
@@ -586,17 +530,12 @@ export async function POST(req: Request) {
                   ?.precoCompraUsd !==
                   undefined
               ) {
-                custoTotal +=
-                  Number(
-                    aparelho.lote
-                      .precoCompraUsd
-                  );
+                custoTotal += Number(
+                  aparelho.lote
+                    .precoCompraUsd
+                );
               }
             }
-
-            // -----------------------------------------
-            // TOTAL DO ITEM
-            // -----------------------------------------
 
             const total =
               item.quantidade *
@@ -604,71 +543,53 @@ export async function POST(req: Request) {
 
             totalVenda += total;
 
-            // -----------------------------------------
-            // CRIAR ITEM DA VENDA
-            // -----------------------------------------
-
             const vendaItem =
-              await tx.vendaItem.create(
-                {
-                  data: {
-                    quantidade:
-                      item.quantidade,
-
-                    valorUnitario:
-                      item.valorUnitario,
-
-                    total,
-
-                    precoCompraUsd:
-                      item.quantidade >
-                      0
-                        ? custoTotal /
-                          item.quantidade
-                        : null,
-
-                    custoTotal,
-
-                    vendaId:
-                      venda.id,
-
-                    produtoId:
-                      item.produtoId,
-                  },
-                }
-              );
-
-            // -----------------------------------------
-            // MARCAR APARELHOS COMO VENDIDOS
-            // -----------------------------------------
-
-            await tx.aparelho.updateMany(
-              {
-                where: {
-                  id: {
-                    in: aparelhos.map(
-                      (
-                        aparelho: {
-                          id: number;
-                        }
-                      ) =>
-                        aparelho.id
-                    ),
-                  },
-                },
-
+              await tx.vendaItem.create({
                 data: {
-                  vendido: true,
+                  quantidade:
+                    item.quantidade,
 
-                  vendaItemId:
-                    vendaItem.id,
+                  valorUnitario:
+                    item.valorUnitario,
+
+                  total,
+
+                  precoCompraUsd:
+                    item.quantidade > 0
+                      ? custoTotal /
+                        item.quantidade
+                      : null,
+
+                  custoTotal,
+
+                  vendaId:
+                    venda.id,
+
+                  produtoId:
+                    item.produtoId,
                 },
-              }
-            );
+              });
 
-            // -----------------------------------------
-            // DIMINUIR ESTOQUE
-            // -----------------------------------------
+            await tx.aparelho.updateMany({
+              where: {
+                id: {
+                  in: aparelhos.map(
+                    (
+                      aparelho: {
+                        id: number;
+                      }
+                    ) => aparelho.id
+                  ),
+                },
+              },
+
+              data: {
+                vendido: true,
+
+                vendaItemId:
+                  vendaItem.id,
+              },
+            });
 
             await tx.produto.update({
               where: {
@@ -684,34 +605,83 @@ export async function POST(req: Request) {
             });
           }
 
-          // -------------------------------------------
-          // BUSCAR VENDA COMPLETA
-          // -------------------------------------------
+          // =================================================
+          // PAGAMENTO AUTOMÁTICO
+          // =================================================
+
+          const estadoNormalizado =
+            estadoFatura
+              .toLowerCase()
+              .normalize("NFD")
+              .replace(
+                /[\u0300-\u036f]/g,
+                ""
+              );
+
+          if (
+            estadoNormalizado ===
+              "pago" ||
+            estadoNormalizado ===
+              "quitado"
+          ) {
+            await tx.pagamento.create({
+              data: {
+                valor:
+                  totalVenda,
+
+                desconto: 0,
+
+                forma:
+                  formaPagamento,
+
+                observacao:
+                  "Pagamento registrado automaticamente na venda.",
+
+                vendaId:
+                  venda.id,
+              },
+            });
+
+            await tx.venda.update({
+              where: {
+                id: venda.id,
+              },
+
+              data: {
+                estadoFatura:
+                  "Quitado",
+
+                formaPagamento:
+                  formaPagamento,
+              },
+            });
+          }
+
+          // =================================================
+          // VENDA COMPLETA
+          // =================================================
 
           const vendaCompleta =
-            await tx.venda.findUnique(
-              {
-                where: {
-                  id: venda.id,
-                },
+            await tx.venda.findUnique({
+              where: {
+                id: venda.id,
+              },
 
-                include: {
-                  itens: {
-                    include: {
-                      produto: true,
-                      aparelhos: true,
-                    },
-                  },
-
-                  pagamentos: {
-                    orderBy: {
-                      createdAt:
-                        "asc",
-                    },
+              include: {
+                itens: {
+                  include: {
+                    produto: true,
+                    aparelhos: true,
                   },
                 },
-              }
-            );
+
+                pagamentos: {
+                  orderBy: {
+                    createdAt: "asc",
+                  },
+                },
+              },
+            });
 
           return {
             venda:
@@ -721,10 +691,6 @@ export async function POST(req: Request) {
           };
         }
       );
-
-    // =================================================
-    // RESPOSTA
-    // =================================================
 
     return NextResponse.json(
       {
@@ -760,15 +726,546 @@ export async function POST(req: Request) {
 }
 
 // =====================================================
-// DELETE — CANCELAR VENDA
+// PATCH — DEVOLVER UM APARELHO
+// SOMENTE ADMIN
 // =====================================================
 
-export async function DELETE(
-  req: Request
-) {
+export async function PATCH(req: Request) {
   try {
-    const body =
-      await req.json();
+    const usuario = await obterSessao();
+
+    if (!usuario) {
+      return NextResponse.json(
+        {
+          error: "Não autorizado.",
+        },
+        {
+          status: 401,
+        }
+      );
+    }
+
+    if (usuario.role !== "ADMIN") {
+      return NextResponse.json(
+        {
+          error:
+            "Somente o administrador pode devolver aparelhos.",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
+    const body = await req.json();
+
+    const vendaId = Number(
+      body.vendaId ??
+        body.id
+    );
+
+    const aparelhoId =
+      body.aparelhoId !== undefined &&
+      body.aparelhoId !== null &&
+      body.aparelhoId !== ""
+        ? Number(body.aparelhoId)
+        : null;
+
+    const imei =
+      body.imei !== undefined &&
+      body.imei !== null
+        ? String(body.imei).trim()
+        : "";
+
+    if (
+      !Number.isInteger(vendaId) ||
+      vendaId <= 0
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "ID da venda inválido.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (
+      aparelhoId !== null &&
+      (!Number.isInteger(aparelhoId) ||
+        aparelhoId <= 0)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "ID do aparelho inválido.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (!aparelhoId && !imei) {
+      return NextResponse.json(
+        {
+          error:
+            "Informe o aparelho ou o IMEI que será devolvido.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const resultado =
+      await prisma.$transaction(
+        async (
+          tx: Prisma.TransactionClient
+        ) => {
+          // =================================================
+          // BUSCAR VENDA
+          // =================================================
+
+          const venda =
+            await tx.venda.findUnique({
+              where: {
+                id: vendaId,
+              },
+
+              include: {
+                itens: {
+                  include: {
+                    aparelhos: {
+                      include: {
+                        lote: true,
+                      },
+                    },
+
+                    produto: true,
+                  },
+                },
+
+                pagamentos: {
+                  orderBy: {
+                    createdAt: "asc",
+                  },
+                },
+              },
+            });
+
+          if (!venda) {
+            throw new Error(
+              "Venda não encontrada."
+            );
+          }
+
+          // =================================================
+          // ENCONTRAR APARELHO
+          // =================================================
+
+          let aparelhoEncontrado:
+            | (typeof venda.itens[number]["aparelhos"][number])
+            | null = null;
+
+          let itemEncontrado:
+            | (typeof venda.itens[number])
+            | null = null;
+
+          for (
+            const item of venda.itens
+          ) {
+            const aparelho =
+              item.aparelhos.find(
+                (a) => {
+                  if (
+                    aparelhoId !== null
+                  ) {
+                    return (
+                      a.id ===
+                      aparelhoId
+                    );
+                  }
+
+                  return (
+                    a.imei === imei
+                  );
+                }
+              );
+
+            if (aparelho) {
+              aparelhoEncontrado =
+                aparelho;
+
+              itemEncontrado =
+                item;
+
+              break;
+            }
+          }
+
+          if (
+            !aparelhoEncontrado ||
+            !itemEncontrado
+          ) {
+            throw new Error(
+              "Este aparelho/IMEI não está vinculado a esta venda."
+            );
+          }
+
+          // =================================================
+          // CONFIRMAR QUE ESTÁ VENDIDO
+          // =================================================
+
+          if (
+            aparelhoEncontrado.vendido !==
+            true
+          ) {
+            throw new Error(
+              "Este aparelho já foi devolvido."
+            );
+          }
+
+          // =================================================
+          // CUSTO DO APARELHO
+          // =================================================
+
+          let custoAparelho = 0;
+
+          if (
+            aparelhoEncontrado.lote
+              ?.precoCompraUsd !==
+              null &&
+            aparelhoEncontrado.lote
+              ?.precoCompraUsd !==
+              undefined
+          ) {
+            custoAparelho = Number(
+              aparelhoEncontrado.lote
+                .precoCompraUsd
+            );
+          }
+
+          // =================================================
+          // VALOR DE VENDA
+          // =================================================
+
+          const valorUnitario =
+            Number(
+              itemEncontrado.valorUnitario ||
+                0
+            );
+
+          // =================================================
+          // DEVOLVER APARELHO AO ESTOQUE
+          // =================================================
+
+          await tx.aparelho.update({
+            where: {
+              id:
+                aparelhoEncontrado.id,
+            },
+
+            data: {
+              vendido: false,
+
+              vendaItemId:
+                null,
+            },
+          });
+
+          await tx.produto.update({
+            where: {
+              id:
+                itemEncontrado.produtoId,
+            },
+
+            data: {
+              quantidade: {
+                increment: 1,
+              },
+            },
+          });
+
+          // =================================================
+          // ATUALIZAR ITEM DA VENDA
+          // =================================================
+
+          const novaQuantidade =
+            Number(
+              itemEncontrado.quantidade ||
+                0
+            ) - 1;
+
+          if (
+            novaQuantidade <= 0
+          ) {
+            await tx.vendaItem.delete({
+              where: {
+                id:
+                  itemEncontrado.id,
+              },
+            });
+          } else {
+            const novoTotal =
+              novaQuantidade *
+              valorUnitario;
+
+            const custoAtual =
+              Number(
+                itemEncontrado.custoTotal ||
+                  0
+              );
+
+            const novoCustoTotal =
+              Math.max(
+                0,
+                custoAtual -
+                  custoAparelho
+              );
+
+            const novoPrecoCompra =
+              novaQuantidade > 0
+                ? novoCustoTotal /
+                  novaQuantidade
+                : null;
+
+            await tx.vendaItem.update({
+              where: {
+                id:
+                  itemEncontrado.id,
+              },
+
+              data: {
+                quantidade:
+                  novaQuantidade,
+
+                total:
+                  novoTotal,
+
+                custoTotal:
+                  novoCustoTotal,
+
+                precoCompraUsd:
+                  novoPrecoCompra,
+              },
+            });
+          }
+
+          // =================================================
+          // NOVO TOTAL DA VENDA
+          // =================================================
+
+          const itensAtualizados =
+            await tx.vendaItem.findMany({
+              where: {
+                vendaId,
+              },
+            });
+
+          const novoTotalVenda =
+            itensAtualizados.reduce(
+              (
+                total,
+                item
+              ) =>
+                total +
+                Number(
+                  item.total || 0
+                ),
+              0
+            );
+
+          const novoCustoTotalUsd =
+            itensAtualizados.reduce(
+              (
+                total,
+                item
+              ) =>
+                total +
+                Number(
+                  item.custoTotal || 0
+                ),
+              0
+            );
+
+          // =================================================
+          // PAGAMENTO AUTOMÁTICO
+          // =================================================
+
+          const pagamentoAutomatico =
+            venda.pagamentos.find(
+              (pagamento) =>
+                pagamento.observacao ===
+                "Pagamento registrado automaticamente na venda."
+            );
+
+          if (
+            pagamentoAutomatico
+          ) {
+            if (
+              novoTotalVenda <=
+              0.009
+            ) {
+              await tx.pagamento.delete({
+                where: {
+                  id:
+                    pagamentoAutomatico.id,
+                },
+              });
+            } else {
+              await tx.pagamento.update({
+                where: {
+                  id:
+                    pagamentoAutomatico.id,
+                },
+
+                data: {
+                  valor:
+                    novoTotalVenda,
+                },
+              });
+            }
+          }
+
+          // =================================================
+          // NOVO ESTADO DA FATURA
+          // =================================================
+
+          let novoEstadoFatura =
+            venda.estadoFatura;
+
+          if (
+            novoTotalVenda <=
+            0.009
+          ) {
+            novoEstadoFatura =
+              "Cancelada";
+          } else if (
+            pagamentoAutomatico
+          ) {
+            novoEstadoFatura =
+              "Quitado";
+          }
+
+          // =================================================
+          // ATUALIZAR VENDA
+          // =================================================
+
+          const vendaAtualizada =
+            await tx.venda.update({
+              where: {
+                id: vendaId,
+              },
+
+              data: {
+                estadoFatura:
+                  novoEstadoFatura,
+              },
+
+              include: {
+                itens: {
+                  include: {
+                    produto: true,
+                    aparelhos: true,
+                  },
+                },
+
+                pagamentos: {
+                  orderBy: {
+                    createdAt:
+                      "asc",
+                  },
+                },
+              },
+            });
+
+          return {
+            venda:
+              vendaAtualizada,
+
+            aparelhoDevolvido: {
+              id:
+                aparelhoEncontrado.id,
+
+              imei:
+                aparelhoEncontrado.imei,
+
+              modelo:
+                itemEncontrado.produto
+                  .nome,
+            },
+
+            novoTotalVenda,
+
+            novoCustoTotalUsd,
+          };
+        }
+      );
+
+    return NextResponse.json({
+      success: true,
+
+      message:
+        "Aparelho devolvido com sucesso e retornado ao estoque.",
+
+      ...resultado,
+    });
+  } catch (error) {
+    console.error(
+      "ERRO AO DEVOLVER APARELHO:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Erro ao devolver aparelho.",
+      },
+      {
+        status: 400,
+      }
+    );
+  }
+}
+
+// =====================================================
+// DELETE — EXCLUIR VENDA INTEIRA
+// SOMENTE ADMIN
+// =====================================================
+
+export async function DELETE(req: Request) {
+  try {
+    const usuario = await obterSessao();
+
+    if (!usuario) {
+      return NextResponse.json(
+        {
+          error: "Não autorizado.",
+        },
+        {
+          status: 401,
+        }
+      );
+    }
+
+    if (usuario.role !== "ADMIN") {
+      return NextResponse.json(
+        {
+          error:
+            "Somente o administrador pode cancelar uma venda.",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
+    const body = await req.json();
 
     const vendaId = Number(
       body.vendaId ??
@@ -793,27 +1290,27 @@ export async function DELETE(
     }
 
     await prisma.$transaction(
-      async (tx: any) => {
-        // -------------------------------------------
+      async (
+        tx: Prisma.TransactionClient
+      ) => {
+        // =================================================
         // BUSCAR VENDA
-        // -------------------------------------------
+        // =================================================
 
         const venda =
-          await tx.venda.findUnique(
-            {
-              where: {
-                id: vendaId,
-              },
+          await tx.venda.findUnique({
+            where: {
+              id: vendaId,
+            },
 
-              include: {
-                itens: {
-                  include: {
-                    aparelhos: true,
-                  },
+            include: {
+              itens: {
+                include: {
+                  aparelhos: true,
                 },
               },
-            }
-          );
+            },
+          });
 
         if (!venda) {
           throw new Error(
@@ -821,25 +1318,25 @@ export async function DELETE(
           );
         }
 
-        // -------------------------------------------
-        // DEVOLVER APARELHOS AO ESTOQUE
-        // -------------------------------------------
+        // =================================================
+        // DEVOLVER TODOS OS APARELHOS
+        // =================================================
 
         for (
-          const item of
-            venda.itens
+          const item of venda.itens
         ) {
-          const quantidade =
-            item.aparelhos.length;
+          const aparelhos =
+            item.aparelhos;
 
           if (
-            quantidade > 0
+            aparelhos.length >
+            0
           ) {
-            await tx.aparelho.updateMany(
-              {
-                where: {
-                  id: {
-                    in: item.aparelhos.map(
+            await tx.aparelho.updateMany({
+              where: {
+                id: {
+                  in:
+                    aparelhos.map(
                       (
                         aparelho: {
                           id: number;
@@ -847,50 +1344,57 @@ export async function DELETE(
                       ) =>
                         aparelho.id
                     ),
-                  },
                 },
+              },
 
-                data: {
-                  vendido: false,
+              data: {
+                vendido:
+                  false,
 
-                  vendaItemId:
-                    null,
+                vendaItemId:
+                  null,
+              },
+            });
+
+            await tx.produto.update({
+              where: {
+                id:
+                  item.produtoId,
+              },
+
+              data: {
+                quantidade: {
+                  increment:
+                    aparelhos.length,
                 },
-              }
-            );
-
-            await tx.produto.update(
-              {
-                where: {
-                  id: item.produtoId,
-                },
-
-                data: {
-                  quantidade: {
-                    increment:
-                      quantidade,
-                  },
-                },
-              }
-            );
+              },
+            });
           }
         }
 
-        // -------------------------------------------
+        // =================================================
+        // DELETAR PAGAMENTOS
+        // =================================================
+
+        await tx.pagamento.deleteMany({
+          where: {
+            vendaId,
+          },
+        });
+
+        // =================================================
         // DELETAR ITENS
-        // -------------------------------------------
+        // =================================================
 
-        await tx.vendaItem.deleteMany(
-          {
-            where: {
-              vendaId,
-            },
-          }
-        );
+        await tx.vendaItem.deleteMany({
+          where: {
+            vendaId,
+          },
+        });
 
-        // -------------------------------------------
+        // =================================================
         // DELETAR VENDA
-        // -------------------------------------------
+        // =================================================
 
         await tx.venda.delete({
           where: {
@@ -904,11 +1408,11 @@ export async function DELETE(
       success: true,
 
       message:
-        "Venda cancelada e aparelhos devolvidos ao estoque.",
+        "Venda excluída e todos os aparelhos foram devolvidos ao estoque.",
     });
   } catch (error) {
     console.error(
-      "ERRO AO CANCELAR VENDA:",
+      "ERRO AO EXCLUIR VENDA:",
       error
     );
 
@@ -917,7 +1421,7 @@ export async function DELETE(
         error:
           error instanceof Error
             ? error.message
-            : "Erro ao cancelar venda.",
+            : "Erro ao excluir venda.",
       },
       {
         status: 400,

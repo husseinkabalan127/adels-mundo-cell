@@ -11,12 +11,20 @@ type Aparelho = {
 type Produto = {
   id: number;
   nome: string;
-  quantidade: number;
-  precoVendaUsd: number | null;
-  precoVendaBrl: number | null;
-  tipoPreco: string | null;
-  aparelhos: Aparelho[];
+  quantidade?: number | null;
+
+  // =====================================================
+  // CUSTO / PREÇO DE COMPRA
+  // =====================================================
+
+  precoCompraUsd?: number | string | null;
+  precoCompraBrl?: number | string | null;
+  tipoCusto?: string | null;
+
+  aparelhos?: Aparelho[];
 };
+
+type TipoCusto = "USD" | "BRL";
 
 export default function TelefonesSemPrecoPage() {
   const [produtos, setProdutos] = useState<Produto[]>([]);
@@ -29,16 +37,14 @@ export default function TelefonesSemPrecoPage() {
   const [salvando, setSalvando] =
     useState<number | null>(null);
 
-  const [tipoPreco, setTipoPreco] =
-    useState<
-      Record<number, "USD" | "BRL">
-    >({});
+  const [tipoCusto, setTipoCusto] =
+    useState<Record<number, TipoCusto>>({});
 
   const [precos, setPrecos] =
     useState<Record<number, string>>({});
 
   // =====================================================
-  // CARREGAR
+  // CARREGAR PRODUTOS
   // =====================================================
 
   async function carregarProdutos() {
@@ -49,6 +55,7 @@ export default function TelefonesSemPrecoPage() {
       const response = await fetch(
         "/api/telefones-sem-preco",
         {
+          method: "GET",
           cache: "no-store",
         }
       );
@@ -62,15 +69,85 @@ export default function TelefonesSemPrecoPage() {
         );
       }
 
+      if (!Array.isArray(data)) {
+        throw new Error(
+          "A API não retornou uma lista de telefones."
+        );
+      }
+
+      // =================================================
+      // NORMALIZAR DADOS
+      // =================================================
+
       const lista: Produto[] =
-        Array.isArray(data) ? data : [];
+        data.map((produto: any) => ({
+          id: Number(produto.id),
+
+          nome: String(
+            produto.nome ??
+              "Produto sem nome"
+          ),
+
+          quantidade:
+            produto.quantidade != null
+              ? Number(
+                  produto.quantidade
+                )
+              : null,
+
+          // =================================================
+          // CUSTO
+          // =================================================
+
+          precoCompraUsd:
+            produto.precoCompraUsd != null
+              ? Number(
+                  produto.precoCompraUsd
+                )
+              : null,
+
+          precoCompraBrl:
+            produto.precoCompraBrl != null
+              ? Number(
+                  produto.precoCompraBrl
+                )
+              : null,
+
+          tipoCusto:
+            produto.tipoCusto ?? null,
+
+          aparelhos:
+            Array.isArray(
+              produto.aparelhos
+            )
+              ? produto.aparelhos.map(
+                  (aparelho: any) => ({
+                    id: Number(
+                      aparelho.id
+                    ),
+
+                    imei: String(
+                      aparelho.imei ?? ""
+                    ),
+
+                    vendido:
+                      Boolean(
+                        aparelho.vendido
+                      ),
+                  })
+                )
+              : [],
+        }));
 
       setProdutos(lista);
 
-      // Preencher os campos com os preços atuais
+      // =================================================
+      // CUSTOS EXISTENTES
+      // =================================================
+
       const novosTipos: Record<
         number,
-        "USD" | "BRL"
+        TipoCusto
       > = {};
 
       const novosPrecos: Record<
@@ -79,29 +156,40 @@ export default function TelefonesSemPrecoPage() {
       > = {};
 
       lista.forEach((produto) => {
-        if (produto.tipoPreco === "USD") {
-          novosTipos[produto.id] = "USD";
+        if (
+          produto.tipoCusto === "USD" &&
+          produto.precoCompraUsd != null
+        ) {
+          novosTipos[produto.id] =
+            "USD";
 
           novosPrecos[produto.id] =
             String(
-              produto.precoVendaUsd ?? ""
+              produto.precoCompraUsd
             );
         }
 
-        if (produto.tipoPreco === "BRL") {
-          novosTipos[produto.id] = "BRL";
+        if (
+          produto.tipoCusto === "BRL" &&
+          produto.precoCompraBrl != null
+        ) {
+          novosTipos[produto.id] =
+            "BRL";
 
           novosPrecos[produto.id] =
             String(
-              produto.precoVendaBrl ?? ""
+              produto.precoCompraBrl
             );
         }
       });
 
-      setTipoPreco(novosTipos);
+      setTipoCusto(novosTipos);
       setPrecos(novosPrecos);
     } catch (error) {
-      console.error(error);
+      console.error(
+        "ERRO AO CARREGAR CUSTOS:",
+        error
+      );
 
       setErro(
         error instanceof Error
@@ -113,25 +201,32 @@ export default function TelefonesSemPrecoPage() {
     }
   }
 
+  // =====================================================
+  // PRIMEIRO CARREGAMENTO
+  // =====================================================
+
   useEffect(() => {
     carregarProdutos();
   }, []);
 
   // =====================================================
-  // SALVAR PREÇO
+  // SALVAR CUSTO
   // =====================================================
 
   async function salvarPreco(
     produtoId: number
   ) {
     const tipo =
-      tipoPreco[produtoId] || "BRL";
+      tipoCusto[produtoId] ||
+      "BRL";
 
-    const preco =
+    const precoTexto =
       precos[produtoId] || "";
 
     const numero = Number(
-      String(preco).replace(",", ".")
+      String(precoTexto)
+        .replace(",", ".")
+        .trim()
     );
 
     if (
@@ -139,8 +234,9 @@ export default function TelefonesSemPrecoPage() {
       numero <= 0
     ) {
       alert(
-        "Informe um preço válido."
+        "Informe um preço de custo válido."
       );
+
       return;
     }
 
@@ -159,7 +255,11 @@ export default function TelefonesSemPrecoPage() {
 
           body: JSON.stringify({
             produtoId,
-            tipoPreco: tipo,
+
+            // IMPORTANTE:
+            // agora é CUSTO
+            tipoCusto: tipo,
+
             preco: numero,
           }),
         }
@@ -171,24 +271,27 @@ export default function TelefonesSemPrecoPage() {
       if (!response.ok) {
         throw new Error(
           data?.error ||
-            "Erro ao salvar preço."
+            "Erro ao salvar custo."
         );
       }
-
-      alert(
-        "Preço salvo com sucesso!"
-      );
 
       setEditando(null);
 
       await carregarProdutos();
+
+      alert(
+        "Custo salvo com sucesso!"
+      );
     } catch (error) {
-      console.error(error);
+      console.error(
+        "ERRO AO SALVAR CUSTO:",
+        error
+      );
 
       alert(
         error instanceof Error
           ? error.message
-          : "Erro ao salvar preço."
+          : "Erro ao salvar custo."
       );
     } finally {
       setSalvando(null);
@@ -196,39 +299,81 @@ export default function TelefonesSemPrecoPage() {
   }
 
   // =====================================================
-  // FORMATAR
+  // FORMATAR MOEDA
   // =====================================================
 
   function moeda(
-    valor: number,
-    moeda: "BRL" | "USD"
+    valor:
+      | number
+      | string
+      | null
+      | undefined,
+    tipo: TipoCusto
   ) {
-    return Number(
-      valor || 0
-    ).toLocaleString(
+    const numero =
+      Number(valor ?? 0);
+
+    return numero.toLocaleString(
       "pt-BR",
       {
         style: "currency",
-        currency: moeda,
+
+        currency:
+          tipo === "USD"
+            ? "USD"
+            : "BRL",
       }
     );
   }
 
   // =====================================================
-  // SEPARAR
+  // QUANTIDADE DISPONÍVEL
   // =====================================================
 
-  const semPreco = produtos.filter(
-    (produto) =>
-      produto.precoVendaUsd === null &&
-      produto.precoVendaBrl === null
-  );
+  function quantidadeDisponivel(
+    produto: Produto
+  ) {
+    if (
+      Array.isArray(
+        produto.aparelhos
+      )
+    ) {
+      return produto.aparelhos.filter(
+        (aparelho) =>
+          aparelho.vendido === false
+      ).length;
+    }
 
-  const comPreco = produtos.filter(
-    (produto) =>
-      produto.precoVendaUsd !== null ||
-      produto.precoVendaBrl !== null
-  );
+    return Number(
+      produto.quantidade ?? 0
+    );
+  }
+
+  // =====================================================
+  // SEM CUSTO
+  // =====================================================
+
+  const semPreco =
+    produtos.filter(
+      (produto) =>
+        produto.precoCompraUsd ==
+          null &&
+        produto.precoCompraBrl ==
+          null
+    );
+
+  // =====================================================
+  // COM CUSTO
+  // =====================================================
+
+  const comPreco =
+    produtos.filter(
+      (produto) =>
+        produto.precoCompraUsd !=
+          null ||
+        produto.precoCompraBrl !=
+          null
+    );
 
   // =====================================================
   // LOADING
@@ -238,9 +383,17 @@ export default function TelefonesSemPrecoPage() {
     return (
       <main className="min-h-screen bg-gray-100 p-6">
         <div className="mx-auto max-w-6xl">
-          <div className="rounded-2xl bg-white p-10 text-center shadow">
-            <p className="text-gray-600">
+          <div className="rounded-2xl bg-white p-10 text-center shadow-lg">
+            <div className="mb-4 text-4xl">
+              📱
+            </div>
+
+            <p className="text-lg font-semibold text-gray-700">
               Carregando telefones...
+            </p>
+
+            <p className="mt-2 text-sm text-gray-500">
+              Aguarde um momento.
             </p>
           </div>
         </div>
@@ -249,7 +402,7 @@ export default function TelefonesSemPrecoPage() {
   }
 
   // =====================================================
-  // RENDER
+  // PÁGINA
   // =====================================================
 
   return (
@@ -266,25 +419,27 @@ export default function TelefonesSemPrecoPage() {
 
             <div>
               <h1 className="text-3xl font-bold text-gray-900">
-                📱 Preços dos telefones
+                📱 Custo dos telefones
               </h1>
 
               <p className="mt-2 text-gray-500">
-                Cadastre e altere os preços
-                dos aparelhos.
+                Cadastre e altere o custo
+                de compra dos aparelhos.
               </p>
             </div>
 
             <button
               type="button"
-              onClick={carregarProdutos}
-              className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700"
+              onClick={
+                carregarProdutos
+              }
+              disabled={carregando}
+              className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
             >
               🔄 Atualizar
             </button>
 
           </div>
-
         </div>
 
         {/* ================================================= */}
@@ -292,27 +447,35 @@ export default function TelefonesSemPrecoPage() {
         {/* ================================================= */}
 
         {erro && (
-          <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
-            {erro}
+          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-5 text-red-700">
+
+            <p className="font-bold">
+              ❌ Erro
+            </p>
+
+            <p className="mt-1">
+              {erro}
+            </p>
+
           </div>
         )}
 
         {/* ================================================= */}
-        {/* SEM PREÇO */}
+        {/* TELEFONES SEM CUSTO */}
         {/* ================================================= */}
 
-        <div className="mb-8">
+        <section className="mb-10">
 
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-5 flex items-center justify-between">
 
             <div>
               <h2 className="text-2xl font-bold text-gray-900">
-                ⚠️ Telefones sem preço
+                ⚠️ Telefones sem custo
               </h2>
 
-              <p className="text-sm text-gray-500">
+              <p className="mt-1 text-sm text-gray-500">
                 Produtos que ainda não possuem
-                preço de venda.
+                custo de compra cadastrado.
               </p>
             </div>
 
@@ -323,84 +486,122 @@ export default function TelefonesSemPrecoPage() {
           </div>
 
           {semPreco.length === 0 ? (
-            <div className="rounded-2xl bg-white p-10 text-center shadow">
-              <div className="text-4xl">
+
+            <div className="rounded-2xl bg-white p-10 text-center shadow-lg">
+
+              <div className="text-5xl">
                 ✅
               </div>
 
-              <p className="mt-3 font-semibold text-gray-800">
-                Todos os telefones estão
-                precificados.
+              <p className="mt-4 text-lg font-bold text-gray-800">
+                Todos os telefones possuem
+                custo cadastrado.
               </p>
+
             </div>
+
           ) : (
+
             <div className="space-y-5">
 
               {semPreco.map(
                 (produto) => (
+
                   <div
-                    key={produto.id}
+                    key={
+                      produto.id
+                    }
                     className="rounded-2xl bg-white p-6 shadow-lg"
                   >
 
-                    <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 
                       <div>
+
                         <h3 className="text-xl font-bold text-gray-900">
-                          📱 {produto.nome}
+                          📱{" "}
+                          {
+                            produto.nome
+                          }
                         </h3>
 
-                        <p className="mt-1 text-sm text-gray-500">
-                          {produto.aparelhos.filter(
-                            (a) =>
-                              !a.vendido
-                          ).length}{" "}
-                          aparelho(s)
-                          disponível(is)
+                        <p className="mt-2 text-sm text-gray-500">
+
+                          Estoque disponível:{" "}
+
+                          <strong className="text-gray-800">
+                            {
+                              quantidadeDisponivel(
+                                produto
+                              )
+                            }
+                          </strong>
+
                         </p>
+
                       </div>
 
-                      <span className="rounded-full bg-yellow-100 px-4 py-2 text-sm font-bold text-yellow-800">
-                        Sem preço
+                      <span className="w-fit rounded-full bg-yellow-100 px-4 py-2 text-sm font-bold text-yellow-800">
+                        Sem custo
                       </span>
 
                     </div>
 
                     <EditarPreco
-                      produto={produto}
-                      tipo={
-                        tipoPreco[
-                          produto.id
-                        ] || "BRL"
+                      produto={
+                        produto
                       }
+
+                      tipo={
+                        tipoCusto[
+                          produto.id
+                        ] ||
+                        "BRL"
+                      }
+
                       preco={
                         precos[
                           produto.id
-                        ] || ""
+                        ] ||
+                        ""
                       }
-                      setTipo={(tipo) =>
-                        setTipoPreco(
-                          (anterior) => ({
+
+                      setTipo={(
+                        tipo
+                      ) =>
+                        setTipoCusto(
+                          (
+                            anterior
+                          ) => ({
                             ...anterior,
+
                             [produto.id]:
                               tipo,
                           })
                         )
                       }
-                      setPreco={(preco) =>
+
+                      setPreco={(
+                        preco
+                      ) =>
                         setPrecos(
-                          (anterior) => ({
+                          (
+                            anterior
+                          ) => ({
                             ...anterior,
+
                             [produto.id]:
                               preco,
                           })
                         )
                       }
+
                       salvar={() =>
                         salvarPreco(
                           produto.id
                         )
                       }
+
                       salvando={
                         salvando ===
                         produto.id
@@ -414,25 +615,27 @@ export default function TelefonesSemPrecoPage() {
             </div>
           )}
 
-        </div>
+        </section>
 
         {/* ================================================= */}
-        {/* COM PREÇO */}
+        {/* TELEFONES COM CUSTO */}
         {/* ================================================= */}
 
-        <div>
+        <section>
 
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-5 flex items-center justify-between">
 
             <div>
+
               <h2 className="text-2xl font-bold text-gray-900">
-                ✅ Telefones com preço
+                ✅ Telefones com custo
               </h2>
 
-              <p className="text-sm text-gray-500">
+              <p className="mt-1 text-sm text-gray-500">
                 Aqui você pode consultar ou
-                alterar o preço.
+                alterar o custo de compra.
               </p>
+
             </div>
 
             <span className="rounded-full bg-green-100 px-4 py-2 text-sm font-bold text-green-700">
@@ -442,13 +645,21 @@ export default function TelefonesSemPrecoPage() {
           </div>
 
           {comPreco.length === 0 ? (
-            <div className="rounded-2xl bg-white p-10 text-center shadow">
-              <p className="text-gray-500">
-                Nenhum telefone com preço
-                cadastrado.
+
+            <div className="rounded-2xl bg-white p-10 text-center shadow-lg">
+
+              <div className="text-4xl">
+                📱
+              </div>
+
+              <p className="mt-3 text-gray-500">
+                Nenhum custo cadastrado.
               </p>
+
             </div>
+
           ) : (
+
             <div className="space-y-4">
 
               {comPreco.map(
@@ -458,66 +669,74 @@ export default function TelefonesSemPrecoPage() {
                     editando ===
                     produto.id;
 
-                  const tipoAtual =
-                    produto.tipoPreco ===
+                  const tipoAtual:
+                    TipoCusto =
+                    produto.tipoCusto ===
                     "USD"
                       ? "USD"
                       : "BRL";
 
                   const precoAtual =
-                    tipoAtual === "USD"
+                    tipoAtual ===
+                    "USD"
                       ? Number(
-                          produto.precoVendaUsd ||
+                          produto.precoCompraUsd ??
                             0
                         )
                       : Number(
-                          produto.precoVendaBrl ||
+                          produto.precoCompraBrl ??
                             0
                         );
 
                   const quantidade =
-                    produto.aparelhos.filter(
-                      (a) =>
-                        !a.vendido
-                    ).length;
+                    quantidadeDisponivel(
+                      produto
+                    );
 
                   return (
                     <div
-                      key={produto.id}
-                      className="rounded-2xl bg-white p-6 shadow"
+                      key={
+                        produto.id
+                      }
+                      className="rounded-2xl bg-white p-6 shadow-lg"
                     >
 
                       <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
 
                         <div>
+
                           <h3 className="text-xl font-bold text-gray-900">
-                            📱 {produto.nome}
+                            📱{" "}
+                            {
+                              produto.nome
+                            }
                           </h3>
 
-                          <p className="mt-1 text-sm text-gray-500">
+                          <p className="mt-2 text-sm text-gray-500">
+
                             Estoque disponível:{" "}
-                            <strong>
-                              {quantidade}
+
+                            <strong className="text-gray-800">
+                              {
+                                quantidade
+                              }
                             </strong>
+
                           </p>
 
                           {!estaEditando && (
-                            <div className="mt-3">
+                            <div className="mt-4 flex flex-wrap items-center gap-2">
 
                               <span className="rounded-lg bg-gray-100 px-4 py-2 font-bold text-gray-800">
-                                {tipoAtual ===
-                                "USD"
-                                  ? moeda(
-                                      precoAtual,
-                                      "USD"
-                                    )
-                                  : moeda(
-                                      precoAtual,
-                                      "BRL"
-                                    )}
+
+                                {moeda(
+                                  precoAtual,
+                                  tipoAtual
+                                )}
+
                               </span>
 
-                              <span className="ml-2 rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-700">
+                              <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-700">
                                 {tipoAtual}
                               </span>
 
@@ -527,18 +746,21 @@ export default function TelefonesSemPrecoPage() {
                         </div>
 
                         {!estaEditando && (
+
                           <button
                             type="button"
                             onClick={() => {
+
                               setEditando(
                                 produto.id
                               );
 
-                              setTipoPreco(
+                              setTipoCusto(
                                 (
                                   anterior
                                 ) => ({
                                   ...anterior,
+
                                   [produto.id]:
                                     tipoAtual,
                                 })
@@ -549,63 +771,83 @@ export default function TelefonesSemPrecoPage() {
                                   anterior
                                 ) => ({
                                   ...anterior,
+
                                   [produto.id]:
                                     String(
                                       precoAtual
                                     ),
                                 })
                               );
+
                             }}
-                            className="rounded-xl bg-blue-600 px-5 py-3 font-bold text-white hover:bg-blue-700"
+                            className="rounded-xl bg-blue-600 px-5 py-3 font-bold text-white transition hover:bg-blue-700"
                           >
-                            ✏️ Editar preço
+                            ✏️ Editar custo
                           </button>
+
                         )}
 
                       </div>
 
                       {estaEditando && (
-                        <div className="mt-6 border-t pt-6">
+
+                        <div className="mt-6 border-t border-gray-200 pt-6">
 
                           <EditarPreco
-                            produto={produto}
-                            tipo={
-                              tipoPreco[
-                                produto.id
-                              ] || tipoAtual
+                            produto={
+                              produto
                             }
+
+                            tipo={
+                              tipoCusto[
+                                produto.id
+                              ] ||
+                              tipoAtual
+                            }
+
                             preco={
                               precos[
                                 produto.id
-                              ] || ""
+                              ] ||
+                              ""
                             }
-                            setTipo={(tipo) =>
-                              setTipoPreco(
+
+                            setTipo={(
+                              tipo
+                            ) =>
+                              setTipoCusto(
                                 (
                                   anterior
                                 ) => ({
                                   ...anterior,
+
                                   [produto.id]:
                                     tipo,
                                 })
                               )
                             }
-                            setPreco={(preco) =>
+
+                            setPreco={(
+                              preco
+                            ) =>
                               setPrecos(
                                 (
                                   anterior
                                 ) => ({
                                   ...anterior,
+
                                   [produto.id]:
                                     preco,
                                 })
                               )
                             }
+
                             salvar={() =>
                               salvarPreco(
                                 produto.id
                               )
                             }
+
                             salvando={
                               salvando ===
                               produto.id
@@ -619,7 +861,11 @@ export default function TelefonesSemPrecoPage() {
                                 null
                               )
                             }
-                            className="mt-3 rounded-xl border border-gray-300 px-5 py-3 font-semibold text-gray-700 hover:bg-gray-100"
+                            disabled={
+                              salvando ===
+                              produto.id
+                            }
+                            className="mt-3 rounded-xl border border-gray-300 px-5 py-3 font-semibold text-gray-700 transition hover:bg-gray-100 disabled:opacity-50"
                           >
                             Cancelar
                           </button>
@@ -635,7 +881,7 @@ export default function TelefonesSemPrecoPage() {
             </div>
           )}
 
-        </div>
+        </section>
 
       </div>
     </main>
@@ -643,7 +889,7 @@ export default function TelefonesSemPrecoPage() {
 }
 
 // =====================================================
-// COMPONENTE DE EDIÇÃO
+// COMPONENTE EDITAR CUSTO
 // =====================================================
 
 function EditarPreco({
@@ -656,24 +902,32 @@ function EditarPreco({
   salvando,
 }: {
   produto: Produto;
-  tipo: "USD" | "BRL";
+
+  tipo: TipoCusto;
+
   preco: string;
+
   setTipo: (
-    tipo: "USD" | "BRL"
+    tipo: TipoCusto
   ) => void;
+
   setPreco: (
     preco: string
   ) => void;
+
   salvar: () => void;
+
   salvando: boolean;
 }) {
   return (
     <div>
 
-      {/* TIPO */}
+      {/* ================================================= */}
+      {/* TIPO DE CUSTO */}
+      {/* ================================================= */}
 
       <label className="mb-3 block text-sm font-bold text-gray-700">
-        Tipo de preço
+        Tipo de custo
       </label>
 
       <div className="grid grid-cols-2 gap-3">
@@ -683,10 +937,10 @@ function EditarPreco({
           onClick={() =>
             setTipo("USD")
           }
-          className={`rounded-xl border-2 px-4 py-4 font-bold ${
+          className={`rounded-xl border-2 px-4 py-4 font-bold transition ${
             tipo === "USD"
               ? "border-blue-600 bg-blue-50 text-blue-700"
-              : "border-gray-200 text-gray-600"
+              : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
           }`}
         >
           🇺🇸 USD
@@ -697,10 +951,10 @@ function EditarPreco({
           onClick={() =>
             setTipo("BRL")
           }
-          className={`rounded-xl border-2 px-4 py-4 font-bold ${
+          className={`rounded-xl border-2 px-4 py-4 font-bold transition ${
             tipo === "BRL"
               ? "border-green-600 bg-green-50 text-green-700"
-              : "border-gray-200 text-gray-600"
+              : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
           }`}
         >
           🇧🇷 BRL
@@ -708,14 +962,18 @@ function EditarPreco({
 
       </div>
 
-      {/* PREÇO */}
+      {/* ================================================= */}
+      {/* PREÇO DE COMPRA */}
+      {/* ================================================= */}
 
-      <div className="mt-4">
+      <div className="mt-5">
 
         <label className="mb-2 block text-sm font-bold text-gray-700">
+
           {tipo === "USD"
-            ? "Preço em dólar"
-            : "Preço em real"}
+            ? "Custo de compra em dólar"
+            : "Custo de compra em real"}
+
         </label>
 
         <div className="flex flex-col gap-3 md:flex-row">
@@ -723,21 +981,38 @@ function EditarPreco({
           <div className="relative flex-1">
 
             <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-gray-500">
+
               {tipo === "USD"
                 ? "$"
                 : "R$"}
+
             </span>
 
             <input
               type="text"
               inputMode="decimal"
               value={preco}
+              placeholder={
+                tipo === "USD"
+                  ? "Ex: 500"
+                  : "Ex: 2999"
+              }
               onChange={(e) =>
                 setPreco(
                   e.target.value
                 )
               }
-              className="w-full rounded-xl border border-gray-300 py-4 pl-12 pr-4 text-lg font-semibold outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              onKeyDown={(e) => {
+
+                if (
+                  e.key ===
+                  "Enter"
+                ) {
+                  salvar();
+                }
+
+              }}
+              className="w-full rounded-xl border border-gray-300 bg-white py-4 pl-12 pr-4 text-lg font-semibold text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
 
           </div>
@@ -746,20 +1021,39 @@ function EditarPreco({
             type="button"
             onClick={salvar}
             disabled={salvando}
-            className="rounded-xl bg-green-600 px-7 py-4 font-bold text-white hover:bg-green-700 disabled:opacity-50"
+            className="rounded-xl bg-green-600 px-7 py-4 font-bold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {salvando
               ? "Salvando..."
-              : "💾 Salvar preço"}
+              : "💾 Salvar custo"}
           </button>
 
         </div>
 
-        <p className="mt-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-800">
-          {tipo === "USD"
-            ? "USD: a taxa da venda será usada para converter o valor para BRL."
-            : "BRL: o valor já está em reais e não usa taxa."}
-        </p>
+        {/* ================================================= */}
+        {/* INFORMAÇÃO */}
+        {/* ================================================= */}
+
+        <div className="mt-4 rounded-xl bg-blue-50 p-4 text-sm text-blue-800">
+
+          {tipo === "USD" ? (
+            <>
+              <strong>USD:</strong>{" "}
+              este valor será usado como
+              custo de compra. A Taxa da
+              venda será usada para converter
+              o custo para BRL.
+            </>
+          ) : (
+            <>
+              <strong>BRL:</strong>{" "}
+              este valor será usado diretamente
+              como custo de compra em reais e
+              não depende da Taxa.
+            </>
+          )}
+
+        </div>
 
       </div>
 

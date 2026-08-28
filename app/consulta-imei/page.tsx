@@ -5,71 +5,110 @@ import { useState } from "react";
 type Resultado = {
   encontrado: boolean;
   mensagem?: string;
+
   aparelho?: {
     id: number;
     imei: string;
     vendido: boolean;
+
     produto?: {
       id: number;
       nome: string;
     } | null;
+
     lote?: {
       id: number;
       fornecedor?: string | null;
       precoCompraUsd?: number | null;
     } | null;
+
+    venda?: {
+      id: number;
+      cliente: string | null;
+      dataVenda: string | null;
+      createdAt: string;
+    } | null;
   };
 };
 
 export default function ConsultaImeiPage() {
-  const [imei, setImei] = useState("");
-  const [carregando, setCarregando] = useState(false);
+
+  const [imei, setImei] =
+    useState("");
+
+  const [carregando, setCarregando] =
+    useState(false);
+
   const [resultado, setResultado] =
-    useState<Resultado | null>(null);
-  const [erro, setErro] = useState("");
+    useState<Resultado | null>(
+      null
+    );
+
+  const [erro, setErro] =
+    useState("");
+
+  // =====================================================
+  // CONSULTAR
+  // =====================================================
 
   async function consultarImei() {
+
     setErro("");
     setResultado(null);
 
-    const valor = imei.trim();
+    const valor =
+      imei.trim();
 
     if (!valor) {
-      setErro("Digite o IMEI.");
+      setErro(
+        "Digite o IMEI."
+      );
       return;
     }
 
     setCarregando(true);
 
     try {
-      const res = await fetch(
-        `/api/consulta-imei?imei=${encodeURIComponent(
-          valor
-        )}`,
-        {
-          cache: "no-store",
-        }
-      );
 
-      const data = await res.json();
+      const res =
+        await fetch(
+          `/api/consulta-imei?imei=${encodeURIComponent(
+            valor
+          )}`,
+          {
+            cache: "no-store",
+          }
+        );
+
+      const data =
+        await res.json();
 
       if (!res.ok) {
         throw new Error(
-          data.error ||
+          data?.error ||
             "Erro ao consultar IMEI."
         );
       }
 
       setResultado(data);
-    } catch (e: any) {
+
+    } catch (e) {
+
       setErro(
-        e.message ||
-          "Erro ao consultar IMEI."
+        e instanceof Error
+          ? e.message
+          : "Erro ao consultar IMEI."
       );
+
     } finally {
+
       setCarregando(false);
     }
   }
+
+  // =====================================================
+  // LIMPAR
+  // =====================================================
 
   function limpar() {
     setImei("");
@@ -77,44 +116,106 @@ export default function ConsultaImeiPage() {
     setErro("");
   }
 
+  // =====================================================
+  // FORMATAR DATA
+  // =====================================================
+
+  function formatarData(
+    data: string | null | undefined
+  ) {
+
+    if (!data) {
+      return "-";
+    }
+
+    const d =
+      new Date(data);
+
+    if (
+      Number.isNaN(
+        d.getTime()
+      )
+    ) {
+      return "-";
+    }
+
+    return d.toLocaleString(
+      "pt-BR",
+      {
+        dateStyle:
+          "short",
+        timeStyle:
+          "short",
+      }
+    );
+  }
+
+  // =====================================================
+  // STATUS
+  // =====================================================
+
   function statusAparelho() {
-    if (!resultado?.aparelho) {
+
+    if (
+      !resultado?.aparelho
+    ) {
       return "";
     }
 
-    if (resultado.aparelho.vendido) {
-      return "Vendido";
-    }
-
-    return "Disponível em estoque";
+    return resultado.aparelho.vendido
+      ? "Vendido"
+      : "Disponível em estoque";
   }
 
   return (
     <main
       style={{
-        minHeight: "100vh",
-        background: "#f5f6f8",
+        minHeight:
+          "100vh",
+
+        background:
+          "#f5f6f8",
+
         padding: 24,
-        fontFamily: "Arial, sans-serif",
+
+        fontFamily:
+          "Arial, sans-serif",
       }}
     >
+
       <div
         style={{
-          maxWidth: 850,
-          margin: "0 auto",
+          maxWidth:
+            850,
+
+          margin:
+            "0 auto",
         }}
       >
+
+        {/* ================================================= */}
         {/* CABEÇALHO */}
+        {/* ================================================= */}
 
         <div
           style={{
-            background: "#fff",
-            borderRadius: 16,
-            padding: 24,
-            marginBottom: 20,
-            border: "1px solid #e5e5e5",
+            background:
+              "#fff",
+
+            borderRadius:
+              16,
+
+            padding:
+              24,
+
+            marginBottom:
+              20,
+
+            border:
+              "1px solid #e5e5e5",
           }}
         >
+
           <h1
             style={{
               margin: 0,
@@ -132,18 +233,29 @@ export default function ConsultaImeiPage() {
           >
             Adel&apos;s Mundo Cell
           </p>
+
         </div>
 
+        {/* ================================================= */}
         {/* CONSULTA */}
+        {/* ================================================= */}
 
         <section
           style={{
-            background: "#fff",
-            borderRadius: 16,
-            padding: 24,
-            border: "1px solid #e5e5e5",
+            background:
+              "#fff",
+
+            borderRadius:
+              16,
+
+            padding:
+              24,
+
+            border:
+              "1px solid #e5e5e5",
           }}
         >
+
           <h2
             style={{
               marginTop: 0,
@@ -160,23 +272,28 @@ export default function ConsultaImeiPage() {
             }}
           >
             Digite ou escaneie o IMEI para
-            verificar se o aparelho pertence à
-            Adel&apos;s Mundo Cell.
+            verificar o aparelho.
           </p>
 
           {/* IMEI */}
 
           <label
             style={{
-              display: "block",
-              fontWeight: 700,
-              marginTop: 20,
+              display:
+                "block",
+
+              fontWeight:
+                700,
+
+              marginTop:
+                20,
             }}
           >
             IMEI
 
             <input
               value={imei}
+
               onChange={(e) =>
                 setImei(
                   e.target.value.replace(
@@ -185,59 +302,115 @@ export default function ConsultaImeiPage() {
                   )
                 )
               }
+
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
+
+                if (
+                  e.key ===
+                  "Enter"
+                ) {
+
                   e.preventDefault();
+
                   consultarImei();
                 }
               }}
+
               placeholder="Digite ou escaneie o IMEI"
+
               inputMode="numeric"
+
               autoComplete="off"
+
               style={{
-                display: "block",
-                width: "100%",
-                boxSizing: "border-box",
-                marginTop: 8,
-                padding: "15px 14px",
+                display:
+                  "block",
+
+                width:
+                  "100%",
+
+                boxSizing:
+                  "border-box",
+
+                marginTop:
+                  8,
+
+                padding:
+                  "15px 14px",
+
                 border:
                   "1px solid #ccc",
-                borderRadius: 10,
-                fontSize: 17,
-                outline: "none",
+
+                borderRadius:
+                  10,
+
+                fontSize:
+                  17,
+
+                outline:
+                  "none",
               }}
             />
+
           </label>
 
           {/* BOTÕES */}
 
           <div
             style={{
-              display: "flex",
-              gap: 10,
-              marginTop: 16,
-              flexWrap: "wrap",
+              display:
+                "flex",
+
+              gap:
+                10,
+
+              marginTop:
+                16,
+
+              flexWrap:
+                "wrap",
             }}
           >
+
             <button
               type="button"
-              onClick={consultarImei}
-              disabled={carregando}
+              onClick={
+                consultarImei
+              }
+              disabled={
+                carregando
+              }
+
               style={{
                 border: 0,
-                borderRadius: 10,
+
+                borderRadius:
+                  10,
+
                 padding:
                   "13px 20px",
-                background: "#1769e0",
-                color: "#fff",
-                fontWeight: 700,
-                fontSize: 15,
-                cursor: carregando
-                  ? "default"
-                  : "pointer",
-                opacity: carregando
-                  ? 0.7
-                  : 1,
+
+                background:
+                  "#1769e0",
+
+                color:
+                  "#fff",
+
+                fontWeight:
+                  700,
+
+                fontSize:
+                  15,
+
+                cursor:
+                  carregando
+                    ? "default"
+                    : "pointer",
+
+                opacity:
+                  carregando
+                    ? 0.7
+                    : 1,
               }}
             >
               {carregando
@@ -247,68 +420,115 @@ export default function ConsultaImeiPage() {
 
             <button
               type="button"
-              onClick={limpar}
+              onClick={
+                limpar
+              }
+
               style={{
                 border:
                   "1px solid #ccc",
-                borderRadius: 10,
+
+                borderRadius:
+                  10,
+
                 padding:
                   "13px 20px",
-                background: "#fff",
-                color: "#333",
-                fontWeight: 700,
-                fontSize: 15,
-                cursor: "pointer",
+
+                background:
+                  "#fff",
+
+                color:
+                  "#333",
+
+                fontWeight:
+                  700,
+
+                fontSize:
+                  15,
+
+                cursor:
+                  "pointer",
               }}
             >
               Limpar
             </button>
+
           </div>
 
+          {/* ================================================= */}
           {/* ERRO */}
+          {/* ================================================= */}
 
           {erro && (
             <div
               style={{
-                marginTop: 20,
-                padding: 16,
-                borderRadius: 10,
-                background: "#fff1f0",
-                color: "#b42318",
-                fontWeight: 600,
-                lineHeight: 1.5,
+                marginTop:
+                  20,
+
+                padding:
+                  16,
+
+                borderRadius:
+                  10,
+
+                background:
+                  "#fff1f0",
+
+                color:
+                  "#b42318",
+
+                fontWeight:
+                  600,
+
+                lineHeight:
+                  1.5,
               }}
             >
               ❌ {erro}
             </div>
           )}
 
+          {/* ================================================= */}
           {/* RESULTADO */}
+          {/* ================================================= */}
 
           {resultado && (
+
             <div
               style={{
-                marginTop: 22,
+                marginTop:
+                  22,
               }}
             >
+
               {resultado.encontrado &&
               resultado.aparelho ? (
+
                 <>
-                  {/* APARELHO ENCONTRADO */}
+
+                  {/* APARELHO */}
 
                   <div
                     style={{
-                      padding: 18,
-                      borderRadius: 12,
+                      padding:
+                        18,
+
+                      borderRadius:
+                        12,
+
                       background:
                         "#eefaf1",
+
                       border:
                         "1px solid #b7e1c0",
                     }}
                   >
+
                     <h2
                       style={{
-                        marginTop: 0,
+                        marginTop:
+                          0,
+
                         color:
                           "#16823b",
                       }}
@@ -318,10 +538,14 @@ export default function ConsultaImeiPage() {
 
                     <p
                       style={{
-                        marginBottom: 0,
+                        marginBottom:
+                          0,
+
                         color:
                           "#146c2e",
-                        fontWeight: 600,
+
+                        fontWeight:
+                          600,
                       }}
                     >
                       Este IMEI está
@@ -329,19 +553,27 @@ export default function ConsultaImeiPage() {
                       sistema da
                       Adel&apos;s Mundo Cell.
                     </p>
+
                   </div>
 
                   {/* INFORMAÇÕES */}
 
                   <div
                     style={{
-                      marginTop: 18,
-                      display: "grid",
+                      marginTop:
+                        18,
+
+                      display:
+                        "grid",
+
                       gridTemplateColumns:
                         "repeat(2, minmax(0, 1fr))",
-                      gap: 12,
+
+                      gap:
+                        12,
                     }}
                   >
+
                     <Info
                       titulo="IMEI"
                       valor={
@@ -364,7 +596,9 @@ export default function ConsultaImeiPage() {
 
                     <Info
                       titulo="Status"
-                      valor={statusAparelho()}
+                      valor={
+                        statusAparelho()
+                      }
                     />
 
                     <Info
@@ -386,8 +620,15 @@ export default function ConsultaImeiPage() {
                           .lote
                           ?.precoCompraUsd !=
                         null
-                          ? `US$ ${resultado.aparelho.lote.precoCompraUsd
-                              .toFixed(2)
+                          ? `US$ ${Number(
+                              resultado
+                                .aparelho
+                                .lote
+                                .precoCompraUsd
+                            )
+                              .toFixed(
+                                2
+                              )
                               .replace(
                                 ".",
                                 ","
@@ -404,43 +645,127 @@ export default function ConsultaImeiPage() {
                           .id
                       )}
                     />
+
                   </div>
 
-                  {/* AVISO DE VENDA */}
+                  {/* ================================================= */}
+                  {/* INFORMAÇÕES DA VENDA */}
+                  {/* ================================================= */}
 
-                  {resultado.aparelho
-                    .vendido ? (
+                  {resultado.aparelho.vendido && (
                     <div
                       style={{
-                        marginTop: 18,
-                        padding: 16,
-                        borderRadius: 10,
+                        marginTop:
+                          18,
+
+                        padding:
+                          20,
+
+                        borderRadius:
+                          12,
+
                         background:
                           "#fff8e6",
+
                         border:
                           "1px solid #f0d58a",
-                        color:
-                          "#795500",
-                        fontWeight: 700,
                       }}
                     >
-                      📱 Este aparelho
-                      está marcado
-                      como VENDIDO.
+
+                      <h2
+                        style={{
+                          marginTop:
+                            0,
+
+                          color:
+                            "#795500",
+                        }}
+                      >
+                        🧾 Informações da venda
+                      </h2>
+
+                      <div
+                        style={{
+                          display:
+                            "grid",
+
+                          gridTemplateColumns:
+                            "repeat(2, minmax(0, 1fr))",
+
+                          gap:
+                            12,
+                        }}
+                      >
+
+                        <Info
+                          titulo="Vendido para"
+                          valor={
+                            resultado
+                              .aparelho
+                              .venda
+                              ?.cliente ||
+                            "-"
+                          }
+                        />
+
+                        <Info
+                          titulo="Data da venda"
+                          valor={
+                            formatarData(
+                              resultado
+                                .aparelho
+                                .venda
+                                ?.dataVenda ||
+                              resultado
+                                .aparelho
+                                .venda
+                                ?.createdAt
+                            )
+                          }
+                        />
+
+                        <Info
+                          titulo="ID da venda"
+                          valor={String(
+                            resultado
+                              .aparelho
+                              .venda
+                              ?.id ??
+                            "-"
+                          )}
+                        />
+
+                      </div>
+
                     </div>
-                  ) : (
+                  )}
+
+                  {/* STATUS */}
+
+                  {!resultado.aparelho.vendido ? (
+
                     <div
                       style={{
-                        marginTop: 18,
-                        padding: 16,
-                        borderRadius: 10,
+                        marginTop:
+                          18,
+
+                        padding:
+                          16,
+
+                        borderRadius:
+                          10,
+
                         background:
                           "#eef6ff",
+
                         border:
                           "1px solid #b9d8ff",
+
                         color:
                           "#1559a6",
-                        fontWeight: 700,
+
+                        fontWeight:
+                          700,
                       }}
                     >
                       📦 Este aparelho
@@ -448,24 +773,80 @@ export default function ConsultaImeiPage() {
                       disponível no
                       estoque.
                     </div>
+
+                  ) : (
+
+                    <div
+                      style={{
+                        marginTop:
+                          18,
+
+                        padding:
+                          16,
+
+                        borderRadius:
+                          10,
+
+                        background:
+                          "#fff1f0",
+
+                        border:
+                          "1px solid #f1b8b5",
+
+                        color:
+                          "#b42318",
+
+                        fontWeight:
+                          700,
+                      }}
+                    >
+                      🔴 Este aparelho
+                      foi vendido.
+
+                      {resultado
+                        .aparelho
+                        .venda
+                        ?.cliente && (
+                        <>
+                          {" "}
+                          Para:{" "}
+                          {
+                            resultado
+                              .aparelho
+                              .venda
+                              .cliente
+                          }
+                        </>
+                      )}
+                    </div>
+
                   )}
 
-                  {/* FUTURO BOTÃO DE GARANTIA */}
+                  {/* GARANTIA */}
 
                   <div
                     style={{
-                      marginTop: 20,
-                      padding: 18,
-                      borderRadius: 12,
+                      marginTop:
+                        20,
+
+                      padding:
+                        18,
+
+                      borderRadius:
+                        12,
+
                       background:
                         "#f7f7f7",
+
                       border:
                         "1px solid #ddd",
                     }}
                   >
+
                     <h3
                       style={{
-                        marginTop: 0,
+                        marginTop:
+                          0,
                       }}
                     >
                       🛡️ Garantia
@@ -473,37 +854,46 @@ export default function ConsultaImeiPage() {
 
                     <p
                       style={{
-                        color: "#666",
-                        marginBottom: 0,
+                        color:
+                          "#666",
+
+                        marginBottom:
+                          0,
                       }}
                     >
                       Depois vamos ligar
                       esta consulta
                       diretamente à
-                      garantia para você
-                      verificar a garantia
-                      do aparelho quando o
-                      cliente retornar à
-                      loja.
+                      garantia.
                     </p>
+
                   </div>
+
                 </>
+
               ) : (
-                /* NÃO ENCONTRADO */
 
                 <div
                   style={{
-                    padding: 20,
-                    borderRadius: 12,
+                    padding:
+                      20,
+
+                    borderRadius:
+                      12,
+
                     background:
                       "#fff1f0",
+
                     border:
                       "1px solid #f1b8b5",
                   }}
                 >
+
                   <h2
                     style={{
-                      marginTop: 0,
+                      marginTop:
+                        0,
+
                       color:
                         "#b42318",
                     }}
@@ -513,10 +903,14 @@ export default function ConsultaImeiPage() {
 
                   <p
                     style={{
-                      marginBottom: 0,
+                      marginBottom:
+                        0,
+
                       color:
                         "#7a271a",
-                      lineHeight: 1.5,
+
+                      lineHeight:
+                        1.5,
                     }}
                   >
                     Este IMEI não foi
@@ -524,19 +918,26 @@ export default function ConsultaImeiPage() {
                     sistema da
                     Adel&apos;s Mundo Cell.
                   </p>
+
                 </div>
+
               )}
+
             </div>
+
           )}
+
         </section>
+
       </div>
+
     </main>
   );
 }
 
-/* ================================================= */
-/* COMPONENTE DE INFORMAÇÃO */
-/* ================================================= */
+// =====================================================
+// COMPONENTE INFO
+// =====================================================
 
 function Info({
   titulo,
@@ -545,21 +946,34 @@ function Info({
   titulo: string;
   valor: string;
 }) {
+
   return (
     <div
       style={{
         border:
           "1px solid #e5e5e5",
-        borderRadius: 10,
-        padding: 14,
-        background: "#fafafa",
+
+        borderRadius:
+          10,
+
+        padding:
+          14,
+
+        background:
+          "#fafafa",
       }}
     >
+
       <div
         style={{
-          color: "#777",
-          fontSize: 12,
-          marginBottom: 6,
+          color:
+            "#777",
+
+          fontSize:
+            12,
+
+          marginBottom:
+            6,
         }}
       >
         {titulo}
@@ -567,14 +981,19 @@ function Info({
 
       <div
         style={{
-          fontWeight: 700,
-          fontSize: 14,
+          fontWeight:
+            700,
+
+          fontSize:
+            14,
+
           wordBreak:
             "break-word",
         }}
       >
         {valor || "-"}
       </div>
+
     </div>
   );
 }

@@ -41,7 +41,6 @@ export default function DashboardPage() {
   const [contas, setContas] = useState<ContaReceber[]>([]);
 
   const [carregando, setCarregando] = useState(true);
-  const [saindo, setSaindo] = useState(false);
 
   const [mostrarDisponiveis, setMostrarDisponiveis] =
     useState(false);
@@ -140,43 +139,6 @@ export default function DashboardPage() {
   useEffect(() => {
     carregarDados();
   }, []);
-
-  // =====================================================
-  // SAIR
-  // =====================================================
-
-  async function sair() {
-    setSaindo(true);
-
-    try {
-      const resposta = await fetch(
-        "/api/logout",
-        {
-          method: "POST",
-        }
-      );
-
-      if (!resposta.ok) {
-        alert("Não foi possível sair.");
-        setSaindo(false);
-        return;
-      }
-
-      router.replace("/login");
-      router.refresh();
-    } catch (error) {
-      console.error(
-        "Erro ao sair:",
-        error
-      );
-
-      alert(
-        "Erro ao encerrar sessão."
-      );
-
-      setSaindo(false);
-    }
-  }
 
   // =====================================================
   // APARELHOS DISPONÍVEIS
@@ -345,7 +307,7 @@ export default function DashboardPage() {
         {/* CABEÇALHO */}
         {/* ================================================= */}
 
-        <div className="mb-8 flex flex-col gap-4 rounded-2xl bg-white p-6 shadow-lg md:flex-row md:items-center md:justify-between">
+        <div className="mb-8 rounded-2xl bg-white p-6 shadow-lg">
 
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
@@ -356,17 +318,6 @@ export default function DashboardPage() {
               Adel's Mundo Cell
             </p>
           </div>
-
-          <button
-            type="button"
-            onClick={sair}
-            disabled={saindo}
-            className="rounded-xl bg-red-600 px-5 py-3 font-semibold text-white shadow transition hover:bg-red-700 disabled:bg-red-400"
-          >
-            {saindo
-              ? "Saindo..."
-              : "🚪 Sair"}
-          </button>
 
         </div>
 

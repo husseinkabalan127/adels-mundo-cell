@@ -3,149 +3,110 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-enum Role {
-  ADMIN
-  FUNCIONARIO
-}
-
 model Usuario {
-  id        Int      @id @default(autoincrement())
-  nome      String
-  email     String   @unique
-  senha     String
-  role      Role     @default(FUNCIONARIO)
-  ativo     Boolean  @default(true)
-
+  id                 Int       @id @default(autoincrement())
+  nome               String
+  email              String    @unique
+  senha              String
+  role               Role      @default(FUNCIONARIO)
+  ativo              Boolean   @default(true)
   resetCode          String?
   resetCodeExpiresAt DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 }
 
 model Produto {
-  id         Int      @id @default(autoincrement())
-  nome       String
-  quantidade Int      @default(0)
-  createdAt  DateTime @default(now())
-
-  // =====================================================
-  // PREÇO DE VENDA
-  // =====================================================
-
-  // Preço em dólar
+  id            Int           @id @default(autoincrement())
+  nome          String
+  quantidade    Int           @default(0)
+  createdAt     DateTime      @default(now())
   precoVendaUsd Float?
-
-  // Preço em real
   precoVendaBrl Float?
-
-  // Tipo do preço: USD ou BRL
-  tipoPreco String?
-
-  lotes         Lote[]
+  tipoPreco     String?
   aparelhos     Aparelho[]
-  vendas        VendaItem[]
-  vendasLegadas Venda[]       @relation("VendaProdutoLegado")
+  assistencias  Assistencia[]
   garantias     Garantia[]
-  assistencias Assistencia[]
+  lotes         Lote[]
+  vendasLegadas Venda[]       @relation("VendaProdutoLegado")
+  vendas        VendaItem[]
 }
 
 model Lote {
-  id             Int      @id @default(autoincrement())
+  id             Int        @id @default(autoincrement())
   fornecedor     String?
   precoCompraUsd Float?
-  quantidade     Int      @default(0)
+  precoCompraBrl Float?
+  tipoCusto      String?
+  quantidade     Int        @default(0)
   observacao     String?
-  createdAt      DateTime @default(now())
-
-  produtoId Int
-  produto   Produto @relation(fields: [produtoId], references: [id])
-
-  aparelhos Aparelho[]
+  createdAt      DateTime   @default(now())
+  produtoId      Int
+  aparelhos      Aparelho[]
+  produto        Produto    @relation(fields: [produtoId], references: [id])
 }
 
 model Aparelho {
-  id        Int      @id @default(autoincrement())
-  imei      String   @unique
-  vendido   Boolean  @default(false)
-  createdAt DateTime @default(now())
-
-  loteId Int
-  lote   Lote @relation(fields: [loteId], references: [id])
-
-  produtoId Int
-  produto   Produto @relation(fields: [produtoId], references: [id])
-
-  vendaItemId Int?
-  vendaItem   VendaItem? @relation(fields: [vendaItemId], references: [id])
-
+  id           Int           @id @default(autoincrement())
+  imei         String        @unique
+  vendido      Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+  loteId       Int
+  produtoId    Int
+  vendaItemId  Int?
+  lote         Lote          @relation(fields: [loteId], references: [id])
+  produto      Produto       @relation(fields: [produtoId], references: [id])
+  vendaItem    VendaItem?    @relation(fields: [vendaItemId], references: [id])
   assistencias Assistencia[]
 }
 
 model Venda {
-  id          Int      @id @default(autoincrement())
-  cliente     String
-  taxa        Float?
-  taxaFechada Boolean  @default(false)
-
-  dataVenda DateTime @default(now())
-  createdAt DateTime @default(now())
-
+  id             Int         @id @default(autoincrement())
+  cliente        String
+  taxa           Float?
+  taxaFechada    Boolean     @default(false)
+  dataVenda      DateTime    @default(now())
+  createdAt      DateTime    @default(now())
   produtoId      Int?
   quantidade     Int?
   valorVenda     Float?
   precoCompraUsd Float?
-
-  // =====================================================
-  // CONTAS A RECEBER
-  // =====================================================
-
-  formaPagamento String? @default("Não informado")
-  estadoFatura   String? @default("Em aberto")
-  desconto       Float   @default(0)
-
-  produto Produto? @relation("VendaProdutoLegado", fields: [produtoId], references: [id])
-
-  itens      VendaItem[]
-  pagamentos Pagamento[]
+  formaPagamento String?     @default("Não informado")
+  estadoFatura   String?     @default("Em aberto")
+  desconto       Float       @default(0)
+  pagamentos     Pagamento[]
+  produto        Produto?    @relation("VendaProdutoLegado", fields: [produtoId], references: [id])
+  itens          VendaItem[]
 }
 
 model VendaItem {
-  id            Int   @id @default(autoincrement())
-  quantidade    Int
-  valorUnitario Float
-  total         Float
-
+  id             Int        @id @default(autoincrement())
+  quantidade     Int
+  valorUnitario  Float
+  total          Float
   precoCompraUsd Float?
   custoTotal     Float?
-
-  createdAt DateTime @default(now())
-
-  vendaId Int
-  venda   Venda @relation(fields: [vendaId], references: [id])
-
-  produtoId Int
-  produto   Produto @relation(fields: [produtoId], references: [id])
-
-  aparelhos Aparelho[]
+  createdAt      DateTime   @default(now())
+  vendaId        Int
+  produtoId      Int
+  aparelhos      Aparelho[]
+  produto        Produto    @relation(fields: [produtoId], references: [id])
+  venda          Venda      @relation(fields: [vendaId], references: [id])
 }
 
 model Pagamento {
-  id Int @id @default(autoincrement())
-
+  id         Int      @id @default(autoincrement())
   valor      Float
-  desconto   Float  @default(0)
+  desconto   Float    @default(0)
   forma      String?
   observacao String?
-
-  createdAt DateTime @default(now())
-
-  vendaId Int
-  venda   Venda @relation(fields: [vendaId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  vendaId    Int
+  venda      Venda    @relation(fields: [vendaId], references: [id])
 }
 
 model Garantia {
@@ -157,9 +118,8 @@ model Garantia {
   fim        DateTime
   observacao String?
   createdAt  DateTime @default(now())
-
-  produtoId Int
-  produto   Produto @relation(fields: [produtoId], references: [id])
+  produtoId  Int
+  produto    Produto  @relation(fields: [produtoId], references: [id])
 }
 
 model Assistencia {
@@ -173,10 +133,13 @@ model Assistencia {
   dataEntrada DateTime  @default(now())
   dataSaida   DateTime?
   createdAt   DateTime  @default(now())
+  produtoId   Int
+  aparelhoId  Int?
+  aparelho    Aparelho? @relation(fields: [aparelhoId], references: [id])
+  produto     Produto   @relation(fields: [produtoId], references: [id])
+}
 
-  produtoId Int
-  produto   Produto @relation(fields: [produtoId], references: [id])
-
-  aparelhoId Int?
-  aparelho   Aparelho? @relation(fields: [aparelhoId], references: [id])
+enum Role {
+  ADMIN
+  FUNCIONARIO
 }

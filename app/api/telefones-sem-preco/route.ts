@@ -2,41 +2,131 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 // =====================================================
-// GET — TODOS OS PRODUTOS
+// GET — TELEFONES E CUSTOS
 // =====================================================
 
 export async function GET() {
   try {
-    const produtos = await prisma.produto.findMany({
-      orderBy: {
-        nome: "asc",
-      },
+    const produtos =
+      await prisma.produto.findMany({
+        orderBy: {
+          nome: "asc",
+        },
 
-      include: {
-        aparelhos: {
-          where: {
-            vendido: false,
-          },
+        select: {
+          id: true,
+          nome: true,
+          quantidade: true,
 
-          select: {
-            id: true,
-            imei: true,
-            vendido: true,
+          aparelhos: {
+            select: {
+              id: true,
+              imei: true,
+              vendido: true,
+
+              lote: {
+                select: {
+                  id: true,
+                  precoCompraUsd: true,
+                  precoCompraBrl: true,
+                  tipoCusto: true,
+                },
+              },
+            },
           },
         },
-      },
-    });
+      });
 
-    return NextResponse.json(produtos);
+    // =================================================
+    // PREPARAR PRODUTOS
+    // =================================================
+
+    const produtosPreparados =
+      produtos.map((produto) => {
+        // -------------------------------------------------
+        // PEGAR LOTES QUE POSSUEM CUSTO
+        // -------------------------------------------------
+
+        const aparelhosComCusto =
+          produto.aparelhos.filter(
+            (aparelho) =>
+              aparelho.lote &&
+              (
+                aparelho.lote
+                  .precoCompraUsd !== null ||
+                aparelho.lote
+                  .precoCompraBrl !== null
+              )
+          );
+
+        // -------------------------------------------------
+        // PEGAR O PRIMEIRO CUSTO CADASTRADO
+        // -------------------------------------------------
+
+        const aparelhoComCusto =
+          aparelhosComCusto[0];
+
+        const lote =
+          aparelhoComCusto?.lote ??
+          null;
+
+        return {
+          id: produto.id,
+
+          nome: produto.nome,
+
+          quantidade:
+            produto.quantidade,
+
+          // =================================================
+          // CUSTO
+          // =================================================
+
+          precoCompraUsd:
+            lote?.precoCompraUsd ??
+            null,
+
+          precoCompraBrl:
+            lote?.precoCompraBrl ??
+            null,
+
+          tipoCusto:
+            lote?.tipoCusto ??
+            null,
+
+          // =================================================
+          // APARELHOS
+          // =================================================
+
+          aparelhos:
+            produto.aparelhos.map(
+              (aparelho) => ({
+                id: aparelho.id,
+
+                imei: aparelho.imei,
+
+                vendido:
+                  aparelho.vendido,
+              })
+            ),
+        };
+      });
+
+    return NextResponse.json(
+      produtosPreparados
+    );
   } catch (error) {
     console.error(
-      "ERRO AO BUSCAR TELEFONES:",
+      "ERRO AO BUSCAR CUSTOS:",
       error
     );
 
     return NextResponse.json(
       {
-        error: "Erro ao buscar telefones.",
+        error:
+          error instanceof Error
+            ? error.message
+            : "Erro ao buscar custos.",
       },
       {
         status: 500,
@@ -46,30 +136,45 @@ export async function GET() {
 }
 
 // =====================================================
-// PUT — SALVAR / ALTERAR PREÇO
+// PUT — SALVAR / ALTERAR CUSTO
 // =====================================================
 
 export async function PUT(req: Request) {
   try {
-    const body = await req.json();
+    const body =
+      await req.json();
 
-    const produtoId = Number(body.produtoId);
+    const produtoId =
+      Number(
+        body.produtoId
+      );
 
-    const tipoPreco = String(
-      body.tipoPreco || ""
-    ).toUpperCase();
+    const tipoCusto =
+      String(
+        body.tipoCusto || ""
+      ).toUpperCase();
 
-    const preco = Number(
-      String(body.preco ?? "").replace(",", ".")
-    );
+    const preco =
+      Number(
+        String(
+          body.preco ?? ""
+        ).replace(",", ".")
+      );
+
+    // =================================================
+    // VALIDAR PRODUTO
+    // =================================================
 
     if (
-      !Number.isInteger(produtoId) ||
+      !Number.isInteger(
+        produtoId
+      ) ||
       produtoId <= 0
     ) {
       return NextResponse.json(
         {
-          error: "Produto inválido.",
+          error:
+            "Produto inválido.",
         },
         {
           status: 400,
@@ -77,13 +182,18 @@ export async function PUT(req: Request) {
       );
     }
 
+    // =================================================
+    // VALIDAR TIPO
+    // =================================================
+
     if (
-      tipoPreco !== "USD" &&
-      tipoPreco !== "BRL"
+      tipoCusto !== "USD" &&
+      tipoCusto !== "BRL"
     ) {
       return NextResponse.json(
         {
-          error: "Escolha USD ou BRL.",
+          error:
+            "Escolha USD ou BRL.",
         },
         {
           status: 400,
@@ -91,13 +201,20 @@ export async function PUT(req: Request) {
       );
     }
 
+    // =================================================
+    // VALIDAR PREÇO
+    // =================================================
+
     if (
-      !Number.isFinite(preco) ||
+      !Number.isFinite(
+        preco
+      ) ||
       preco <= 0
     ) {
       return NextResponse.json(
         {
-          error: "Informe um preço válido.",
+          error:
+            "Informe um custo válido.",
         },
         {
           status: 400,
@@ -105,17 +222,41 @@ export async function PUT(req: Request) {
       );
     }
 
+    // =================================================
+    // BUSCAR PRODUTO
+    // =================================================
+
     const produto =
-      await prisma.produto.findUnique({
-        where: {
-          id: produtoId,
-        },
-      });
+      await prisma.produto.findUnique(
+        {
+          where: {
+            id: produtoId,
+          },
+
+          select: {
+            id: true,
+            nome: true,
+
+            aparelhos: {
+              select: {
+                id: true,
+
+                lote: {
+                  select: {
+                    id: true,
+                  },
+                },
+              },
+            },
+          },
+        }
+      );
 
     if (!produto) {
       return NextResponse.json(
         {
-          error: "Produto não encontrado.",
+          error:
+            "Produto não encontrado.",
         },
         {
           status: 404,
@@ -123,34 +264,111 @@ export async function PUT(req: Request) {
       );
     }
 
-    const produtoAtualizado =
-      await prisma.produto.update({
+    // =================================================
+    // PEGAR IDS DOS LOTES
+    // =================================================
+
+    const loteIds =
+      produto.aparelhos
+        .map(
+          (aparelho) =>
+            aparelho.lote?.id
+        )
+        .filter(
+          (
+            id
+          ): id is number =>
+            Number.isInteger(id)
+        );
+
+    // =================================================
+    // VERIFICAR LOTES
+    // =================================================
+
+    if (
+      loteIds.length === 0
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Nenhum lote encontrado para os aparelhos deste produto.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // =================================================
+    // REMOVER DUPLICADOS
+    // =================================================
+
+    const loteIdsUnicos =
+      Array.from(
+        new Set(loteIds)
+      );
+
+    // =================================================
+    // SALVAR CUSTO NOS LOTES
+    // =================================================
+
+    const resultado =
+      await prisma.lote.updateMany({
         where: {
-          id: produtoId,
+          id: {
+            in: loteIdsUnicos,
+          },
         },
 
         data:
-          tipoPreco === "USD"
+          tipoCusto === "USD"
             ? {
-                precoVendaUsd: preco,
-                precoVendaBrl: null,
-                tipoPreco: "USD",
+                precoCompraUsd:
+                  preco,
+
+                precoCompraBrl:
+                  null,
+
+                tipoCusto:
+                  "USD",
               }
             : {
-                precoVendaUsd: null,
-                precoVendaBrl: preco,
-                tipoPreco: "BRL",
+                precoCompraUsd:
+                  null,
+
+                precoCompraBrl:
+                  preco,
+
+                tipoCusto:
+                  "BRL",
               },
       });
 
+    // =================================================
+    // RESPOSTA
+    // =================================================
+
     return NextResponse.json({
       success: true,
-      message: "Preço salvo com sucesso.",
-      produto: produtoAtualizado,
+
+      message:
+        "Custo salvo com sucesso.",
+
+      produtoId,
+
+      produto:
+        produto.nome,
+
+      tipoCusto,
+
+      preco,
+
+      lotesAtualizados:
+        resultado.count,
     });
   } catch (error) {
     console.error(
-      "ERRO AO SALVAR PREÇO:",
+      "ERRO AO SALVAR CUSTO:",
       error
     );
 
@@ -159,7 +377,7 @@ export async function PUT(req: Request) {
         error:
           error instanceof Error
             ? error.message
-            : "Erro ao salvar preço.",
+            : "Erro ao salvar custo.",
       },
       {
         status: 500,

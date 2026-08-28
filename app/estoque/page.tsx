@@ -2,6 +2,13 @@
 
 import { useEffect, useState } from "react";
 
+type Usuario = {
+  id: number;
+  nome: string;
+  email: string;
+  role: "ADMIN" | "FUNCIONARIO";
+};
+
 type Aparelho = {
   id: number;
   imei: string;
@@ -29,30 +36,49 @@ type Produto = {
 };
 
 export default function EstoquePage() {
-  const [produtos, setProdutos] = useState<Produto[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [produtos, setProdutos] =
+    useState<Produto[]>([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [usuario, setUsuario] =
+    useState<Usuario | null>(null);
+
+  const [carregandoUsuario, setCarregandoUsuario] =
+    useState(true);
 
   // =====================================================
-  // FORMULÁRIO
+  // FORMULÁRIO ADMIN
   // =====================================================
 
-  const [nome, setNome] = useState("");
-  const [fornecedor, setFornecedor] = useState("");
-  const [quantidade, setQuantidade] = useState("1");
-  const [precoCompraUsd, setPrecoCompraUsd] = useState("");
+  const [nome, setNome] =
+    useState("");
 
-  const [imeis, setImeis] = useState<string[]>([""]);
+  const [fornecedor, setFornecedor] =
+    useState("");
 
-  const [salvando, setSalvando] = useState(false);
+  const [quantidade, setQuantidade] =
+    useState("1");
+
+  const [precoCompraUsd, setPrecoCompraUsd] =
+    useState("");
+
+  const [imeis, setImeis] =
+    useState<string[]>([""]);
+
+  const [salvando, setSalvando] =
+    useState(false);
 
   // =====================================================
-  // PREÇO USD POSTERIORMENTE
+  // PREÇO USD
   // =====================================================
 
   const [lotePrecoAberto, setLotePrecoAberto] =
     useState<number | null>(null);
 
-  const [precoLote, setPrecoLote] = useState("");
+  const [precoLote, setPrecoLote] =
+    useState("");
 
   const [salvandoPreco, setSalvandoPreco] =
     useState(false);
@@ -64,15 +90,22 @@ export default function EstoquePage() {
   const [produtoParaExcluir, setProdutoParaExcluir] =
     useState<Produto | null>(null);
 
-  const [senha, setSenha] = useState("");
-  const [excluindo, setExcluindo] = useState(false);
+  const [senha, setSenha] =
+    useState("");
+
+  const [excluindo, setExcluindo] =
+    useState(false);
 
   // =====================================================
   // TROCAR IMEI
   // =====================================================
 
-  const [imeiAntigo, setImeiAntigo] = useState("");
-  const [imeiNovo, setImeiNovo] = useState("");
+  const [imeiAntigo, setImeiAntigo] =
+    useState("");
+
+  const [imeiNovo, setImeiNovo] =
+    useState("");
+
   const [trocandoImei, setTrocandoImei] =
     useState(false);
 
@@ -80,8 +113,66 @@ export default function EstoquePage() {
   // MENSAGENS
   // =====================================================
 
-  const [mensagem, setMensagem] = useState("");
-  const [erro, setErro] = useState("");
+  const [mensagem, setMensagem] =
+    useState("");
+
+  const [erro, setErro] =
+    useState("");
+
+  // =====================================================
+  // BUSCAR USUÁRIO LOGADO
+  // =====================================================
+
+  async function carregarUsuario() {
+    try {
+      setCarregandoUsuario(true);
+
+      const response =
+        await fetch(
+          "/api/auth/me",
+          {
+            cache: "no-store",
+          }
+        );
+
+      if (!response.ok) {
+        setUsuario(null);
+        return;
+      }
+
+      const data =
+        await response.json();
+
+      if (data?.user) {
+        setUsuario(
+          data.user
+        );
+      } else if (data?.usuario) {
+        setUsuario(
+          data.usuario
+        );
+      } else {
+        setUsuario(null);
+      }
+    } catch (error) {
+      console.error(
+        "Erro ao buscar usuário:",
+        error
+      );
+
+      setUsuario(null);
+    } finally {
+      setCarregandoUsuario(false);
+    }
+  }
+
+  // =====================================================
+  // ADMIN?
+  // =====================================================
+
+  const isAdmin =
+    usuario?.role ===
+    "ADMIN";
 
   // =====================================================
   // CARREGAR ESTOQUE
@@ -90,25 +181,34 @@ export default function EstoquePage() {
   async function carregarEstoque() {
     try {
       setLoading(true);
+      setErro("");
 
-      const response = await fetch("/api/estoque", {
-        cache: "no-store",
-      });
+      const response =
+        await fetch(
+          "/api/estoque",
+          {
+            cache: "no-store",
+          }
+        );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       if (!response.ok) {
         throw new Error(
-          data.error || "Erro ao carregar estoque."
+          data?.error ||
+            "Erro ao carregar estoque."
         );
       }
 
       setProdutos(
-        Array.isArray(data) ? data : []
+        Array.isArray(data)
+          ? data
+          : []
       );
     } catch (error: any) {
       setErro(
-        error.message ||
+        error?.message ||
           "Erro ao carregar estoque."
       );
     } finally {
@@ -116,7 +216,12 @@ export default function EstoquePage() {
     }
   }
 
+  // =====================================================
+  // INICIAR
+  // =====================================================
+
   useEffect(() => {
+    carregarUsuario();
     carregarEstoque();
   }, []);
 
@@ -124,22 +229,34 @@ export default function EstoquePage() {
   // ALTERAR QUANTIDADE
   // =====================================================
 
-  function alterarQuantidade(valor: string) {
+  function alterarQuantidade(
+    valor: string
+  ) {
     const qtd = Math.max(
       1,
       Number(valor) || 1
     );
 
-    setQuantidade(String(qtd));
+    setQuantidade(
+      String(qtd)
+    );
 
     setImeis((lista) => {
-      const novaLista = [...lista];
+      const novaLista = [
+        ...lista,
+      ];
 
-      while (novaLista.length < qtd) {
+      while (
+        novaLista.length <
+        qtd
+      ) {
         novaLista.push("");
       }
 
-      while (novaLista.length > qtd) {
+      while (
+        novaLista.length >
+        qtd
+      ) {
         novaLista.pop();
       }
 
@@ -156,9 +273,12 @@ export default function EstoquePage() {
     valor: string
   ) {
     setImeis((lista) => {
-      const novaLista = [...lista];
+      const novaLista = [
+        ...lista,
+      ];
 
-      novaLista[index] = valor;
+      novaLista[index] =
+        valor;
 
       return novaLista;
     });
@@ -172,14 +292,18 @@ export default function EstoquePage() {
     e: React.KeyboardEvent<HTMLInputElement>,
     index: number
   ) {
-    if (e.key !== "Enter") {
+    if (
+      e.key !== "Enter"
+    ) {
       return;
     }
 
     e.preventDefault();
 
     setImeis((lista) => {
-      const novaLista = [...lista];
+      const novaLista = [
+        ...lista,
+      ];
 
       const imeiAtual =
         novaLista[index]?.trim();
@@ -195,7 +319,9 @@ export default function EstoquePage() {
         novaLista.push("");
 
         setQuantidade(
-          String(novaLista.length)
+          String(
+            novaLista.length
+          )
         );
       }
 
@@ -203,7 +329,8 @@ export default function EstoquePage() {
     });
 
     setTimeout(() => {
-      const proximoIndex = index + 1;
+      const proximoIndex =
+        index + 1;
 
       const elemento =
         document.getElementById(
@@ -226,11 +353,22 @@ export default function EstoquePage() {
     setMensagem("");
     setErro("");
 
-    const qtd = Number(quantidade);
+    if (!isAdmin) {
+      setErro(
+        "Apenas o administrador pode adicionar aparelhos ao estoque."
+      );
+      return;
+    }
 
-    const imeisLimpos = imeis
-      .map((item) => item.trim())
-      .filter(Boolean);
+    const qtd =
+      Number(quantidade);
+
+    const imeisLimpos =
+      imeis
+        .map((item) =>
+          item.trim()
+        )
+        .filter(Boolean);
 
     if (!nome.trim()) {
       setErro(
@@ -247,7 +385,9 @@ export default function EstoquePage() {
     }
 
     if (
-      !Number.isInteger(qtd) ||
+      !Number.isInteger(
+        qtd
+      ) ||
       qtd <= 0
     ) {
       setErro(
@@ -256,7 +396,10 @@ export default function EstoquePage() {
       return;
     }
 
-    if (imeisLimpos.length !== qtd) {
+    if (
+      imeisLimpos.length !==
+      qtd
+    ) {
       setErro(
         "Informe um IMEI para cada aparelho."
       );
@@ -264,7 +407,9 @@ export default function EstoquePage() {
     }
 
     const imeisUnicos =
-      new Set(imeisLimpos);
+      new Set(
+        imeisLimpos
+      );
 
     if (
       imeisUnicos.size !==
@@ -279,36 +424,47 @@ export default function EstoquePage() {
     setSalvando(true);
 
     try {
-      const response = await fetch(
-        "/api/estoque",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            nome: nome.trim(),
-            fornecedor:
-              fornecedor.trim(),
-            quantidade: qtd,
-            precoCompraUsd:
-              precoCompraUsd === ""
-                ? null
-                : Number(
-                    precoCompraUsd
-                  ),
-            imeis: imeisLimpos,
-          }),
-        }
-      );
+      const response =
+        await fetch(
+          "/api/estoque",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              nome:
+                nome.trim(),
+
+              fornecedor:
+                fornecedor.trim(),
+
+              quantidade:
+                qtd,
+
+              precoCompraUsd:
+                precoCompraUsd ===
+                ""
+                  ? null
+                  : Number(
+                      precoCompraUsd
+                    ),
+
+              imeis:
+                imeisLimpos,
+            }),
+          }
+        );
 
       const data =
         await response.json();
 
       if (!response.ok) {
         throw new Error(
-          data.error ||
+          data?.error ||
             "Erro ao cadastrar aparelho."
         );
       }
@@ -326,7 +482,7 @@ export default function EstoquePage() {
       await carregarEstoque();
     } catch (error: any) {
       setErro(
-        error.message ||
+        error?.message ||
           "Erro ao cadastrar aparelho."
       );
     } finally {
@@ -335,15 +491,26 @@ export default function EstoquePage() {
   }
 
   // =====================================================
-  // ADICIONAR / ALTERAR PREÇO USD
+  // ABRIR PREÇO
   // =====================================================
 
-  function abrirPrecoLote(lote: Lote) {
-    setLotePrecoAberto(lote.id);
+  function abrirPrecoLote(
+    lote: Lote
+  ) {
+    if (!isAdmin) {
+      return;
+    }
+
+    setLotePrecoAberto(
+      lote.id
+    );
 
     setPrecoLote(
-      lote.precoCompraUsd !== null
-        ? String(lote.precoCompraUsd)
+      lote.precoCompraUsd !==
+        null
+        ? String(
+            lote.precoCompraUsd
+          )
         : ""
     );
 
@@ -351,10 +518,22 @@ export default function EstoquePage() {
     setErro("");
   }
 
+  // =====================================================
+  // SALVAR PREÇO
+  // =====================================================
+
   async function salvarPrecoLote() {
     if (
-      lotePrecoAberto === null
+      lotePrecoAberto ===
+      null
     ) {
+      return;
+    }
+
+    if (!isAdmin) {
+      setErro(
+        "Apenas o administrador pode alterar o preço de compra."
+      );
       return;
     }
 
@@ -362,7 +541,8 @@ export default function EstoquePage() {
     setErro("");
 
     if (
-      precoLote.trim() === ""
+      precoLote.trim() ===
+      ""
     ) {
       setErro(
         "Informe o preço de compra em USD."
@@ -374,7 +554,9 @@ export default function EstoquePage() {
       Number(precoLote);
 
     if (
-      !Number.isFinite(valor) ||
+      !Number.isFinite(
+        valor
+      ) ||
       valor < 0
     ) {
       setErro(
@@ -386,31 +568,36 @@ export default function EstoquePage() {
     setSalvandoPreco(true);
 
     try {
-      const response = await fetch(
-        "/api/estoque",
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            action:
-              "atualizarPreco",
-            loteId:
-              lotePrecoAberto,
-            precoCompraUsd:
-              valor,
-          }),
-        }
-      );
+      const response =
+        await fetch(
+          "/api/estoque",
+          {
+            method: "PATCH",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              action:
+                "atualizarPreco",
+
+              loteId:
+                lotePrecoAberto,
+
+              precoCompraUsd:
+                valor,
+            }),
+          }
+        );
 
       const data =
         await response.json();
 
       if (!response.ok) {
         throw new Error(
-          data.error ||
+          data?.error ||
             "Erro ao atualizar preço."
         );
       }
@@ -419,17 +606,22 @@ export default function EstoquePage() {
         "Preço de compra USD atualizado com sucesso!"
       );
 
-      setLotePrecoAberto(null);
+      setLotePrecoAberto(
+        null
+      );
+
       setPrecoLote("");
 
       await carregarEstoque();
     } catch (error: any) {
       setErro(
-        error.message ||
+        error?.message ||
           "Erro ao atualizar preço."
       );
     } finally {
-      setSalvandoPreco(false);
+      setSalvandoPreco(
+        false
+      );
     }
   }
 
@@ -441,6 +633,13 @@ export default function EstoquePage() {
     if (
       !produtoParaExcluir
     ) {
+      return;
+    }
+
+    if (!isAdmin) {
+      setErro(
+        "Apenas o administrador pode excluir produtos."
+      );
       return;
     }
 
@@ -456,28 +655,32 @@ export default function EstoquePage() {
     setMensagem("");
 
     try {
-      const response = await fetch(
-        "/api/estoque",
-        {
-          method: "DELETE",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            produtoId:
-              produtoParaExcluir.id,
-            senha,
-          }),
-        }
-      );
+      const response =
+        await fetch(
+          "/api/estoque",
+          {
+            method: "DELETE",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              produtoId:
+                produtoParaExcluir.id,
+
+              senha,
+            }),
+          }
+        );
 
       const data =
         await response.json();
 
       if (!response.ok) {
         throw new Error(
-          data.error ||
+          data?.error ||
             "Erro ao excluir produto."
         );
       }
@@ -486,17 +689,22 @@ export default function EstoquePage() {
         "Produto excluído do estoque."
       );
 
-      setProdutoParaExcluir(null);
+      setProdutoParaExcluir(
+        null
+      );
+
       setSenha("");
 
       await carregarEstoque();
     } catch (error: any) {
       setErro(
-        error.message ||
+        error?.message ||
           "Erro ao excluir produto."
       );
     } finally {
-      setExcluindo(false);
+      setExcluindo(
+        false
+      );
     }
   }
 
@@ -505,6 +713,13 @@ export default function EstoquePage() {
   // =====================================================
 
   async function trocarImei() {
+    if (!isAdmin) {
+      setErro(
+        "Apenas o administrador pode trocar IMEI."
+      );
+      return;
+    }
+
     setMensagem("");
     setErro("");
 
@@ -522,32 +737,38 @@ export default function EstoquePage() {
       return;
     }
 
-    setTrocandoImei(true);
+    setTrocandoImei(
+      true
+    );
 
     try {
-      const response = await fetch(
-        "/api/estoque",
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            imeiAntigo:
-              imeiAntigo.trim(),
-            imeiNovo:
-              imeiNovo.trim(),
-          }),
-        }
-      );
+      const response =
+        await fetch(
+          "/api/estoque",
+          {
+            method: "PATCH",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              imeiAntigo:
+                imeiAntigo.trim(),
+
+              imeiNovo:
+                imeiNovo.trim(),
+            }),
+          }
+        );
 
       const data =
         await response.json();
 
       if (!response.ok) {
         throw new Error(
-          data.error ||
+          data?.error ||
             "Erro ao trocar IMEI."
         );
       }
@@ -562,16 +783,18 @@ export default function EstoquePage() {
       await carregarEstoque();
     } catch (error: any) {
       setErro(
-        error.message ||
+        error?.message ||
           "Erro ao trocar IMEI."
       );
     } finally {
-      setTrocandoImei(false);
+      setTrocandoImei(
+        false
+      );
     }
   }
 
   // =====================================================
-  // LIMPAR MENSAGENS
+  // LIMPAR
   // =====================================================
 
   function limparMensagens() {
@@ -586,7 +809,10 @@ export default function EstoquePage() {
   const produtosDisponiveis =
     produtos.filter(
       (produto) =>
-        (produto.aparelhos || []).some(
+        (
+          produto.aparelhos ||
+          []
+        ).some(
           (aparelho) =>
             !aparelho.vendido
         )
@@ -598,16 +824,60 @@ export default function EstoquePage() {
 
   const totalEstoque =
     produtos.reduce(
-      (total, produto) =>
+      (
+        total,
+        produto
+      ) =>
         total +
-        (produto.aparelhos || [])
-          .filter(
-            (aparelho) =>
-              !aparelho.vendido
-          )
-          .length,
+        (
+          produto.aparelhos ||
+          []
+        ).filter(
+          (aparelho) =>
+            !aparelho.vendido
+        ).length,
       0
     );
+
+  // =====================================================
+  // LOADING USUÁRIO
+  // =====================================================
+
+  if (
+    carregandoUsuario
+  ) {
+    return (
+      <main
+        style={{
+          minHeight:
+            "100vh",
+          background:
+            "#f5f6f8",
+          padding:
+            "30px",
+          fontFamily:
+            "Arial, Helvetica, sans-serif",
+        }}
+      >
+        <div
+          style={{
+            maxWidth:
+              "1400px",
+            margin:
+              "0 auto",
+            background:
+              "#fff",
+            padding:
+              "30px",
+            borderRadius:
+              "15px",
+          }}
+        >
+          Carregando...
+        </div>
+      </main>
+    );
+  }
 
   // =====================================================
   // TELA
@@ -616,17 +886,26 @@ export default function EstoquePage() {
   return (
     <main
       style={{
-        minHeight: "100vh",
-        background: "#f5f6f8",
-        padding: "30px",
+        minHeight:
+          "100vh",
+
+        background:
+          "#f5f6f8",
+
+        padding:
+          "30px",
+
         fontFamily:
           "Arial, Helvetica, sans-serif",
       }}
     >
       <div
         style={{
-          maxWidth: "1400px",
-          margin: "0 auto",
+          maxWidth:
+            "1400px",
+
+          margin:
+            "0 auto",
         }}
       >
 
@@ -636,21 +915,36 @@ export default function EstoquePage() {
 
         <div
           style={{
-            display: "flex",
+            display:
+              "flex",
+
             justifyContent:
               "space-between",
-            alignItems: "center",
-            marginBottom: "25px",
-            gap: "15px",
-            flexWrap: "wrap",
+
+            alignItems:
+              "center",
+
+            marginBottom:
+              "25px",
+
+            gap:
+              "15px",
+
+            flexWrap:
+              "wrap",
           }}
         >
           <div>
             <h1
               style={{
-                margin: 0,
-                fontSize: "32px",
-                fontWeight: 800,
+                margin:
+                  0,
+
+                fontSize:
+                  "32px",
+
+                fontWeight:
+                  800,
               }}
             >
               Estoque
@@ -658,8 +952,11 @@ export default function EstoquePage() {
 
             <p
               style={{
-                marginTop: "7px",
-                color: "#666",
+                marginTop:
+                  "7px",
+
+                color:
+                  "#666",
               }}
             >
               Adel&apos;s Mundo Cell
@@ -668,18 +965,66 @@ export default function EstoquePage() {
 
           <div
             style={{
-              background: "#fff",
-              padding:
-                "15px 22px",
-              borderRadius: "12px",
-              boxShadow:
-                "0 2px 8px rgba(0,0,0,0.08)",
+              display:
+                "flex",
+
+              gap:
+                "10px",
+
+              alignItems:
+                "center",
+
+              flexWrap:
+                "wrap",
             }}
           >
-            <strong>
-              Total em estoque:
-            </strong>{" "}
-            {totalEstoque}
+            <div
+              style={{
+                background:
+                  "#fff",
+
+                padding:
+                  "15px 22px",
+
+                borderRadius:
+                  "12px",
+
+                boxShadow:
+                  "0 2px 8px rgba(0,0,0,0.08)",
+              }}
+            >
+              <strong>
+                Total em estoque:
+              </strong>{" "}
+              {totalEstoque}
+            </div>
+
+            <div
+              style={{
+                background:
+                  isAdmin
+                    ? "#dcfce7"
+                    : "#dbeafe",
+
+                color:
+                  isAdmin
+                    ? "#166534"
+                    : "#1e40af",
+
+                padding:
+                  "15px 22px",
+
+                borderRadius:
+                  "12px",
+
+                fontWeight:
+                  700,
+              }}
+            >
+              {isAdmin
+                ? "👑 ADMIN"
+                : "👷 FUNCIONÁRIO"}
+            </div>
           </div>
         </div>
 
@@ -690,12 +1035,23 @@ export default function EstoquePage() {
         {mensagem && (
           <div
             style={{
-              background: "#dcfce7",
-              color: "#166534",
-              padding: "14px",
-              borderRadius: "10px",
-              marginBottom: "15px",
-              fontWeight: 600,
+              background:
+                "#dcfce7",
+
+              color:
+                "#166534",
+
+              padding:
+                "14px",
+
+              borderRadius:
+                "10px",
+
+              marginBottom:
+                "15px",
+
+              fontWeight:
+                600,
             }}
           >
             {mensagem}
@@ -705,12 +1061,23 @@ export default function EstoquePage() {
         {erro && (
           <div
             style={{
-              background: "#fee2e2",
-              color: "#991b1b",
-              padding: "14px",
-              borderRadius: "10px",
-              marginBottom: "15px",
-              fontWeight: 600,
+              background:
+                "#fee2e2",
+
+              color:
+                "#991b1b",
+
+              padding:
+                "14px",
+
+              borderRadius:
+                "10px",
+
+              marginBottom:
+                "15px",
+
+              fontWeight:
+                600,
             }}
           >
             {erro}
@@ -718,314 +1085,384 @@ export default function EstoquePage() {
         )}
 
         {/* =================================================
-            ADICIONAR ESTOQUE
+            ÁREA ADMIN
         ================================================== */}
 
-        <section
-          style={{
-            background: "#fff",
-            padding: "25px",
-            borderRadius: "15px",
-            marginBottom: "25px",
-            boxShadow:
-              "0 2px 10px rgba(0,0,0,0.06)",
-          }}
-        >
-          <h2
-            style={{
-              marginTop: 0,
-              marginBottom: "20px",
-            }}
-          >
-            Adicionar aparelho
-          </h2>
-
-          <form
-            onSubmit={
-              adicionarEstoque
-            }
-          >
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns:
-                  "repeat(auto-fit, minmax(200px, 1fr))",
-                gap: "15px",
-              }}
-            >
-
-              {/* MODELO */}
-
-              <div>
-                <label>
-                  Modelo
-                </label>
-
-                <input
-                  value={nome}
-                  onChange={(e) =>
-                    setNome(
-                      e.target.value
-                    )
-                  }
-                  placeholder="Ex: iPhone 17 Pro Max"
-                  style={
-                    inputStyle
-                  }
-                />
-              </div>
-
-              {/* FORNECEDOR */}
-
-              <div>
-                <label>
-                  Fornecedor
-                </label>
-
-                <input
-                  value={fornecedor}
-                  onChange={(e) =>
-                    setFornecedor(
-                      e.target.value
-                    )
-                  }
-                  placeholder="Fornecedor"
-                  style={
-                    inputStyle
-                  }
-                />
-              </div>
-
-              {/* QUANTIDADE */}
-
-              <div>
-                <label>
-                  Quantidade
-                </label>
-
-                <input
-                  type="number"
-                  min="1"
-                  value={
-                    quantidade
-                  }
-                  onChange={(e) =>
-                    alterarQuantidade(
-                      e.target.value
-                    )
-                  }
-                  style={
-                    inputStyle
-                  }
-                />
-              </div>
-
-              {/* PREÇO USD */}
-
-              <div>
-                <label>
-                  Preço compra USD
-                </label>
-
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={
-                    precoCompraUsd
-                  }
-                  onChange={(e) =>
-                    setPrecoCompraUsd(
-                      e.target.value
-                    )
-                  }
-                  placeholder="Opcional — pode colocar depois"
-                  style={
-                    inputStyle
-                  }
-                />
-
-                <small
-                  style={{
-                    display: "block",
-                    marginTop: "5px",
-                    color: "#777",
-                  }}
-                >
-                  Você pode deixar vazio
-                  e colocar depois.
-                </small>
-              </div>
-            </div>
-
+        {isAdmin && (
+          <>
             {/* =================================================
-                IMEIS
+                ADICIONAR ESTOQUE
             ================================================== */}
 
-            <div
+            <section
               style={{
-                marginTop: "20px",
+                background:
+                  "#fff",
+
+                padding:
+                  "25px",
+
+                borderRadius:
+                  "15px",
+
+                marginBottom:
+                  "25px",
+
+                boxShadow:
+                  "0 2px 10px rgba(0,0,0,0.06)",
               }}
             >
-              <h3>
-                IMEI dos aparelhos
-              </h3>
-
-              <p
+              <h2
                 style={{
-                  color: "#666",
-                  fontSize: "14px",
+                  marginTop:
+                    0,
+
+                  marginBottom:
+                    "20px",
                 }}
               >
-                Digite o IMEI e aperte
-                Enter para adicionar
-                outro.
-              </p>
+                Adicionar aparelho
+              </h2>
 
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns:
-                    "repeat(auto-fit, minmax(250px, 1fr))",
-                  gap: "10px",
-                }}
+              <form
+                onSubmit={
+                  adicionarEstoque
+                }
               >
-                {imeis.map(
-                  (
-                    imei,
-                    index
-                  ) => (
+                <div
+                  style={{
+                    display:
+                      "grid",
+
+                    gridTemplateColumns:
+                      "repeat(auto-fit, minmax(200px, 1fr))",
+
+                    gap:
+                      "15px",
+                  }}
+                >
+
+                  <div>
+                    <label>
+                      Modelo
+                    </label>
+
                     <input
-                      id={`imei-${index}`}
-                      key={index}
-                      value={imei}
-                      onChange={(e) =>
-                        alterarImei(
-                          index,
-                          e.target.value
+                      value={
+                        nome
+                      }
+                      onChange={(
+                        e
+                      ) =>
+                        setNome(
+                          e.target
+                            .value
                         )
                       }
-                      onKeyDown={(e) =>
-                        handleImeiKeyDown(
-                          e,
-                          index
-                        )
-                      }
-                      placeholder={`IMEI ${index + 1}`}
+                      placeholder="Ex: iPhone 17 Pro Max"
                       style={
                         inputStyle
                       }
                     />
-                  )
-                )}
+                  </div>
+
+                  <div>
+                    <label>
+                      Fornecedor
+                    </label>
+
+                    <input
+                      value={
+                        fornecedor
+                      }
+                      onChange={(
+                        e
+                      ) =>
+                        setFornecedor(
+                          e.target
+                            .value
+                        )
+                      }
+                      placeholder="Fornecedor"
+                      style={
+                        inputStyle
+                      }
+                    />
+                  </div>
+
+                  <div>
+                    <label>
+                      Quantidade
+                    </label>
+
+                    <input
+                      type="number"
+                      min="1"
+                      value={
+                        quantidade
+                      }
+                      onChange={(
+                        e
+                      ) =>
+                        alterarQuantidade(
+                          e.target
+                            .value
+                        )
+                      }
+                      style={
+                        inputStyle
+                      }
+                    />
+                  </div>
+
+                  <div>
+                    <label>
+                      Preço compra USD
+                    </label>
+
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={
+                        precoCompraUsd
+                      }
+                      onChange={(
+                        e
+                      ) =>
+                        setPrecoCompraUsd(
+                          e.target
+                            .value
+                        )
+                      }
+                      placeholder="Opcional"
+                      style={
+                        inputStyle
+                      }
+                    />
+
+                    <small
+                      style={{
+                        display:
+                          "block",
+
+                        marginTop:
+                          "5px",
+
+                        color:
+                          "#777",
+                      }}
+                    >
+                      Você pode deixar vazio
+                      e colocar depois.
+                    </small>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    marginTop:
+                      "20px",
+                  }}
+                >
+                  <h3>
+                    IMEI dos aparelhos
+                  </h3>
+
+                  <p
+                    style={{
+                      color:
+                        "#666",
+
+                      fontSize:
+                        "14px",
+                    }}
+                  >
+                    Digite o IMEI e aperte
+                    Enter para adicionar
+                    outro.
+                  </p>
+
+                  <div
+                    style={{
+                      display:
+                        "grid",
+
+                      gridTemplateColumns:
+                        "repeat(auto-fit, minmax(250px, 1fr))",
+
+                      gap:
+                        "10px",
+                    }}
+                  >
+                    {imeis.map(
+                      (
+                        imei,
+                        index
+                      ) => (
+                        <input
+                          id={`imei-${index}`}
+                          key={
+                            index
+                          }
+                          value={
+                            imei
+                          }
+                          onChange={(
+                            e
+                          ) =>
+                            alterarImei(
+                              index,
+                              e.target
+                                .value
+                            )
+                          }
+                          onKeyDown={(
+                            e
+                          ) =>
+                            handleImeiKeyDown(
+                              e,
+                              index
+                            )
+                          }
+                          placeholder={`IMEI ${index + 1}`}
+                          style={
+                            inputStyle
+                          }
+                        />
+                      )
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={
+                    salvando
+                  }
+                  style={{
+                    ...primaryButton,
+
+                    marginTop:
+                      "20px",
+
+                    opacity:
+                      salvando
+                        ? 0.6
+                        : 1,
+                  }}
+                >
+                  {salvando
+                    ? "Salvando..."
+                    : "Adicionar ao estoque"}
+                </button>
+              </form>
+            </section>
+
+            {/* =================================================
+                TROCAR IMEI
+            ================================================== */}
+
+            <section
+              style={{
+                background:
+                  "#fff",
+
+                padding:
+                  "25px",
+
+                borderRadius:
+                  "15px",
+
+                marginBottom:
+                  "25px",
+
+                boxShadow:
+                  "0 2px 10px rgba(0,0,0,0.06)",
+              }}
+            >
+              <h2
+                style={{
+                  marginTop:
+                    0,
+                }}
+              >
+                Trocar IMEI
+              </h2>
+
+              <div
+                style={{
+                  display:
+                    "grid",
+
+                  gridTemplateColumns:
+                    "repeat(auto-fit, minmax(250px, 1fr))",
+
+                  gap:
+                    "15px",
+                }}
+              >
+                <input
+                  value={
+                    imeiAntigo
+                  }
+                  onChange={(
+                    e
+                  ) =>
+                    setImeiAntigo(
+                      e.target
+                        .value
+                    )
+                  }
+                  placeholder="IMEI antigo"
+                  style={
+                    inputStyle
+                  }
+                />
+
+                <input
+                  value={
+                    imeiNovo
+                  }
+                  onChange={(
+                    e
+                  ) =>
+                    setImeiNovo(
+                      e.target
+                        .value
+                    )
+                  }
+                  placeholder="IMEI novo"
+                  style={
+                    inputStyle
+                  }
+                />
+
+                <button
+                  type="button"
+                  onClick={
+                    trocarImei
+                  }
+                  disabled={
+                    trocandoImei
+                  }
+                  style={{
+                    ...secondaryButton,
+
+                    opacity:
+                      trocandoImei
+                        ? 0.6
+                        : 1,
+                  }}
+                >
+                  {trocandoImei
+                    ? "Trocando..."
+                    : "Trocar IMEI"}
+                </button>
               </div>
-            </div>
-
-            {/* BOTÃO */}
-
-            <button
-              type="submit"
-              disabled={
-                salvando
-              }
-              style={{
-                ...primaryButton,
-                marginTop: "20px",
-                opacity:
-                  salvando
-                    ? 0.6
-                    : 1,
-              }}
-            >
-              {salvando
-                ? "Salvando..."
-                : "Adicionar ao estoque"}
-            </button>
-          </form>
-        </section>
-
-        {/* =================================================
-            TROCAR IMEI
-        ================================================== */}
-
-        <section
-          style={{
-            background: "#fff",
-            padding: "25px",
-            borderRadius: "15px",
-            marginBottom: "25px",
-            boxShadow:
-              "0 2px 10px rgba(0,0,0,0.06)",
-          }}
-        >
-          <h2
-            style={{
-              marginTop: 0,
-            }}
-          >
-            Trocar IMEI
-          </h2>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns:
-                "repeat(auto-fit, minmax(250px, 1fr))",
-              gap: "15px",
-            }}
-          >
-            <input
-              value={
-                imeiAntigo
-              }
-              onChange={(e) =>
-                setImeiAntigo(
-                  e.target.value
-                )
-              }
-              placeholder="IMEI antigo"
-              style={
-                inputStyle
-              }
-            />
-
-            <input
-              value={
-                imeiNovo
-              }
-              onChange={(e) =>
-                setImeiNovo(
-                  e.target.value
-                )
-              }
-              placeholder="IMEI novo"
-              style={
-                inputStyle
-              }
-            />
-
-            <button
-              type="button"
-              onClick={
-                trocarImei
-              }
-              disabled={
-                trocandoImei
-              }
-              style={{
-                ...secondaryButton,
-                opacity:
-                  trocandoImei
-                    ? 0.6
-                    : 1,
-              }}
-            >
-              {trocandoImei
-                ? "Trocando..."
-                : "Trocar IMEI"}
-            </button>
-          </div>
-        </section>
+            </section>
+          </>
+        )}
 
         {/* =================================================
             LISTA ESTOQUE
@@ -1033,21 +1470,31 @@ export default function EstoquePage() {
 
         <section
           style={{
-            background: "#fff",
-            padding: "25px",
-            borderRadius: "15px",
+            background:
+              "#fff",
+
+            padding:
+              "25px",
+
+            borderRadius:
+              "15px",
+
             boxShadow:
               "0 2px 10px rgba(0,0,0,0.06)",
           }}
         >
           <h2
             style={{
-              marginTop: 0,
+              marginTop:
+                0,
+
               marginBottom:
                 "20px",
             }}
           >
-            Produtos em estoque
+            {isAdmin
+              ? "Produtos em estoque"
+              : "Aparelhos disponíveis"}
           </h2>
 
           {loading ? (
@@ -1058,7 +1505,8 @@ export default function EstoquePage() {
             0 ? (
             <p
               style={{
-                color: "#666",
+                color:
+                  "#666",
               }}
             >
               Nenhum produto cadastrado.
@@ -1066,13 +1514,17 @@ export default function EstoquePage() {
           ) : (
             <div
               style={{
-                display: "grid",
-                gap: "15px",
+                display:
+                  "grid",
+
+                gap:
+                  "15px",
               }}
             >
               {produtosDisponiveis.map(
-                (produto) => {
-
+                (
+                  produto
+                ) => {
                   const aparelhosDisponiveis =
                     (
                       produto.aparelhos ||
@@ -1096,24 +1548,31 @@ export default function EstoquePage() {
                       style={{
                         border:
                           "1px solid #e5e7eb",
+
                         borderRadius:
                           "12px",
+
                         padding:
                           "20px",
                       }}
                     >
 
-                      {/* PRODUTO HEADER */}
+                      {/* PRODUTO */}
 
                       <div
                         style={{
                           display:
                             "flex",
+
                           justifyContent:
                             "space-between",
+
                           alignItems:
                             "center",
-                          gap: "15px",
+
+                          gap:
+                            "15px",
+
                           flexWrap:
                             "wrap",
                         }}
@@ -1123,6 +1582,7 @@ export default function EstoquePage() {
                             style={{
                               margin:
                                 "0 0 8px",
+
                               fontSize:
                                 "21px",
                             }}
@@ -1147,29 +1607,33 @@ export default function EstoquePage() {
                           </div>
                         </div>
 
-                        {/* DELETE */}
+                        {/* DELETE ADMIN */}
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            limparMensagens();
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              limparMensagens();
 
-                            setProdutoParaExcluir(
-                              produto
-                            );
+                              setProdutoParaExcluir(
+                                produto
+                              );
 
-                            setSenha("");
-                          }}
-                          style={
-                            deleteButton
-                          }
-                        >
-                          🗑️ Excluir
-                        </button>
+                              setSenha(
+                                ""
+                              );
+                            }}
+                            style={
+                              deleteButton
+                            }
+                          >
+                            🗑️ Excluir
+                          </button>
+                        )}
                       </div>
 
                       {/* =================================================
-                          IMEIS DISPONÍVEIS
+                          IMEIS
                       ================================================== */}
 
                       <div
@@ -1186,9 +1650,13 @@ export default function EstoquePage() {
                           style={{
                             display:
                               "flex",
+
                             flexWrap:
                               "wrap",
-                            gap: "8px",
+
+                            gap:
+                              "8px",
+
                             marginTop:
                               "10px",
                           }}
@@ -1204,10 +1672,13 @@ export default function EstoquePage() {
                                 style={{
                                   background:
                                     "#f1f5f9",
+
                                   padding:
                                     "7px 10px",
+
                                   borderRadius:
                                     "7px",
+
                                   fontSize:
                                     "13px",
                                 }}
@@ -1222,281 +1693,290 @@ export default function EstoquePage() {
                       </div>
 
                       {/* =================================================
-                          LOTES
+                          LOTES — ADMIN ONLY
                       ================================================== */}
 
-                      {lotes.length >
-                        0 && (
-                        <details
-                          style={{
-                            marginTop:
-                              "18px",
-                          }}
-                        >
-                          <summary
-                            style={{
-                              cursor:
-                                "pointer",
-                              fontWeight:
-                                700,
-                            }}
-                          >
-                            Ver compras /
-                            fornecedores
-                          </summary>
-
-                          <div
+                      {isAdmin &&
+                        lotes.length >
+                          0 && (
+                          <details
                             style={{
                               marginTop:
-                                "12px",
-                              display:
-                                "grid",
-                              gap: "10px",
+                                "18px",
                             }}
                           >
-                            {lotes.map(
-                              (
-                                lote
-                              ) => {
+                            <summary
+                              style={{
+                                cursor:
+                                  "pointer",
 
-                                const aparelhosDoLote =
-                                  (
+                                fontWeight:
+                                  700,
+                              }}
+                            >
+                              Ver compras /
+                              fornecedores
+                            </summary>
+
+                            <div
+                              style={{
+                                marginTop:
+                                  "12px",
+
+                                display:
+                                  "grid",
+
+                                gap:
+                                  "10px",
+                              }}
+                            >
+                              {lotes.map(
+                                (
+                                  lote
+                                ) => {
+                                  const aparelhosDoLote =
                                     lote.aparelhos ||
-                                    []
-                                  );
+                                    [];
 
-                                const aparelhosDisponiveisDoLote =
-                                  aparelhosDoLote.filter(
-                                    (
-                                      aparelho
-                                    ) =>
-                                      !aparelho.vendido
-                                  );
+                                  const aparelhosDisponiveisDoLote =
+                                    aparelhosDoLote.filter(
+                                      (
+                                        aparelho
+                                      ) =>
+                                        !aparelho.vendido
+                                    );
 
-                                return (
-                                  <div
-                                    key={
-                                      lote.id
-                                    }
-                                    style={{
-                                      background:
-                                        "#f8fafc",
-                                      padding:
-                                        "15px",
-                                      borderRadius:
-                                        "8px",
-                                      border:
-                                        "1px solid #e5e7eb",
-                                    }}
-                                  >
-
-                                    {/* FORNECEDOR */}
-
-                                    <div>
-                                      <strong>
-                                        Fornecedor:
-                                      </strong>{" "}
-                                      {
-                                        lote.fornecedor ||
-                                        "-"
-                                      }
-                                    </div>
-
-                                    {/* QUANTIDADE */}
-
+                                  return (
                                     <div
-                                      style={{
-                                        marginTop:
-                                          "5px",
-                                      }}
-                                    >
-                                      <strong>
-                                        Quantidade:
-                                      </strong>{" "}
-                                      {
-                                        aparelhosDisponiveisDoLote.length
+                                      key={
+                                        lote.id
                                       }
-                                    </div>
-
-                                    {/* PREÇO */}
-
-                                    <div
                                       style={{
-                                        marginTop:
+                                        background:
+                                          "#f8fafc",
+
+                                        padding:
+                                          "15px",
+
+                                        borderRadius:
                                           "8px",
+
+                                        border:
+                                          "1px solid #e5e7eb",
                                       }}
                                     >
-                                      <strong>
-                                        Compra USD:
-                                      </strong>{" "}
-
-                                      {lote.precoCompraUsd !==
-                                      null
-                                        ? `$ ${Number(
-                                            lote.precoCompraUsd
-                                          ).toFixed(
-                                            2
-                                          )}`
-                                        : (
-                                          <span
-                                            style={{
-                                              color:
-                                                "#dc2626",
-                                              fontWeight:
-                                                600,
-                                            }}
-                                          >
-                                            Não informado
-                                          </span>
-                                        )}
-                                    </div>
-
-                                    {/* BOTÃO PREÇO */}
-
-                                    {lotePrecoAberto !==
-                                    lote.id ? (
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          abrirPrecoLote(
-                                            lote
-                                          )
+                                      <div>
+                                        <strong>
+                                          Fornecedor:
+                                        </strong>{" "}
+                                        {
+                                          lote.fornecedor ||
+                                          "-"
                                         }
-                                        style={{
-                                          ...secondaryButton,
-                                          marginTop:
-                                            "12px",
-                                          padding:
-                                            "9px 14px",
-                                          fontSize:
-                                            "14px",
-                                        }}
-                                      >
-                                        {lote.precoCompraUsd !==
-                                        null
-                                          ? "✏️ Alterar preço USD"
-                                          : "💵 Adicionar preço USD"}
-                                      </button>
-                                    ) : (
+                                      </div>
+
                                       <div
                                         style={{
                                           marginTop:
-                                            "12px",
-                                          background:
-                                            "#fff",
-                                          border:
-                                            "1px solid #d1d5db",
-                                          padding:
-                                            "12px",
-                                          borderRadius:
+                                            "5px",
+                                        }}
+                                      >
+                                        <strong>
+                                          Quantidade:
+                                        </strong>{" "}
+                                        {
+                                          aparelhosDisponiveisDoLote.length
+                                        }
+                                      </div>
+
+                                      <div
+                                        style={{
+                                          marginTop:
                                             "8px",
                                         }}
                                       >
-                                        <label
-                                          style={{
-                                            fontWeight:
-                                              700,
-                                          }}
-                                        >
-                                          Preço de compra USD
-                                        </label>
+                                        <strong>
+                                          Compra USD:
+                                        </strong>{" "}
 
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          step="0.01"
-                                          autoFocus
-                                          value={
-                                            precoLote
-                                          }
-                                          onChange={(
-                                            e
-                                          ) =>
-                                            setPrecoLote(
-                                              e
-                                                .target
-                                                .value
+                                        {lote.precoCompraUsd !==
+                                        null
+                                          ? `$ ${Number(
+                                              lote.precoCompraUsd
+                                            ).toFixed(
+                                              2
+                                            )}`
+                                          : (
+                                            <span
+                                              style={{
+                                                color:
+                                                  "#dc2626",
+
+                                                fontWeight:
+                                                  600,
+                                              }}
+                                            >
+                                              Não informado
+                                            </span>
+                                          )}
+                                      </div>
+
+                                      {lotePrecoAberto !==
+                                      lote.id ? (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            abrirPrecoLote(
+                                              lote
                                             )
                                           }
-                                          onKeyDown={(
-                                            e
-                                          ) => {
-                                            if (
-                                              e.key ===
-                                              "Enter"
-                                            ) {
-                                              e.preventDefault();
-
-                                              salvarPrecoLote();
-                                            }
-                                          }}
-                                          placeholder="Ex: 850"
                                           style={{
-                                            ...inputStyle,
-                                            marginTop:
-                                              "7px",
-                                          }}
-                                        />
+                                            ...secondaryButton,
 
-                                        <div
-                                          style={{
-                                            display:
-                                              "flex",
-                                            gap: "8px",
                                             marginTop:
-                                              "10px",
-                                            flexWrap:
-                                              "wrap",
+                                              "12px",
+
+                                            padding:
+                                              "9px 14px",
+
+                                            fontSize:
+                                              "14px",
                                           }}
                                         >
-                                          <button
-                                            type="button"
-                                            onClick={
-                                              salvarPrecoLote
-                                            }
-                                            disabled={
-                                              salvandoPreco
-                                            }
+                                          {lote.precoCompraUsd !==
+                                          null
+                                            ? "✏️ Alterar preço USD"
+                                            : "💵 Adicionar preço USD"}
+                                        </button>
+                                      ) : (
+                                        <div
+                                          style={{
+                                            marginTop:
+                                              "12px",
+
+                                            background:
+                                              "#fff",
+
+                                            border:
+                                              "1px solid #d1d5db",
+
+                                            padding:
+                                              "12px",
+
+                                            borderRadius:
+                                              "8px",
+                                          }}
+                                        >
+                                          <label
                                             style={{
-                                              ...primaryButton,
-                                              opacity:
-                                                salvandoPreco
-                                                  ? 0.6
-                                                  : 1,
+                                              fontWeight:
+                                                700,
                                             }}
                                           >
-                                            {salvandoPreco
-                                              ? "Salvando..."
-                                              : "💾 Salvar preço"}
-                                          </button>
+                                            Preço de compra USD
+                                          </label>
 
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              setLotePrecoAberto(
-                                                null
-                                              );
-
-                                              setPrecoLote(
-                                                ""
-                                              );
-                                            }}
-                                            style={
-                                              cancelButton
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            autoFocus
+                                            value={
+                                              precoLote
                                             }
+                                            onChange={(
+                                              e
+                                            ) =>
+                                              setPrecoLote(
+                                                e.target
+                                                  .value
+                                              )
+                                            }
+                                            onKeyDown={(
+                                              e
+                                            ) => {
+                                              if (
+                                                e.key ===
+                                                "Enter"
+                                              ) {
+                                                e.preventDefault();
+
+                                                salvarPrecoLote();
+                                              }
+                                            }}
+                                            placeholder="Ex: 850"
+                                            style={{
+                                              ...inputStyle,
+
+                                              marginTop:
+                                                "7px",
+                                            }}
+                                          />
+
+                                          <div
+                                            style={{
+                                              display:
+                                                "flex",
+
+                                              gap:
+                                                "8px",
+
+                                              marginTop:
+                                                "10px",
+
+                                              flexWrap:
+                                                "wrap",
+                                            }}
                                           >
-                                            Cancelar
-                                          </button>
+                                            <button
+                                              type="button"
+                                              onClick={
+                                                salvarPrecoLote
+                                              }
+                                              disabled={
+                                                salvandoPreco
+                                              }
+                                              style={{
+                                                ...primaryButton,
+
+                                                opacity:
+                                                  salvandoPreco
+                                                    ? 0.6
+                                                    : 1,
+                                              }}
+                                            >
+                                              {salvandoPreco
+                                                ? "Salvando..."
+                                                : "💾 Salvar preço"}
+                                            </button>
+
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setLotePrecoAberto(
+                                                  null
+                                                );
+
+                                                setPrecoLote(
+                                                  ""
+                                                );
+                                              }}
+                                              style={
+                                                cancelButton
+                                              }
+                                            >
+                                              Cancelar
+                                            </button>
+                                          </div>
                                         </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              }
-                            )}
-                          </div>
-                        </details>
-                      )}
+                                      )}
+                                    </div>
+                                  );
+                                }
+                              )}
+                            </div>
+                          </details>
+                        )}
                     </div>
                   );
                 }
@@ -1507,146 +1987,198 @@ export default function EstoquePage() {
       </div>
 
       {/* =====================================================
-          MODAL SENHA
+          MODAL SENHA ADMIN
       ===================================================== */}
 
-      {produtoParaExcluir && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background:
-              "rgba(0,0,0,0.55)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent:
-              "center",
-            padding: "20px",
-            zIndex: 9999,
-          }}
-        >
+      {isAdmin &&
+        produtoParaExcluir && (
           <div
             style={{
-              background: "#fff",
-              width: "100%",
-              maxWidth: "420px",
-              borderRadius: "16px",
-              padding: "25px",
-              boxShadow:
-                "0 10px 40px rgba(0,0,0,0.25)",
+              position:
+                "fixed",
+
+              inset:
+                0,
+
+              background:
+                "rgba(0,0,0,0.55)",
+
+              display:
+                "flex",
+
+              alignItems:
+                "center",
+
+              justifyContent:
+                "center",
+
+              padding:
+                "20px",
+
+              zIndex:
+                9999,
             }}
           >
-            <h2
-              style={{
-                marginTop: 0,
-              }}
-            >
-              🔐 Confirmar exclusão
-            </h2>
-
-            <p
-              style={{
-                color: "#555",
-              }}
-            >
-              Você está tentando excluir:
-            </p>
-
             <div
               style={{
                 background:
-                  "#f1f5f9",
-                padding: "12px",
+                  "#fff",
+
+                width:
+                  "100%",
+
+                maxWidth:
+                  "420px",
+
                 borderRadius:
-                  "8px",
-                fontWeight: 700,
-                marginBottom:
-                  "18px",
+                  "16px",
+
+                padding:
+                  "25px",
+
+                boxShadow:
+                  "0 10px 40px rgba(0,0,0,0.25)",
               }}
             >
-              {
-                produtoParaExcluir.nome
-              }
-            </div>
-
-            <label>
-              Senha
-            </label>
-
-            <input
-              type="password"
-              value={senha}
-              onChange={(e) =>
-                setSenha(
-                  e.target.value
-                )
-              }
-              placeholder="Digite a senha"
-              autoFocus
-              style={{
-                ...inputStyle,
-                marginTop: "8px",
-                marginBottom:
-                  "18px",
-              }}
-              onKeyDown={(e) => {
-                if (
-                  e.key ===
-                  "Enter"
-                ) {
-                  excluirProduto();
-                }
-              }}
-            />
-
-            <div
-              style={{
-                display: "flex",
-                gap: "10px",
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  setProdutoParaExcluir(
-                    null
-                  );
-
-                  setSenha("");
-                }}
+              <h2
                 style={{
-                  ...cancelButton,
-                  flex: 1,
+                  marginTop:
+                    0,
                 }}
               >
-                Cancelar
-              </button>
+                🔐 Confirmar exclusão
+              </h2>
 
-              <button
-                type="button"
-                onClick={
-                  excluirProduto
-                }
-                disabled={
-                  excluindo
-                }
+              <p
                 style={{
-                  ...deleteButton,
-                  flex: 1,
-                  opacity:
+                  color:
+                    "#555",
+                }}
+              >
+                Você está tentando excluir:
+              </p>
+
+              <div
+                style={{
+                  background:
+                    "#f1f5f9",
+
+                  padding:
+                    "12px",
+
+                  borderRadius:
+                    "8px",
+
+                  fontWeight:
+                    700,
+
+                  marginBottom:
+                    "18px",
+                }}
+              >
+                {
+                  produtoParaExcluir.nome
+                }
+              </div>
+
+              <label>
+                Senha
+              </label>
+
+              <input
+                type="password"
+                value={
+                  senha
+                }
+                onChange={(
+                  e
+                ) =>
+                  setSenha(
+                    e.target
+                      .value
+                  )
+                }
+                placeholder="Digite a senha"
+                autoFocus
+                style={{
+                  ...inputStyle,
+
+                  marginTop:
+                    "8px",
+
+                  marginBottom:
+                    "18px",
+                }}
+                onKeyDown={(
+                  e
+                ) => {
+                  if (
+                    e.key ===
+                    "Enter"
+                  ) {
+                    excluirProduto();
+                  }
+                }}
+              />
+
+              <div
+                style={{
+                  display:
+                    "flex",
+
+                  gap:
+                    "10px",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProdutoParaExcluir(
+                      null
+                    );
+
+                    setSenha(
+                      ""
+                    );
+                  }}
+                  style={{
+                    ...cancelButton,
+
+                    flex:
+                      1,
+                  }}
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="button"
+                  onClick={
+                    excluirProduto
+                  }
+                  disabled={
                     excluindo
-                      ? 0.6
-                      : 1,
-                }}
-              >
-                {excluindo
-                  ? "Excluindo..."
-                  : "Excluir"}
-              </button>
+                  }
+                  style={{
+                    ...deleteButton,
+
+                    flex:
+                      1,
+
+                    opacity:
+                      excluindo
+                        ? 0.6
+                        : 1,
+                  }}
+                >
+                  {excluindo
+                    ? "Excluindo..."
+                    : "Excluir"}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
     </main>
   );
 }
@@ -1657,60 +2189,129 @@ export default function EstoquePage() {
 
 const inputStyle: React.CSSProperties =
   {
-    width: "100%",
-    boxSizing: "border-box",
-    padding: "12px",
-    marginTop: "7px",
+    width:
+      "100%",
+
+    boxSizing:
+      "border-box",
+
+    padding:
+      "12px",
+
+    marginTop:
+      "7px",
+
     border:
       "1px solid #d1d5db",
-    borderRadius: "8px",
-    fontSize: "15px",
-    outline: "none",
+
+    borderRadius:
+      "8px",
+
+    fontSize:
+      "15px",
+
+    outline:
+      "none",
   };
 
 const primaryButton: React.CSSProperties =
   {
-    border: "none",
-    background: "#111827",
-    color: "#fff",
-    padding: "13px 20px",
-    borderRadius: "8px",
-    cursor: "pointer",
-    fontWeight: 700,
-    fontSize: "15px",
+    border:
+      "none",
+
+    background:
+      "#111827",
+
+    color:
+      "#fff",
+
+    padding:
+      "13px 20px",
+
+    borderRadius:
+      "8px",
+
+    cursor:
+      "pointer",
+
+    fontWeight:
+      700,
+
+    fontSize:
+      "15px",
   };
 
 const secondaryButton: React.CSSProperties =
   {
-    border: "none",
-    background: "#2563eb",
-    color: "#fff",
-    padding: "13px 20px",
-    borderRadius: "8px",
-    cursor: "pointer",
-    fontWeight: 700,
-    fontSize: "15px",
+    border:
+      "none",
+
+    background:
+      "#2563eb",
+
+    color:
+      "#fff",
+
+    padding:
+      "13px 20px",
+
+    borderRadius:
+      "8px",
+
+    cursor:
+      "pointer",
+
+    fontWeight:
+      700,
+
+    fontSize:
+      "15px",
   };
 
 const deleteButton: React.CSSProperties =
   {
-    border: "none",
-    background: "#dc2626",
-    color: "#fff",
-    padding: "10px 15px",
-    borderRadius: "8px",
-    cursor: "pointer",
-    fontWeight: 700,
+    border:
+      "none",
+
+    background:
+      "#dc2626",
+
+    color:
+      "#fff",
+
+    padding:
+      "10px 15px",
+
+    borderRadius:
+      "8px",
+
+    cursor:
+      "pointer",
+
+    fontWeight:
+      700,
   };
 
 const cancelButton: React.CSSProperties =
   {
     border:
       "1px solid #d1d5db",
-    background: "#fff",
-    color: "#333",
-    padding: "10px 15px",
-    borderRadius: "8px",
-    cursor: "pointer",
-    fontWeight: 700,
+
+    background:
+      "#fff",
+
+    color:
+      "#333",
+
+    padding:
+      "10px 15px",
+
+    borderRadius:
+      "8px",
+
+    cursor:
+      "pointer",
+
+    fontWeight:
+      700,
   };

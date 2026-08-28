@@ -1,51 +1,150 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { obterSessao } from "@/lib/auth";
 
 // =====================================================
-// GET - Buscar estoque completo
+// GET - BUSCAR ESTOQUE
 // =====================================================
 
 export async function GET() {
   try {
-    const produtos = await prisma.produto.findMany({
-      orderBy: {
-        createdAt: "desc",
-      },
+    const usuario = await obterSessao();
 
-      include: {
-        // =================================================
-        // LOTES
-        // IMPORTANTE:
-        // trazer aparelhos dentro de cada lote
-        // para a página poder usar lote.aparelhos.filter()
-        // =================================================
-        lotes: {
-          orderBy: {
-            createdAt: "desc",
-          },
+    if (!usuario) {
+      return NextResponse.json(
+        {
+          error: "Não autorizado.",
+        },
+        {
+          status: 401,
+        }
+      );
+    }
 
-          include: {
-            aparelhos: {
-              orderBy: {
-                createdAt: "desc",
+    const produtos =
+      await prisma.produto.findMany({
+        orderBy: {
+          createdAt: "desc",
+        },
+
+        include: {
+          lotes: {
+            orderBy: {
+              createdAt: "desc",
+            },
+
+            include: {
+              aparelhos: {
+                orderBy: {
+                  createdAt: "desc",
+                },
               },
             },
           },
-        },
 
-        // =================================================
-        // TODOS OS APARELHOS DO PRODUTO
-        // =================================================
-        aparelhos: {
-          orderBy: {
-            createdAt: "desc",
+          aparelhos: {
+            orderBy: {
+              createdAt: "desc",
+            },
           },
         },
-      },
-    });
+      });
 
-    return NextResponse.json(produtos);
+    // =================================================
+    // ADMIN
+    // =================================================
+
+    if (usuario.role === "ADMIN") {
+      return NextResponse.json(
+        produtos
+      );
+    }
+
+    // =================================================
+    // FUNCIONARIO
+    //
+    // Pode ver:
+    // - Modelo
+    // - Quantidade
+    // - IMEI
+    //
+    // Não pode receber:
+    // - Fornecedor
+    // - Preço de compra USD
+    // =================================================
+
+    const produtosFuncionario =
+      produtos.map((produto) => ({
+        id: produto.id,
+
+        nome: produto.nome,
+
+        quantidade:
+          produto.quantidade,
+
+        createdAt:
+          produto.createdAt,
+
+        aparelhos:
+          produto.aparelhos.map(
+            (aparelho) => ({
+              id: aparelho.id,
+
+              imei: aparelho.imei,
+
+              vendido:
+                aparelho.vendido,
+
+              produtoId:
+                aparelho.produtoId,
+
+              loteId:
+                aparelho.loteId,
+            })
+          ),
+
+        lotes:
+          produto.lotes.map(
+            (lote) => ({
+              id: lote.id,
+
+              quantidade:
+                lote.quantidade,
+
+              createdAt:
+                lote.createdAt,
+
+              // IMPORTANTE:
+              // NÃO enviar fornecedor
+              // NÃO enviar preço de compra
+
+              aparelhos:
+                lote.aparelhos.map(
+                  (aparelho) => ({
+                    id:
+                      aparelho.id,
+
+                    imei:
+                      aparelho.imei,
+
+                    vendido:
+                      aparelho.vendido,
+
+                    produtoId:
+                      aparelho.produtoId,
+
+                    loteId:
+                      aparelho.loteId,
+                  })
+                ),
+            })
+          ),
+      }));
+
+    return NextResponse.json(
+      produtosFuncionario
+    );
   } catch (error) {
     console.error(
       "ERRO AO BUSCAR ESTOQUE:",
@@ -55,9 +154,7 @@ export async function GET() {
     return NextResponse.json(
       {
         error:
-          error instanceof Error
-            ? error.message
-            : "Erro ao buscar estoque.",
+          "Erro ao buscar estoque.",
       },
       {
         status: 500,
@@ -67,50 +164,92 @@ export async function GET() {
 }
 
 // =====================================================
-// POST - Cadastrar aparelhos no estoque
+// POST - CADASTRAR APARELHOS
+// SOMENTE ADMIN
 // =====================================================
 
-export async function POST(req: Request) {
+export async function POST(
+  req: Request
+) {
   try {
-    const body = await req.json();
+    const usuario =
+      await obterSessao();
 
-    // =================================================
-    // DADOS
-    // =================================================
+    if (!usuario) {
+      return NextResponse.json(
+        {
+          error:
+            "Não autorizado.",
+        },
+        {
+          status: 401,
+        }
+      );
+    }
 
-    const nome = String(
-      body.nome || ""
-    ).trim();
+    if (
+      usuario.role !== "ADMIN"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Somente o administrador pode adicionar aparelhos ao estoque.",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
 
-    const fornecedor = String(
-      body.fornecedor || ""
-    ).trim();
+    const body =
+      await req.json();
 
-    const quantidade = Number(
-      body.quantidade
-    );
+    const nome =
+      String(
+        body.nome || ""
+      ).trim();
+
+    const fornecedor =
+      String(
+        body.fornecedor || ""
+      ).trim();
+
+    const quantidade =
+      Number(
+        body.quantidade
+      );
 
     const precoCompraUsd =
       body.precoCompraUsd === "" ||
-      body.precoCompraUsd === null ||
-      body.precoCompraUsd === undefined
+      body.precoCompraUsd ===
+        null ||
+      body.precoCompraUsd ===
+        undefined
         ? null
         : Number(
             String(
               body.precoCompraUsd
-            ).replace(",", ".")
+            ).replace(
+              ",",
+              "."
+            )
           );
 
-    const imeis = Array.isArray(
-      body.imeis
-    )
-      ? body.imeis
-          .map(
-            (imei: unknown) =>
-              String(imei).trim()
-          )
-          .filter(Boolean)
-      : [];
+    const imeis =
+      Array.isArray(
+        body.imeis
+      )
+        ? body.imeis
+            .map(
+              (
+                imei: unknown
+              ) =>
+                String(
+                  imei
+                ).trim()
+            )
+            .filter(Boolean)
+        : [];
 
     // =================================================
     // VALIDAÇÕES
@@ -128,7 +267,11 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!Number.isFinite(quantidade)) {
+    if (
+      !Number.isFinite(
+        quantidade
+      )
+    ) {
       return NextResponse.json(
         {
           error:
@@ -157,12 +300,9 @@ export async function POST(req: Request) {
       );
     }
 
-    // =================================================
-    // IMEI
-    // =================================================
-
     if (
-      imeis.length !== quantidade
+      imeis.length !==
+      quantidade
     ) {
       return NextResponse.json(
         {
@@ -174,27 +314,6 @@ export async function POST(req: Request) {
         }
       );
     }
-
-    if (
-      imeis.some(
-        (imei: string) =>
-          !imei
-      )
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Digite o IMEI de todos os aparelhos.",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    // =================================================
-    // IMEI REPETIDO DENTRO DA MESMA ENTRADA
-    // =================================================
 
     const imeisUnicos =
       new Set(imeis);
@@ -214,12 +333,9 @@ export async function POST(req: Request) {
       );
     }
 
-    // =================================================
-    // PREÇO USD
-    // =================================================
-
     if (
-      precoCompraUsd !== null &&
+      precoCompraUsd !==
+        null &&
       (
         !Number.isFinite(
           precoCompraUsd
@@ -239,21 +355,23 @@ export async function POST(req: Request) {
     }
 
     // =================================================
-    // VERIFICAR IMEI JÁ CADASTRADO
+    // VERIFICAR IMEI EXISTENTE
     // =================================================
 
     const aparelhosExistentes =
-      await prisma.aparelho.findMany({
-        where: {
-          imei: {
-            in: imeis,
+      await prisma.aparelho.findMany(
+        {
+          where: {
+            imei: {
+              in: imeis,
+            },
           },
-        },
 
-        select: {
-          imei: true,
-        },
-      });
+          select: {
+            imei: true,
+          },
+        }
+      );
 
     if (
       aparelhosExistentes.length >
@@ -266,7 +384,8 @@ export async function POST(req: Request) {
               item: {
                 imei: string;
               }
-            ) => item.imei
+            ) =>
+              item.imei
           )
           .join(", ");
 
@@ -290,108 +409,102 @@ export async function POST(req: Request) {
         async (
           tx: Prisma.TransactionClient
         ) => {
-          // =============================================
-          // PROCURAR PRODUTO
-          // =============================================
-
           let produto =
-            await tx.produto.findFirst({
-              where: {
-                nome: nome,
-              },
-            });
-
-          // =============================================
-          // CRIAR PRODUTO SE NÃO EXISTIR
-          // =============================================
+            await tx.produto.findFirst(
+              {
+                where: {
+                  nome,
+                },
+              }
+            );
 
           if (!produto) {
             produto =
-              await tx.produto.create({
-                data: {
-                  nome,
-                  quantidade: 0,
-                },
-              });
+              await tx.produto.create(
+                {
+                  data: {
+                    nome,
+                    quantidade: 0,
+                  },
+                }
+              );
           }
-
-          // =============================================
-          // CRIAR LOTE
-          // =============================================
 
           const lote =
             await tx.lote.create({
               data: {
                 quantidade,
+
                 precoCompraUsd,
+
                 fornecedor:
-                  fornecedor || null,
+                  fornecedor ||
+                  null,
+
                 produtoId:
                   produto.id,
               },
             });
 
-          // =============================================
-          // CRIAR APARELHOS / IMEIS
-          // =============================================
+          await tx.aparelho.createMany(
+            {
+              data: imeis.map(
+                (
+                  imei: string
+                ) => ({
+                  imei,
 
-          await tx.aparelho.createMany({
-            data: imeis.map(
-              (
-                imei: string
-              ) => ({
-                imei,
-                vendido: false,
-                loteId: lote.id,
-                produtoId:
-                  produto.id,
-              })
-            ),
-          });
+                  vendido: false,
 
-          // =============================================
-          // ATUALIZAR ESTOQUE DO PRODUTO
-          // =============================================
+                  loteId:
+                    lote.id,
+
+                  produtoId:
+                    produto.id,
+                })
+              ),
+            }
+          );
 
           const produtoAtualizado =
-            await tx.produto.update({
-              where: {
-                id: produto.id,
-              },
-
-              data: {
-                quantidade: {
-                  increment:
-                    quantidade,
+            await tx.produto.update(
+              {
+                where: {
+                  id: produto.id,
                 },
-              },
 
-              include: {
-                lotes: {
-                  include: {
-                    aparelhos:
-                      true,
+                data: {
+                  quantidade: {
+                    increment:
+                      quantidade,
                   },
                 },
 
-                aparelhos: true,
-              },
-            });
+                include: {
+                  lotes: {
+                    include: {
+                      aparelhos:
+                        true,
+                    },
+                  },
 
-          // =============================================
-          // BUSCAR LOTE COMPLETO
-          // =============================================
+                  aparelhos: true,
+                },
+              }
+            );
 
           const loteCompleto =
-            await tx.lote.findUnique({
-              where: {
-                id: lote.id,
-              },
+            await tx.lote.findUnique(
+              {
+                where: {
+                  id: lote.id,
+                },
 
-              include: {
-                aparelhos: true,
-              },
-            });
+                include: {
+                  aparelhos: true,
+                },
+              }
+            );
 
           return {
             produto:
@@ -402,10 +515,6 @@ export async function POST(req: Request) {
           };
         }
       );
-
-    // =================================================
-    // RESPOSTA
-    // =================================================
 
     return NextResponse.json(
       {
@@ -446,34 +555,47 @@ export async function POST(req: Request) {
 
 // =====================================================
 // PATCH
-// =====================================================
-// 1. Atualizar preço de compra USD do lote
-//
-// body:
-// {
-//   action: "atualizarPreco",
-//   loteId: 1,
-//   precoCompraUsd: 850
-// }
-//
-// 2. Trocar IMEI
-//
-// body:
-// {
-//   imeiAntigo: "123456789",
-//   imeiNovo: "987654321"
-// }
+// SOMENTE ADMIN
 // =====================================================
 
 export async function PATCH(
   req: Request
 ) {
   try {
+    const usuario =
+      await obterSessao();
+
+    if (!usuario) {
+      return NextResponse.json(
+        {
+          error:
+            "Não autorizado.",
+        },
+        {
+          status: 401,
+        }
+      );
+    }
+
+    if (
+      usuario.role !== "ADMIN"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Somente o administrador pode alterar o estoque.",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
     const body =
       await req.json();
 
     // =================================================
-    // AÇÃO 1 — ATUALIZAR PREÇO USD
+    // ATUALIZAR PREÇO
     // =================================================
 
     if (
@@ -502,10 +624,6 @@ export async function PATCH(
               )
             );
 
-      // ===============================================
-      // VALIDAR LOTE
-      // ===============================================
-
       if (
         !Number.isInteger(
           loteId
@@ -523,26 +641,9 @@ export async function PATCH(
         );
       }
 
-      // ===============================================
-      // VALIDAR PREÇO
-      // ===============================================
-
       if (
         precoCompraUsd ===
-        null
-      ) {
-        return NextResponse.json(
-          {
-            error:
-              "Informe o preço de compra USD.",
-          },
-          {
-            status: 400,
-          }
-        );
-      }
-
-      if (
+        null ||
         !Number.isFinite(
           precoCompraUsd
         ) ||
@@ -559,16 +660,14 @@ export async function PATCH(
         );
       }
 
-      // ===============================================
-      // VERIFICAR LOTE
-      // ===============================================
-
       const lote =
-        await prisma.lote.findUnique({
-          where: {
-            id: loteId,
-          },
-        });
+        await prisma.lote.findUnique(
+          {
+            where: {
+              id: loteId,
+            },
+          }
+        );
 
       if (!lote) {
         return NextResponse.json(
@@ -582,38 +681,39 @@ export async function PATCH(
         );
       }
 
-      // ===============================================
-      // ATUALIZAR PREÇO
-      // ===============================================
-
       const loteAtualizado =
-        await prisma.lote.update({
-          where: {
-            id: loteId,
-          },
+        await prisma.lote.update(
+          {
+            where: {
+              id: loteId,
+            },
 
-          data: {
-            precoCompraUsd,
-          },
+            data: {
+              precoCompraUsd,
+            },
 
-          include: {
-            aparelhos: true,
-          },
-        });
+            include: {
+              aparelhos:
+                true,
+            },
+          }
+        );
 
-      return NextResponse.json({
-        success: true,
+      return NextResponse.json(
+        {
+          success: true,
 
-        message:
-          "Preço de compra USD atualizado com sucesso.",
+          message:
+            "Preço de compra USD atualizado com sucesso.",
 
-        lote:
-          loteAtualizado,
-      });
+          lote:
+            loteAtualizado,
+        }
+      );
     }
 
     // =================================================
-    // AÇÃO 2 — TROCAR IMEI
+    // TROCAR IMEI
     // =================================================
 
     const imeiAntigo =
@@ -627,10 +727,6 @@ export async function PATCH(
         body.imeiNovo ||
           ""
       ).trim();
-
-    // ===============================================
-    // VALIDAR IMEIS
-    // ===============================================
 
     if (!imeiAntigo) {
       return NextResponse.json(
@@ -657,7 +753,8 @@ export async function PATCH(
     }
 
     if (
-      imeiAntigo === imeiNovo
+      imeiAntigo ===
+      imeiNovo
     ) {
       return NextResponse.json(
         {
@@ -669,10 +766,6 @@ export async function PATCH(
         }
       );
     }
-
-    // ===============================================
-    // PROCURAR IMEI ANTIGO
-    // ===============================================
 
     const aparelho =
       await prisma.aparelho.findUnique(
@@ -695,10 +788,6 @@ export async function PATCH(
       );
     }
 
-    // ===============================================
-    // NÃO PERMITIR TROCAR IMEI DE APARELHO VENDIDO
-    // ===============================================
-
     if (
       aparelho.vendido
     ) {
@@ -712,10 +801,6 @@ export async function PATCH(
         }
       );
     }
-
-    // ===============================================
-    // VERIFICAR IMEI NOVO
-    // ===============================================
 
     const imeiNovoExistente =
       await prisma.aparelho.findUnique(
@@ -740,30 +825,30 @@ export async function PATCH(
       );
     }
 
-    // ===============================================
-    // TROCAR IMEI
-    // ===============================================
-
     const aparelhoAtualizado =
-      await prisma.aparelho.update({
-        where: {
-          id: aparelho.id,
-        },
+      await prisma.aparelho.update(
+        {
+          where: {
+            id: aparelho.id,
+          },
 
-        data: {
-          imei: imeiNovo,
-        },
-      });
+          data: {
+            imei: imeiNovo,
+          },
+        }
+      );
 
-    return NextResponse.json({
-      success: true,
+    return NextResponse.json(
+      {
+        success: true,
 
-      message:
-        "IMEI trocado com sucesso.",
+        message:
+          "IMEI trocado com sucesso.",
 
-      aparelho:
-        aparelhoAtualizado,
-    });
+        aparelho:
+          aparelhoAtualizado,
+      }
+    );
   } catch (error) {
     console.error(
       "ERRO NO PATCH DO ESTOQUE:",
@@ -785,13 +870,43 @@ export async function PATCH(
 }
 
 // =====================================================
-// DELETE - Excluir produto
+// DELETE
+// SOMENTE ADMIN
 // =====================================================
 
 export async function DELETE(
   req: Request
 ) {
   try {
+    const usuario =
+      await obterSessao();
+
+    if (!usuario) {
+      return NextResponse.json(
+        {
+          error:
+            "Não autorizado.",
+        },
+        {
+          status: 401,
+        }
+      );
+    }
+
+    if (
+      usuario.role !== "ADMIN"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Somente o administrador pode excluir produtos.",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
     const body =
       await req.json();
 
@@ -806,10 +921,6 @@ export async function DELETE(
         body.senha ||
           ""
       ).trim();
-
-    // =================================================
-    // VALIDAR ID
-    // =================================================
 
     if (
       !Number.isInteger(
@@ -828,16 +939,9 @@ export async function DELETE(
       );
     }
 
-    // =================================================
-    // SENHA
-    // =================================================
-    // IMPORTANTE:
-    // mantenha aqui a mesma senha que você já
-    // estava usando no sistema.
-    // =================================================
-
     const SENHA_EXCLUSAO =
-      process.env.ESTOQUE_DELETE_PASSWORD ||
+      process.env
+        .ESTOQUE_DELETE_PASSWORD ||
       "1234";
 
     if (
@@ -854,10 +958,6 @@ export async function DELETE(
         }
       );
     }
-
-    // =================================================
-    // PROCURAR PRODUTO
-    // =================================================
 
     const produto =
       await prisma.produto.findUnique(
@@ -886,10 +986,6 @@ export async function DELETE(
       );
     }
 
-    // =================================================
-    // NÃO EXCLUIR PRODUTO COM APARELHO VENDIDO
-    // =================================================
-
     const aparelhoVendido =
       produto.aparelhos.some(
         (
@@ -912,18 +1008,10 @@ export async function DELETE(
       );
     }
 
-    // =================================================
-    // EXCLUIR TUDO EM TRANSACTION
-    // =================================================
-
     await prisma.$transaction(
       async (
         tx: Prisma.TransactionClient
       ) => {
-        // =============================================
-        // APARELHOS
-        // =============================================
-
         await tx.aparelho.deleteMany(
           {
             where: {
@@ -933,10 +1021,6 @@ export async function DELETE(
           }
         );
 
-        // =============================================
-        // LOTES
-        // =============================================
-
         await tx.lote.deleteMany(
           {
             where: {
@@ -945,10 +1029,6 @@ export async function DELETE(
             },
           }
         );
-
-        // =============================================
-        // PRODUTO
-        // =============================================
 
         await tx.produto.delete(
           {

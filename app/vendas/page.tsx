@@ -168,6 +168,9 @@ export default function VendasPage() {
   const [excluindoVendaId, setExcluindoVendaId] =
     useState<number | null>(null);
 
+  const [devolvendoAparelhoId, setDevolvendoAparelhoId] =
+    useState<number | null>(null);
+
   const imeiInputRef =
     useRef<HTMLInputElement>(null);
 
@@ -418,11 +421,9 @@ export default function VendasPage() {
       }
     );
 
-    // Modelo já foi selecionado: limpar a busca para fechar
-    // imediatamente a lista de sugestões.
     setBuscaModelo((atual) => ({
       ...atual,
-      [index]: "",
+      [index]: produto.nome,
     }));
   }
 
@@ -444,7 +445,6 @@ export default function VendasPage() {
       .filter(
         (produto) =>
           produto.quantidade > 0 &&
-          produto.id !== itens[index]?.produtoId &&
           produto.nome
             .toLowerCase()
             .includes(busca)
@@ -1094,6 +1094,44 @@ export default function VendasPage() {
       );
     } finally {
       setSalvando(false);
+    }
+  }
+
+  // =====================================================
+  // DEVOLVER UM APARELHO DA VENDA
+  // NÃO EXCLUI A FATURA
+  // =====================================================
+
+  async function devolverAparelho(
+    vendaId: number,
+    aparelhoId: number,
+    imei: string
+  ) {
+    const confirmar = window.confirm(
+      `Tem certeza que deseja devolver este aparelho?\n\nIMEI: ${imei}\n\nA venda/fatura continuará registrada e somente este aparelho será devolvido ao estoque.`
+    );
+
+    if (!confirmar) return;
+
+    setErro("");
+    setMensagem("");
+    setDevolvendoAparelhoId(aparelhoId);
+
+    try {
+      const res = await fetch("/api/vendas", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vendaId, aparelhoId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao devolver o aparelho.");
+      setMensagem(data.message || `Aparelho ${imei} devolvido com sucesso.`);
+      await carregarEstoque();
+      await carregarVendas();
+    } catch (e: any) {
+      setErro(e.message || "Erro ao devolver o aparelho.");
+    } finally {
+      setDevolvendoAparelhoId(null);
     }
   }
 
@@ -3624,6 +3662,42 @@ export default function VendasPage() {
                                           📲 WhatsApp
                                         </button>
 
+                                        {itensVenda.some((item: any) =>
+                                          Array.isArray(item.aparelhos) &&
+                                          item.aparelhos.some((a: any) => a?.vendido === true)
+                                        ) && (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const aparelhosVendidos = itensVenda.flatMap((item: any) =>
+                                                Array.isArray(item.aparelhos)
+                                                  ? item.aparelhos
+                                                      .filter((a: any) => a?.vendido === true)
+                                                      .map((a: any) => ({ ...a, modelo: nomeProdutoDoItem(item) }))
+                                                  : []
+                                              );
+                                              const lista = aparelhosVendidos.map((a: any, i: number) =>
+                                                `${i + 1}. ${a.modelo} — IMEI ${a.imei}`
+                                              ).join("\n");
+                                              const escolha = window.prompt(
+                                                `Qual aparelho deseja devolver?\n\n${lista}\n\nDigite o número do aparelho:`
+                                              );
+                                              if (escolha === null) return;
+                                              const indice = Number(escolha) - 1;
+                                              if (!Number.isInteger(indice) || indice < 0 || indice >= aparelhosVendidos.length) {
+                                                alert("Número inválido.");
+                                                return;
+                                              }
+                                              const aparelho = aparelhosVendidos[indice];
+                                              devolverAparelho(venda.id, aparelho.id, aparelho.imei);
+                                            }}
+                                            disabled={devolvendoAparelhoId !== null}
+                                            style={returnButton}
+                                          >
+                                            {devolvendoAparelhoId !== null ? "Devolvendo..." : "↩️ Devolver aparelho"}
+                                          </button>
+                                        )}
+
                                         <button
                                           type="button"
                                           onClick={() =>
@@ -3642,7 +3716,7 @@ export default function VendasPage() {
                                           {excluindoVendaId ===
                                           venda.id
                                             ? "Excluindo..."
-                                            : "Excluir"}
+                                            : "Excluir venda"}
                                         </button>
 
                                       </div>
@@ -3871,6 +3945,18 @@ const deleteButton: React.CSSProperties =
 
     whiteSpace:
       "nowrap",
+  };
+
+const returnButton: React.CSSProperties =
+  {
+    border: 0,
+    borderRadius: 8,
+    padding: "8px 12px",
+    background: "#f59e0b",
+    color: "#fff",
+    fontWeight: 700,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
   };
 
 const th: React.CSSProperties =
