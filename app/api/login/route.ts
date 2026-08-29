@@ -28,6 +28,7 @@ export async function POST(req: Request) {
       },
     });
 
+    // Usuário não encontrado
     if (!user) {
       return NextResponse.json(
         {
@@ -37,6 +38,7 @@ export async function POST(req: Request) {
       );
     }
 
+    // Usuário desativado
     if (!user.ativo) {
       return NextResponse.json(
         {
@@ -46,6 +48,7 @@ export async function POST(req: Request) {
       );
     }
 
+    // Verifica a senha
     const senhaCorreta = await bcrypt.compare(
       senha,
       user.senha
@@ -60,6 +63,7 @@ export async function POST(req: Request) {
       );
     }
 
+    // Cria a sessão
     await criarSessao({
       id: user.id,
       nome: user.nome,

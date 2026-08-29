@@ -421,9 +421,10 @@ export default function VendasPage() {
       }
     );
 
+    // O modelo foi escolhido: limpar a busca para fechar a lista de sugestões.
     setBuscaModelo((atual) => ({
       ...atual,
-      [index]: produto.nome,
+      [index]: "",
     }));
   }
 
@@ -1073,16 +1074,6 @@ export default function VendasPage() {
       await carregarEstoque();
 
       await carregarVendas();
-
-      if (
-        data.venda?.id
-      ) {
-        setTimeout(() => {
-          abrirFatura(
-            data.venda
-          );
-        }, 300);
-      }
 
       setTimeout(() => {
         imeiInputRef.current?.focus();

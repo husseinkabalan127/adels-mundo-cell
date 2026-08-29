@@ -42,22 +42,16 @@ export default function AssistenciasPage() {
   const [problema, setProblema] = useState("");
   const [observacao, setObservacao] = useState("");
 
-  // Busca geral
   const [busca, setBusca] = useState("");
-
-  // Busca por IMEI
   const [buscaImei, setBuscaImei] = useState("");
 
-  // Vários aparelhos selecionados
   const [aparelhosSelecionados, setAparelhosSelecionados] =
     useState<number[]>([]);
 
   const [carregando, setCarregando] = useState(false);
-  const [carregandoDados, setCarregandoDados] =
-    useState(true);
+  const [carregandoDados, setCarregandoDados] = useState(true);
 
-  const [entregandoTodos, setEntregandoTodos] =
-    useState(false);
+  const [entregandoTodos, setEntregandoTodos] = useState(false);
 
   const [excluindoId, setExcluindoId] =
     useState<number | null>(null);
@@ -93,9 +87,7 @@ export default function AssistenciasPage() {
         );
       }
 
-      const produtosData =
-        await produtosRes.json();
-
+      const produtosData = await produtosRes.json();
       const assistenciasData =
         await assistenciasRes.json();
 
@@ -132,24 +124,28 @@ export default function AssistenciasPage() {
   // APARELHOS QUE JÁ ESTÃO EM ASSISTÊNCIA
   // =====================================================
 
-  const aparelhosEmAssistencia =
-    useMemo(() => {
-      const ids = new Set<number>();
+  const aparelhosEmAssistencia = useMemo(() => {
+    const ids = new Set<number>();
 
-      assistencias.forEach((item) => {
-        if (
-          item.aparelho?.id &&
-          item.status !== "Entregue"
-        ) {
-          ids.add(item.aparelho.id);
-        }
-      });
+    assistencias.forEach((item) => {
+      if (
+        item.aparelho?.id &&
+        item.status !== "Entregue"
+      ) {
+        ids.add(item.aparelho.id);
+      }
+    });
 
-      return ids;
-    }, [assistencias]);
+    return ids;
+  }, [assistencias]);
 
   // =====================================================
   // TODOS OS APARELHOS
+  // =====================================================
+  // IMPORTANTE:
+  // APARELHO VENDIDO TAMBÉM APARECE AQUI.
+  // Assim podemos receber um telefone vendido
+  // para assistência técnica.
   // =====================================================
 
   const todosAparelhos = useMemo(() => {
@@ -161,12 +157,25 @@ export default function AssistenciasPage() {
     produtos.forEach((produto) => {
       (produto.aparelhos || []).forEach(
         (aparelho) => {
-          // Não mostrar aparelho vendido
-          if (aparelho.vendido) {
-            return;
-          }
 
-          // Não mostrar aparelho que já está em assistência
+          // =================================================
+          // NÃO BLOQUEAR APARELHO VENDIDO
+          // =================================================
+          //
+          // Antes existia:
+          //
+          // if (aparelho.vendido) {
+          //   return;
+          // }
+          //
+          // Isso fazia os aparelhos vendidos desaparecerem.
+          //
+          // Agora aparelho vendido também pode entrar
+          // na assistência.
+          // =================================================
+
+          // Não mostrar aparelho que já está
+          // em uma assistência aberta.
           if (
             aparelhosEmAssistencia.has(
               aparelho.id
@@ -190,7 +199,7 @@ export default function AssistenciasPage() {
   ]);
 
   // =====================================================
-  // BUSCAR POR IMEI
+  // BUSCAR POR IMEI / MODELO
   // =====================================================
 
   const aparelhosFiltrados = useMemo(() => {
@@ -246,7 +255,7 @@ export default function AssistenciasPage() {
   }
 
   // =====================================================
-  // SELECIONAR TODOS OS RESULTADOS
+  // SELECIONAR TODOS
   // =====================================================
 
   function selecionarTodos() {
@@ -370,6 +379,7 @@ export default function AssistenciasPage() {
         await Promise.all(
           aparelhosSelecionados.map(
             async (aparelhoId) => {
+
               const encontrado =
                 todosAparelhos.find(
                   ({ aparelho }) =>
@@ -396,8 +406,7 @@ export default function AssistenciasPage() {
 
                     body: JSON.stringify({
                       produtoId:
-                        encontrado.produto
-                          .id,
+                        encontrado.produto.id,
 
                       aparelhoId,
 
@@ -1287,6 +1296,20 @@ export default function AssistenciasPage() {
                             {aparelho.imei}
                           </div>
 
+                          {/* MOSTRAR SE FOI VENDIDO */}
+
+                          {aparelho.vendido && (
+                            <div className="text-sm font-bold text-red-600 mt-1">
+                              🔴 Vendido
+                            </div>
+                          )}
+
+                          {!aparelho.vendido && (
+                            <div className="text-sm font-bold text-green-600 mt-1">
+                              🟢 Em estoque
+                            </div>
+                          )}
+
                         </div>
 
                         {selecionado && (
@@ -1433,8 +1456,6 @@ export default function AssistenciasPage() {
               </p>
 
             </div>
-
-            {/* ENTREGAR TODOS */}
 
             <button
               onClick={
@@ -1623,8 +1644,6 @@ export default function AssistenciasPage() {
 
                             <div className="flex gap-2 flex-wrap">
 
-                              {/* IMPRIMIR */}
-
                               <button
                                 onClick={() =>
                                   imprimirRecibo(
@@ -1635,8 +1654,6 @@ export default function AssistenciasPage() {
                               >
                                 🧾 Imprimir
                               </button>
-
-                              {/* PREÇO */}
 
                               <button
                                 onClick={() =>
@@ -1652,8 +1669,6 @@ export default function AssistenciasPage() {
                                   ? "Alterar preço"
                                   : "Adicionar preço"}
                               </button>
-
-                              {/* INICIAR */}
 
                               {item.status ===
                                 "Pendente" && (
@@ -1672,8 +1687,6 @@ export default function AssistenciasPage() {
 
                               )}
 
-                              {/* PRONTO */}
-
                               {item.status ===
                                 "Em manutenção" && (
 
@@ -1690,8 +1703,6 @@ export default function AssistenciasPage() {
                                 </button>
 
                               )}
-
-                              {/* ENTREGAR INDIVIDUAL */}
 
                               {item.status ===
                                 "Pronto" && (
@@ -1710,8 +1721,6 @@ export default function AssistenciasPage() {
 
                               )}
 
-                              {/* FINALIZADO */}
-
                               {item.status ===
                                 "Entregue" && (
 
@@ -1720,8 +1729,6 @@ export default function AssistenciasPage() {
                                 </span>
 
                               )}
-
-                              {/* EXCLUIR */}
 
                               <button
                                 onClick={() =>

@@ -1,8 +1,33 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
+import { obterSessao } from "@/lib/auth";
 
 export async function GET(request: Request) {
   try {
+    // =====================================================
+    // VERIFICAR SESSÃO
+    // =====================================================
+
+    const usuario = await obterSessao();
+
+    if (!usuario) {
+      return NextResponse.json(
+        {
+          error: "Não autorizado.",
+        },
+        {
+          status: 401,
+        }
+      );
+    }
+
+    const ehAdmin =
+      usuario.role === "ADMIN";
+
+    // =====================================================
+    // PEGAR IMEI
+    // =====================================================
+
     const { searchParams } =
       new URL(request.url);
 
@@ -36,7 +61,13 @@ export async function GET(request: Request) {
         include: {
           produto: true,
 
-          lote: true,
+          // Só precisamos buscar o lote para ADMIN.
+          // Funcionário não recebe essas informações.
+          ...(ehAdmin
+            ? {
+                lote: true,
+              }
+            : {}),
 
           // =================================================
           // VENDA DO APARELHO
@@ -79,10 +110,10 @@ export async function GET(request: Request) {
       null;
 
     // =====================================================
-    // RESPOSTA
+    // DADOS BÁSICOS
     // =====================================================
 
-    return NextResponse.json({
+    const resposta: any = {
       encontrado: true,
 
       aparelho: {
@@ -104,24 +135,9 @@ export async function GET(request: Request) {
               }
             : null,
 
-        lote:
-          aparelho.lote
-            ? {
-                id:
-                  aparelho.lote.id,
-
-                fornecedor:
-                  aparelho.lote
-                    .fornecedor,
-
-                precoCompraUsd:
-                  aparelho.lote
-                    .precoCompraUsd,
-              }
-            : null,
-
         // =================================================
         // INFORMAÇÕES DA VENDA
+        // Funcionário também pode ver
         // =================================================
 
         venda: venda
@@ -139,7 +155,38 @@ export async function GET(request: Request) {
             }
           : null,
       },
-    });
+    };
+
+    // =====================================================
+    // DADOS DE CUSTO
+    // SOMENTE ADMIN
+    // =====================================================
+
+    if (ehAdmin) {
+      resposta.aparelho.lote =
+        aparelho.lote
+          ? {
+              id:
+                aparelho.lote.id,
+
+              fornecedor:
+                aparelho.lote
+                  .fornecedor,
+
+              precoCompraUsd:
+                aparelho.lote
+                  .precoCompraUsd,
+            }
+          : null;
+    }
+
+    // =====================================================
+    // RESPOSTA
+    // =====================================================
+
+    return NextResponse.json(
+      resposta
+    );
 
   } catch (error) {
 

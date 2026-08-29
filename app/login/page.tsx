@@ -1,11 +1,8 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
-  const router = useRouter();
-
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState("");
@@ -33,12 +30,14 @@ export default function LoginPage() {
       const dados = await resposta.json();
 
       if (!resposta.ok) {
-        setErro(dados.error || "E-mail ou senha incorretos.");
+        setErro(
+          dados.error || "E-mail ou senha incorretos."
+        );
         return;
       }
 
-      router.push("/");
-      router.refresh();
+      // Entrou com sucesso
+      window.location.href = "/";
     } catch (error) {
       console.error(error);
       setErro("Erro ao conectar com o sistema.");
@@ -52,9 +51,14 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         <div className="bg-white rounded-2xl shadow-xl p-8">
 
-          {/* Cabeçalho */}
+          {/* =========================
+              CABEÇALHO
+          ========================= */}
+
           <div className="text-center mb-8">
-            <div className="text-5xl mb-4">📱</div>
+            <div className="text-5xl mb-4">
+              📱
+            </div>
 
             <h1 className="text-3xl font-bold text-gray-800">
               Adel's Mundo Cell
@@ -65,17 +69,27 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* Erro */}
+          {/* =========================
+              ERRO
+          ========================= */}
+
           {erro && (
             <div className="mb-5 rounded-lg bg-red-100 border border-red-300 text-red-700 px-4 py-3">
               {erro}
             </div>
           )}
 
-          {/* Formulário */}
-          <form onSubmit={entrar} className="space-y-5">
+          {/* =========================
+              FORMULÁRIO DE LOGIN
+          ========================= */}
 
-            {/* E-mail */}
+          <form
+            onSubmit={entrar}
+            className="space-y-5"
+          >
+
+            {/* E-MAIL */}
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 E-mail
@@ -84,7 +98,9 @@ export default function LoginPage() {
               <input
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) =>
+                  setEmail(e.target.value)
+                }
                 placeholder="Digite seu e-mail"
                 autoComplete="email"
                 required
@@ -92,7 +108,8 @@ export default function LoginPage() {
               />
             </div>
 
-            {/* Senha */}
+            {/* SENHA */}
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Senha
@@ -101,7 +118,9 @@ export default function LoginPage() {
               <input
                 type="password"
                 value={senha}
-                onChange={(e) => setSenha(e.target.value)}
+                onChange={(e) =>
+                  setSenha(e.target.value)
+                }
                 placeholder="Digite sua senha"
                 autoComplete="current-password"
                 required
@@ -109,29 +128,37 @@ export default function LoginPage() {
               />
             </div>
 
-            {/* Entrar */}
+            {/* BOTÃO ENTRAR */}
+
             <button
               type="submit"
               disabled={carregando}
               className="w-full rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-3 transition"
             >
-              {carregando ? "Entrando..." : "Entrar"}
+              {carregando
+                ? "Entrando..."
+                : "Entrar"}
             </button>
 
           </form>
 
-          {/* Esqueci a senha */}
+          {/* =========================
+              ESQUECI MINHA SENHA
+          ========================= */}
+
           <div className="text-center mt-5">
-            <button
-              type="button"
-              onClick={() => router.push("/recuperar-senha")}
+            <a
+              href="/recuperar-senha"
               className="text-blue-600 hover:text-blue-800 font-medium text-sm"
             >
               Esqueci minha senha
-            </button>
+            </a>
           </div>
 
-          {/* Rodapé */}
+          {/* =========================
+              RODAPÉ
+          ========================= */}
+
           <div className="text-center mt-6">
             <p className="text-sm text-gray-400">
               Sistema interno • Adel's Mundo Cell
