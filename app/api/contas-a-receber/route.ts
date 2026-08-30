@@ -143,7 +143,7 @@ export async function GET() {
       });
 
     const contas = vendas.map(
-      (venda) => {
+      (venda: (typeof vendas)[number]) => {
         const resumo =
           calcularResumo(venda);
 
