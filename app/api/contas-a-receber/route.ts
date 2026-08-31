@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 // =====================================================
@@ -320,7 +321,7 @@ export async function POST(
             "Informe o valor pago ou o desconto.",
         },
         {
-          status: 400,
+          status: 400
         }
       );
     }
@@ -331,7 +332,9 @@ export async function POST(
 
     const resultado =
       await prisma.$transaction(
-        async (tx) => {
+        async (
+          tx: Prisma.TransactionClient
+        ) => {
           // -------------------------------------------
           // BUSCAR VENDA
           // -------------------------------------------
