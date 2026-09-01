@@ -71,53 +71,74 @@ export async function GET() {
     // - Preço de compra USD
     // =================================================
 
-    const produtosFuncionario = produtos.map((produto) => ({
-      id: produto.id,
+    const produtosFuncionario = produtos.map(
+      (
+        produto: Prisma.ProdutoGetPayload<{
+          include: {
+            lotes: {
+              include: {
+                aparelhos: true;
+              };
+            };
+            aparelhos: true;
+          };
+        }>
+      ) => ({
+        id: produto.id,
 
-      nome: produto.nome,
+        nome: produto.nome,
 
-      quantidade: produto.quantidade,
+        quantidade: produto.quantidade,
 
-      createdAt: produto.createdAt,
+        createdAt: produto.createdAt,
 
-      aparelhos: produto.aparelhos.map((aparelho) => ({
-        id: aparelho.id,
+        aparelhos: produto.aparelhos.map(
+          (aparelho) => ({
+            id: aparelho.id,
 
-        imei: aparelho.imei,
+            imei: aparelho.imei,
 
-        vendido: aparelho.vendido,
+            vendido: aparelho.vendido,
 
-        produtoId: aparelho.produtoId,
+            produtoId: aparelho.produtoId,
 
-        loteId: aparelho.loteId,
-      })),
+            loteId: aparelho.loteId,
+          })
+        ),
 
-      lotes: produto.lotes.map((lote) => ({
-        id: lote.id,
+        lotes: produto.lotes.map(
+          (lote) => ({
+            id: lote.id,
 
-        quantidade: lote.quantidade,
+            quantidade: lote.quantidade,
 
-        createdAt: lote.createdAt,
+            createdAt: lote.createdAt,
 
-        // IMPORTANTE:
-        // NÃO enviar fornecedor
-        // NÃO enviar preço de compra
+            // IMPORTANTE:
+            // NÃO enviar fornecedor
+            // NÃO enviar preço de compra
 
-        aparelhos: lote.aparelhos.map((aparelho) => ({
-          id: aparelho.id,
+            aparelhos: lote.aparelhos.map(
+              (aparelho) => ({
+                id: aparelho.id,
 
-          imei: aparelho.imei,
+                imei: aparelho.imei,
 
-          vendido: aparelho.vendido,
+                vendido: aparelho.vendido,
 
-          produtoId: aparelho.produtoId,
+                produtoId: aparelho.produtoId,
 
-          loteId: aparelho.loteId,
-        })),
-      })),
-    }));
+                loteId: aparelho.loteId,
+              })
+            ),
+          })
+        ),
+      })
+    );
 
-    return NextResponse.json(produtosFuncionario);
+    return NextResponse.json(
+      produtosFuncionario
+    );
   } catch (error) {
     console.error(
       "ERRO AO BUSCAR ESTOQUE:",
