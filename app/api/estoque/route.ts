@@ -72,18 +72,7 @@ export async function GET() {
     // =================================================
 
     const produtosFuncionario = produtos.map(
-      (
-        produto: Prisma.ProdutoGetPayload<{
-          include: {
-            lotes: {
-              include: {
-                aparelhos: true;
-              };
-            };
-            aparelhos: true;
-          };
-        }>
-      ) => ({
+      (produto: (typeof produtos)[number]) => ({
         id: produto.id,
 
         nome: produto.nome,
