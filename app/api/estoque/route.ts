@@ -4,6 +4,27 @@ import { prisma } from "@/lib/prisma";
 import { obterSessao } from "@/lib/auth";
 
 // =====================================================
+// TYPES
+// =====================================================
+
+type ProdutoEstoque = Prisma.ProdutoGetPayload<{
+  include: {
+    lotes: {
+      include: {
+        aparelhos: true;
+      };
+    };
+    aparelhos: true;
+  };
+}>;
+
+type AparelhoEstoque =
+  ProdutoEstoque["aparelhos"][number];
+
+type LoteEstoque =
+  ProdutoEstoque["lotes"][number];
+
+// =====================================================
 // GET - BUSCAR ESTOQUE
 // =====================================================
 
@@ -22,33 +43,34 @@ export async function GET() {
       );
     }
 
-    const produtos = await prisma.produto.findMany({
-      orderBy: {
-        createdAt: "desc",
-      },
+    const produtos =
+      await prisma.produto.findMany({
+        orderBy: {
+          createdAt: "desc",
+        },
 
-      include: {
-        lotes: {
-          orderBy: {
-            createdAt: "desc",
-          },
+        include: {
+          lotes: {
+            orderBy: {
+              createdAt: "desc",
+            },
 
-          include: {
-            aparelhos: {
-              orderBy: {
-                createdAt: "desc",
+            include: {
+              aparelhos: {
+                orderBy: {
+                  createdAt: "desc",
+                },
               },
             },
           },
-        },
 
-        aparelhos: {
-          orderBy: {
-            createdAt: "desc",
+          aparelhos: {
+            orderBy: {
+              createdAt: "desc",
+            },
           },
         },
-      },
-    });
+      });
 
     // =================================================
     // ADMIN
@@ -71,59 +93,81 @@ export async function GET() {
     // - Preço de compra USD
     // =================================================
 
-    const produtosFuncionario = produtos.map(
-      (produto: (typeof produtos)[number]) => ({
-        id: produto.id,
+    const produtosFuncionario =
+      produtos.map(
+        (produto: ProdutoEstoque) => ({
+          id: produto.id,
 
-        nome: produto.nome,
+          nome: produto.nome,
 
-        quantidade: produto.quantidade,
+          quantidade:
+            produto.quantidade,
 
-        createdAt: produto.createdAt,
+          createdAt:
+            produto.createdAt,
 
-        aparelhos: produto.aparelhos.map(
-          (aparelho) => ({
-            id: aparelho.id,
-
-            imei: aparelho.imei,
-
-            vendido: aparelho.vendido,
-
-            produtoId: aparelho.produtoId,
-
-            loteId: aparelho.loteId,
-          })
-        ),
-
-        lotes: produto.lotes.map(
-          (lote) => ({
-            id: lote.id,
-
-            quantidade: lote.quantidade,
-
-            createdAt: lote.createdAt,
-
-            // IMPORTANTE:
-            // NÃO enviar fornecedor
-            // NÃO enviar preço de compra
-
-            aparelhos: lote.aparelhos.map(
-              (aparelho) => ({
+          aparelhos:
+            produto.aparelhos.map(
+              (
+                aparelho: AparelhoEstoque
+              ) => ({
                 id: aparelho.id,
 
                 imei: aparelho.imei,
 
-                vendido: aparelho.vendido,
+                vendido:
+                  aparelho.vendido,
 
-                produtoId: aparelho.produtoId,
+                produtoId:
+                  aparelho.produtoId,
 
-                loteId: aparelho.loteId,
+                loteId:
+                  aparelho.loteId,
               })
             ),
-          })
-        ),
-      })
-    );
+
+          lotes:
+            produto.lotes.map(
+              (
+                lote: LoteEstoque
+              ) => ({
+                id: lote.id,
+
+                quantidade:
+                  lote.quantidade,
+
+                createdAt:
+                  lote.createdAt,
+
+                // IMPORTANTE:
+                // NÃO enviar fornecedor
+                // NÃO enviar preço de compra
+
+                aparelhos:
+                  lote.aparelhos.map(
+                    (
+                      aparelho: AparelhoEstoque
+                    ) => ({
+                      id:
+                        aparelho.id,
+
+                      imei:
+                        aparelho.imei,
+
+                      vendido:
+                        aparelho.vendido,
+
+                      produtoId:
+                        aparelho.produtoId,
+
+                      loteId:
+                        aparelho.loteId,
+                    })
+                  ),
+              })
+            ),
+        })
+      );
 
     return NextResponse.json(
       produtosFuncionario
@@ -136,7 +180,8 @@ export async function GET() {
 
     return NextResponse.json(
       {
-        error: "Erro ao buscar estoque.",
+        error:
+          "Erro ao buscar estoque.",
       },
       {
         status: 500,
@@ -150,14 +195,18 @@ export async function GET() {
 // SOMENTE ADMIN
 // =====================================================
 
-export async function POST(req: Request) {
+export async function POST(
+  req: Request
+) {
   try {
-    const usuario = await obterSessao();
+    const usuario =
+      await obterSessao();
 
     if (!usuario) {
       return NextResponse.json(
         {
-          error: "Não autorizado.",
+          error:
+            "Não autorizado.",
         },
         {
           status: 401,
@@ -165,7 +214,9 @@ export async function POST(req: Request) {
       );
     }
 
-    if (usuario.role !== "ADMIN") {
+    if (
+      usuario.role !== "ADMIN"
+    ) {
       return NextResponse.json(
         {
           error:
@@ -177,7 +228,8 @@ export async function POST(req: Request) {
       );
     }
 
-    const body = await req.json();
+    const body =
+      await req.json();
 
     const nome = String(
       body.nome || ""
@@ -202,13 +254,17 @@ export async function POST(req: Request) {
             ).replace(",", ".")
           );
 
-    const imeis = Array.isArray(body.imeis)
-      ? body.imeis
-          .map((imei: unknown) =>
-            String(imei).trim()
-          )
-          .filter(Boolean)
-      : [];
+    const imeis =
+      Array.isArray(
+        body.imeis
+      )
+        ? body.imeis
+            .map(
+              (imei: unknown) =>
+                String(imei).trim()
+            )
+            .filter(Boolean)
+        : [];
 
     // =================================================
     // VALIDAÇÕES
@@ -226,7 +282,11 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!Number.isFinite(quantidade)) {
+    if (
+      !Number.isFinite(
+        quantidade
+      )
+    ) {
       return NextResponse.json(
         {
           error:
@@ -239,7 +299,9 @@ export async function POST(req: Request) {
     }
 
     if (
-      !Number.isInteger(quantidade) ||
+      !Number.isInteger(
+        quantidade
+      ) ||
       quantidade <= 0
     ) {
       return NextResponse.json(
@@ -253,7 +315,10 @@ export async function POST(req: Request) {
       );
     }
 
-    if (imeis.length !== quantidade) {
+    if (
+      imeis.length !==
+      quantidade
+    ) {
       return NextResponse.json(
         {
           error:
@@ -265,10 +330,12 @@ export async function POST(req: Request) {
       );
     }
 
-    const imeisUnicos = new Set(imeis);
+    const imeisUnicos =
+      new Set(imeis);
 
     if (
-      imeisUnicos.size !== imeis.length
+      imeisUnicos.size !==
+      imeis.length
     ) {
       return NextResponse.json(
         {
@@ -282,9 +349,12 @@ export async function POST(req: Request) {
     }
 
     if (
-      precoCompraUsd !== null &&
+      precoCompraUsd !==
+        null &&
       (
-        !Number.isFinite(precoCompraUsd) ||
+        !Number.isFinite(
+          precoCompraUsd
+        ) ||
         precoCompraUsd < 0
       )
     ) {
@@ -304,20 +374,23 @@ export async function POST(req: Request) {
     // =================================================
 
     const aparelhosExistentes =
-      await prisma.aparelho.findMany({
-        where: {
-          imei: {
-            in: imeis,
+      await prisma.aparelho.findMany(
+        {
+          where: {
+            imei: {
+              in: imeis,
+            },
           },
-        },
 
-        select: {
-          imei: true,
-        },
-      });
+          select: {
+            imei: true,
+          },
+        }
+      );
 
     if (
-      aparelhosExistentes.length > 0
+      aparelhosExistentes.length >
+      0
     ) {
       const repetidos =
         aparelhosExistentes
@@ -351,21 +424,25 @@ export async function POST(req: Request) {
           tx: Prisma.TransactionClient
         ) => {
           let produto =
-            await tx.produto.findFirst({
-              where: {
-                nome,
-              },
-            });
+            await tx.produto.findFirst(
+              {
+                where: {
+                  nome,
+                },
+              }
+            );
 
           if (!produto) {
             produto =
-              await tx.produto.create({
-                data: {
-                  nome,
+              await tx.produto.create(
+                {
+                  data: {
+                    nome,
 
-                  quantidade: 0,
-                },
-              });
+                    quantidade: 0,
+                  },
+                }
+              );
           }
 
           const lote =
@@ -376,62 +453,73 @@ export async function POST(req: Request) {
                 precoCompraUsd,
 
                 fornecedor:
-                  fornecedor || null,
+                  fornecedor ||
+                  null,
 
                 produtoId:
                   produto.id,
               },
             });
 
-          await tx.aparelho.createMany({
-            data: imeis.map(
-              (imei: string) => ({
-                imei,
+          await tx.aparelho.createMany(
+            {
+              data: imeis.map(
+                (
+                  imei: string
+                ) => ({
+                  imei,
 
-                vendido: false,
+                  vendido: false,
 
-                loteId: lote.id,
+                  loteId:
+                    lote.id,
 
-                produtoId:
-                  produto.id,
-              })
-            ),
-          });
+                  produtoId:
+                    produto.id,
+                })
+              ),
+            }
+          );
 
           const produtoAtualizado =
-            await tx.produto.update({
-              where: {
-                id: produto.id,
-              },
-
-              data: {
-                quantidade: {
-                  increment:
-                    quantidade,
+            await tx.produto.update(
+              {
+                where: {
+                  id: produto.id,
                 },
-              },
 
-              include: {
-                lotes: {
-                  include: {
-                    aparelhos: true,
+                data: {
+                  quantidade: {
+                    increment:
+                      quantidade,
                   },
                 },
 
-                aparelhos: true,
-              },
-            });
+                include: {
+                  lotes: {
+                    include: {
+                      aparelhos:
+                        true,
+                    },
+                  },
+
+                  aparelhos: true,
+                },
+              }
+            );
 
           const loteCompleto =
-            await tx.lote.findUnique({
-              where: {
-                id: lote.id,
-              },
+            await tx.lote.findUnique(
+              {
+                where: {
+                  id: lote.id,
+                },
 
-              include: {
-                aparelhos: true,
-              },
-            });
+                include: {
+                  aparelhos: true,
+                },
+              }
+            );
 
           return {
             produto:
@@ -485,14 +573,18 @@ export async function POST(req: Request) {
 // SOMENTE ADMIN
 // =====================================================
 
-export async function PATCH(req: Request) {
+export async function PATCH(
+  req: Request
+) {
   try {
-    const usuario = await obterSessao();
+    const usuario =
+      await obterSessao();
 
     if (!usuario) {
       return NextResponse.json(
         {
-          error: "Não autorizado.",
+          error:
+            "Não autorizado.",
         },
         {
           status: 401,
@@ -500,7 +592,9 @@ export async function PATCH(req: Request) {
       );
     }
 
-    if (usuario.role !== "ADMIN") {
+    if (
+      usuario.role !== "ADMIN"
+    ) {
       return NextResponse.json(
         {
           error:
@@ -512,7 +606,8 @@ export async function PATCH(req: Request) {
       );
     }
 
-    const body = await req.json();
+    const body =
+      await req.json();
 
     // =================================================
     // ATUALIZAR PREÇO
@@ -527,18 +622,26 @@ export async function PATCH(req: Request) {
       );
 
       const precoCompraUsd =
-        body.precoCompraUsd === null ||
-        body.precoCompraUsd === undefined ||
-        body.precoCompraUsd === ""
+        body.precoCompraUsd ===
+          null ||
+        body.precoCompraUsd ===
+          undefined ||
+        body.precoCompraUsd ===
+          ""
           ? null
           : Number(
               String(
                 body.precoCompraUsd
-              ).replace(",", ".")
+              ).replace(
+                ",",
+                "."
+              )
             );
 
       if (
-        !Number.isInteger(loteId) ||
+        !Number.isInteger(
+          loteId
+        ) ||
         loteId <= 0
       ) {
         return NextResponse.json(
@@ -553,7 +656,8 @@ export async function PATCH(req: Request) {
       }
 
       if (
-        precoCompraUsd === null ||
+        precoCompraUsd ===
+          null ||
         !Number.isFinite(
           precoCompraUsd
         ) ||
@@ -571,11 +675,13 @@ export async function PATCH(req: Request) {
       }
 
       const lote =
-        await prisma.lote.findUnique({
-          where: {
-            id: loteId,
-          },
-        });
+        await prisma.lote.findUnique(
+          {
+            where: {
+              id: loteId,
+            },
+          }
+        );
 
       if (!lote) {
         return NextResponse.json(
@@ -590,19 +696,21 @@ export async function PATCH(req: Request) {
       }
 
       const loteAtualizado =
-        await prisma.lote.update({
-          where: {
-            id: loteId,
-          },
+        await prisma.lote.update(
+          {
+            where: {
+              id: loteId,
+            },
 
-          data: {
-            precoCompraUsd,
-          },
+            data: {
+              precoCompraUsd,
+            },
 
-          include: {
-            aparelhos: true,
-          },
-        });
+            include: {
+              aparelhos: true,
+            },
+          }
+        );
 
       return NextResponse.json({
         success: true,
@@ -619,13 +727,17 @@ export async function PATCH(req: Request) {
     // TROCAR IMEI
     // =================================================
 
-    const imeiAntigo = String(
-      body.imeiAntigo || ""
-    ).trim();
+    const imeiAntigo =
+      String(
+        body.imeiAntigo ||
+          ""
+      ).trim();
 
-    const imeiNovo = String(
-      body.imeiNovo || ""
-    ).trim();
+    const imeiNovo =
+      String(
+        body.imeiNovo ||
+          ""
+      ).trim();
 
     if (!imeiAntigo) {
       return NextResponse.json(
@@ -651,7 +763,10 @@ export async function PATCH(req: Request) {
       );
     }
 
-    if (imeiAntigo === imeiNovo) {
+    if (
+      imeiAntigo ===
+      imeiNovo
+    ) {
       return NextResponse.json(
         {
           error:
@@ -664,11 +779,13 @@ export async function PATCH(req: Request) {
     }
 
     const aparelho =
-      await prisma.aparelho.findUnique({
-        where: {
-          imei: imeiAntigo,
-        },
-      });
+      await prisma.aparelho.findUnique(
+        {
+          where: {
+            imei: imeiAntigo,
+          },
+        }
+      );
 
     if (!aparelho) {
       return NextResponse.json(
@@ -682,7 +799,9 @@ export async function PATCH(req: Request) {
       );
     }
 
-    if (aparelho.vendido) {
+    if (
+      aparelho.vendido
+    ) {
       return NextResponse.json(
         {
           error:
@@ -695,13 +814,17 @@ export async function PATCH(req: Request) {
     }
 
     const imeiNovoExistente =
-      await prisma.aparelho.findUnique({
-        where: {
-          imei: imeiNovo,
-        },
-      });
+      await prisma.aparelho.findUnique(
+        {
+          where: {
+            imei: imeiNovo,
+          },
+        }
+      );
 
-    if (imeiNovoExistente) {
+    if (
+      imeiNovoExistente
+    ) {
       return NextResponse.json(
         {
           error:
@@ -714,15 +837,17 @@ export async function PATCH(req: Request) {
     }
 
     const aparelhoAtualizado =
-      await prisma.aparelho.update({
-        where: {
-          id: aparelho.id,
-        },
+      await prisma.aparelho.update(
+        {
+          where: {
+            id: aparelho.id,
+          },
 
-        data: {
-          imei: imeiNovo,
-        },
-      });
+          data: {
+            imei: imeiNovo,
+          },
+        }
+      );
 
     return NextResponse.json({
       success: true,
@@ -758,9 +883,12 @@ export async function PATCH(req: Request) {
 // SOMENTE ADMIN
 // =====================================================
 
-export async function DELETE(req: Request) {
+export async function DELETE(
+  req: Request
+) {
   try {
-    const usuario = await obterSessao();
+    const usuario =
+      await obterSessao();
 
     // =================================================
     // VERIFICAR LOGIN
@@ -769,7 +897,8 @@ export async function DELETE(req: Request) {
     if (!usuario) {
       return NextResponse.json(
         {
-          error: "Não autorizado.",
+          error:
+            "Não autorizado.",
         },
         {
           status: 401,
@@ -781,7 +910,9 @@ export async function DELETE(req: Request) {
     // SOMENTE ADMIN PODE EXCLUIR
     // =================================================
 
-    if (usuario.role !== "ADMIN") {
+    if (
+      usuario.role !== "ADMIN"
+    ) {
       return NextResponse.json(
         {
           error:
@@ -797,10 +928,12 @@ export async function DELETE(req: Request) {
     // LER DADOS
     // =================================================
 
-    const body = await req.json();
+    const body =
+      await req.json();
 
     const produtoId = Number(
-      body.produtoId ?? body.id
+      body.produtoId ??
+        body.id
     );
 
     // =================================================
@@ -808,7 +941,9 @@ export async function DELETE(req: Request) {
     // =================================================
 
     if (
-      !Number.isInteger(produtoId) ||
+      !Number.isInteger(
+        produtoId
+      ) ||
       produtoId <= 0
     ) {
       return NextResponse.json(
@@ -827,17 +962,19 @@ export async function DELETE(req: Request) {
     // =================================================
 
     const produto =
-      await prisma.produto.findUnique({
-        where: {
-          id: produtoId,
-        },
+      await prisma.produto.findUnique(
+        {
+          where: {
+            id: produtoId,
+          },
 
-        include: {
-          aparelhos: true,
+          include: {
+            aparelhos: true,
 
-          lotes: true,
-        },
-      });
+            lotes: true,
+          },
+        }
+      );
 
     if (!produto) {
       return NextResponse.json(
@@ -858,7 +995,9 @@ export async function DELETE(req: Request) {
 
     const aparelhoVendido =
       produto.aparelhos.some(
-        (aparelho) =>
+        (
+          aparelho
+        ) =>
           aparelho.vendido
       );
 
@@ -886,12 +1025,14 @@ export async function DELETE(req: Request) {
       async (
         tx: Prisma.TransactionClient
       ) => {
-        await tx.aparelho.deleteMany({
-          where: {
-            produtoId:
-              produtoId,
-          },
-        });
+        await tx.aparelho.deleteMany(
+          {
+            where: {
+              produtoId:
+                produtoId,
+            },
+          }
+        );
 
         await tx.lote.deleteMany({
           where: {
