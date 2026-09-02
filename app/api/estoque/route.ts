@@ -4,27 +4,6 @@ import { prisma } from "@/lib/prisma";
 import { obterSessao } from "@/lib/auth";
 
 // =====================================================
-// TYPES
-// =====================================================
-
-type ProdutoEstoque = Prisma.ProdutoGetPayload<{
-  include: {
-    lotes: {
-      include: {
-        aparelhos: true;
-      };
-    };
-    aparelhos: true;
-  };
-}>;
-
-type AparelhoEstoque =
-  ProdutoEstoque["aparelhos"][number];
-
-type LoteEstoque =
-  ProdutoEstoque["lotes"][number];
-
-// =====================================================
 // GET - BUSCAR ESTOQUE
 // =====================================================
 
@@ -43,34 +22,33 @@ export async function GET() {
       );
     }
 
-    const produtos =
-      await prisma.produto.findMany({
-        orderBy: {
-          createdAt: "desc",
-        },
+    const produtos = await prisma.produto.findMany({
+      orderBy: {
+        createdAt: "desc",
+      },
 
-        include: {
-          lotes: {
-            orderBy: {
-              createdAt: "desc",
-            },
+      include: {
+        lotes: {
+          orderBy: {
+            createdAt: "desc",
+          },
 
-            include: {
-              aparelhos: {
-                orderBy: {
-                  createdAt: "desc",
-                },
+          include: {
+            aparelhos: {
+              orderBy: {
+                createdAt: "desc",
               },
             },
           },
+        },
 
-          aparelhos: {
-            orderBy: {
-              createdAt: "desc",
-            },
+        aparelhos: {
+          orderBy: {
+            createdAt: "desc",
           },
         },
-      });
+      },
+    });
 
     // =================================================
     // ADMIN
@@ -93,81 +71,59 @@ export async function GET() {
     // - Preço de compra USD
     // =================================================
 
-    const produtosFuncionario =
-      produtos.map(
-        (produto: ProdutoEstoque) => ({
-          id: produto.id,
+    const produtosFuncionario = produtos.map(
+      (produto) => ({
+        id: produto.id,
 
-          nome: produto.nome,
+        nome: produto.nome,
 
-          quantidade:
-            produto.quantidade,
+        quantidade: produto.quantidade,
 
-          createdAt:
-            produto.createdAt,
+        createdAt: produto.createdAt,
 
-          aparelhos:
-            produto.aparelhos.map(
-              (
-                aparelho: AparelhoEstoque
-              ) => ({
+        aparelhos: produto.aparelhos.map(
+          (aparelho) => ({
+            id: aparelho.id,
+
+            imei: aparelho.imei,
+
+            vendido: aparelho.vendido,
+
+            produtoId: aparelho.produtoId,
+
+            loteId: aparelho.loteId,
+          })
+        ),
+
+        lotes: produto.lotes.map(
+          (lote) => ({
+            id: lote.id,
+
+            quantidade: lote.quantidade,
+
+            createdAt: lote.createdAt,
+
+            // IMPORTANTE:
+            // NÃO enviar fornecedor
+            // NÃO enviar preço de compra
+
+            aparelhos: lote.aparelhos.map(
+              (aparelho) => ({
                 id: aparelho.id,
 
                 imei: aparelho.imei,
 
-                vendido:
-                  aparelho.vendido,
+                vendido: aparelho.vendido,
 
-                produtoId:
-                  aparelho.produtoId,
+                produtoId: aparelho.produtoId,
 
-                loteId:
-                  aparelho.loteId,
+                loteId: aparelho.loteId,
               })
             ),
-
-          lotes:
-            produto.lotes.map(
-              (
-                lote: LoteEstoque
-              ) => ({
-                id: lote.id,
-
-                quantidade:
-                  lote.quantidade,
-
-                createdAt:
-                  lote.createdAt,
-
-                // IMPORTANTE:
-                // NÃO enviar fornecedor
-                // NÃO enviar preço de compra
-
-                aparelhos:
-                  lote.aparelhos.map(
-                    (
-                      aparelho: AparelhoEstoque
-                    ) => ({
-                      id:
-                        aparelho.id,
-
-                      imei:
-                        aparelho.imei,
-
-                      vendido:
-                        aparelho.vendido,
-
-                      produtoId:
-                        aparelho.produtoId,
-
-                      loteId:
-                        aparelho.loteId,
-                    })
-                  ),
-              })
-            ),
-        })
-      );
+          })
+        ),
+      })
+    );
 
     return NextResponse.json(
       produtosFuncionario
@@ -251,7 +207,10 @@ export async function POST(
         : Number(
             String(
               body.precoCompraUsd
-            ).replace(",", ".")
+            ).replace(
+              ",",
+              "."
+            )
           );
 
     const imeis =
@@ -261,7 +220,9 @@ export async function POST(
         ? body.imeis
             .map(
               (imei: unknown) =>
-                String(imei).trim()
+                String(
+                  imei
+                ).trim()
             )
             .filter(Boolean)
         : [];
@@ -995,9 +956,7 @@ export async function DELETE(
 
     const aparelhoVendido =
       produto.aparelhos.some(
-        (
-          aparelho
-        ) =>
+        (aparelho) =>
           aparelho.vendido
       );
 
