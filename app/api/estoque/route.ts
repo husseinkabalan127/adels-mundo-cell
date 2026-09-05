@@ -72,7 +72,7 @@ export async function GET() {
     // =================================================
 
     const produtosFuncionario = produtos.map(
-      (produto) => ({
+      (produto: any) => ({
         id: produto.id,
 
         nome: produto.nome,
@@ -82,7 +82,7 @@ export async function GET() {
         createdAt: produto.createdAt,
 
         aparelhos: produto.aparelhos.map(
-          (aparelho) => ({
+          (aparelho: any) => ({
             id: aparelho.id,
 
             imei: aparelho.imei,
@@ -96,7 +96,7 @@ export async function GET() {
         ),
 
         lotes: produto.lotes.map(
-          (lote) => ({
+          (lote: any) => ({
             id: lote.id,
 
             quantidade: lote.quantidade,
@@ -108,7 +108,7 @@ export async function GET() {
             // NÃO enviar preço de compra
 
             aparelhos: lote.aparelhos.map(
-              (aparelho) => ({
+              (aparelho: any) => ({
                 id: aparelho.id,
 
                 imei: aparelho.imei,
