@@ -956,7 +956,7 @@ export async function DELETE(
 
     const aparelhoVendido =
       produto.aparelhos.some(
-        (aparelho) =>
+        (aparelho: { vendido: boolean }) =>
           aparelho.vendido
       );
 
