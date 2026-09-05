@@ -245,7 +245,6 @@ export async function POST(req: Request) {
         async (
           tx: Prisma.TransactionClient
         ) => {
-
           // =================================================
           // PROCURAR MODELO
           // =================================================
@@ -262,14 +261,23 @@ export async function POST(req: Request) {
           // =================================================
 
           if (!produto) {
-            const produtos =
+            const produtosExistentes =
               await tx.produto.findMany();
 
             produto =
-              produtos.find(
-                (item: any) =>
-                  item.nome.trim().toLowerCase() ===
-                  nome.trim().toLowerCase()
+              produtosExistentes.find(
+                (item: {
+                  id: number;
+                  nome: string;
+                  quantidade: number;
+                  createdAt: Date;
+                }) =>
+                  item.nome
+                    .trim()
+                    .toLowerCase() ===
+                  nome
+                    .trim()
+                    .toLowerCase()
               ) || null;
           }
 

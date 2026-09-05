@@ -1,5 +1,35 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+
+// =====================================================
+// TIPOS
+// =====================================================
+
+type ProdutoComCustos = Prisma.ProdutoGetPayload<{
+  select: {
+    id: true;
+    nome: true;
+    quantidade: true;
+
+    aparelhos: {
+      select: {
+        id: true;
+        imei: true;
+        vendido: true;
+
+        lote: {
+          select: {
+            id: true;
+            precoCompraUsd: true;
+            precoCompraBrl: true;
+            tipoCusto: true;
+          };
+        };
+      };
+    };
+  };
+}>;
 
 // =====================================================
 // GET — TELEFONES E CUSTOS
@@ -42,75 +72,81 @@ export async function GET() {
     // =================================================
 
     const produtosPreparados =
-      produtos.map((produto) => {
-        // -------------------------------------------------
-        // PEGAR LOTES QUE POSSUEM CUSTO
-        // -------------------------------------------------
+      produtos.map(
+        (produto: ProdutoComCustos) => {
+          // -------------------------------------------------
+          // PEGAR LOTES QUE POSSUEM CUSTO
+          // -------------------------------------------------
 
-        const aparelhosComCusto =
-          produto.aparelhos.filter(
-            (aparelho) =>
-              aparelho.lote &&
+          const aparelhosComCusto =
+            produto.aparelhos.filter(
               (
-                aparelho.lote
-                  .precoCompraUsd !== null ||
-                aparelho.lote
-                  .precoCompraBrl !== null
-              )
-          );
+                aparelho: ProdutoComCustos["aparelhos"][number]
+              ) =>
+                aparelho.lote &&
+                (
+                  aparelho.lote.precoCompraUsd !==
+                    null ||
+                  aparelho.lote.precoCompraBrl !==
+                    null
+                )
+            );
 
-        // -------------------------------------------------
-        // PEGAR O PRIMEIRO CUSTO CADASTRADO
-        // -------------------------------------------------
+          // -------------------------------------------------
+          // PEGAR O PRIMEIRO CUSTO CADASTRADO
+          // -------------------------------------------------
 
-        const aparelhoComCusto =
-          aparelhosComCusto[0];
+          const aparelhoComCusto =
+            aparelhosComCusto[0];
 
-        const lote =
-          aparelhoComCusto?.lote ??
-          null;
+          const lote =
+            aparelhoComCusto?.lote ??
+            null;
 
-        return {
-          id: produto.id,
+          return {
+            id: produto.id,
 
-          nome: produto.nome,
+            nome: produto.nome,
 
-          quantidade:
-            produto.quantidade,
+            quantidade:
+              produto.quantidade,
 
-          // =================================================
-          // CUSTO
-          // =================================================
+            // =================================================
+            // CUSTO
+            // =================================================
 
-          precoCompraUsd:
-            lote?.precoCompraUsd ??
-            null,
+            precoCompraUsd:
+              lote?.precoCompraUsd ??
+              null,
 
-          precoCompraBrl:
-            lote?.precoCompraBrl ??
-            null,
+            precoCompraBrl:
+              lote?.precoCompraBrl ??
+              null,
 
-          tipoCusto:
-            lote?.tipoCusto ??
-            null,
+            tipoCusto:
+              lote?.tipoCusto ??
+              null,
 
-          // =================================================
-          // APARELHOS
-          // =================================================
+            // =================================================
+            // APARELHOS
+            // =================================================
 
-          aparelhos:
-            produto.aparelhos.map(
-              (aparelho) => ({
-                id: aparelho.id,
+            aparelhos:
+              produto.aparelhos.map(
+                (
+                  aparelho: ProdutoComCustos["aparelhos"][number]
+                ) => ({
+                  id: aparelho.id,
 
-                imei: aparelho.imei,
+                  imei: aparelho.imei,
 
-                vendido:
-                  aparelho.vendido,
-              })
-            ),
-        };
-      });
+                  vendido:
+                    aparelho.vendido,
+                })
+              ),
+          };
+        }
+      );
 
     return NextResponse.json(
       produtosPreparados
@@ -139,7 +175,9 @@ export async function GET() {
 // PUT — SALVAR / ALTERAR CUSTO
 // =====================================================
 
-export async function PUT(req: Request) {
+export async function PUT(
+  req: Request
+) {
   try {
     const body =
       await req.json();
@@ -158,7 +196,10 @@ export async function PUT(req: Request) {
       Number(
         String(
           body.preco ?? ""
-        ).replace(",", ".")
+        ).replace(
+          ",",
+          "."
+        )
       );
 
     // =================================================
@@ -271,14 +312,23 @@ export async function PUT(req: Request) {
     const loteIds =
       produto.aparelhos
         .map(
-          (aparelho) =>
+          (
+            aparelho: {
+              id: number;
+              lote: {
+                id: number;
+              } | null;
+            }
+          ) =>
             aparelho.lote?.id
         )
         .filter(
           (
             id
           ): id is number =>
-            Number.isInteger(id)
+            Number.isInteger(
+              id
+            )
         );
 
     // =================================================
@@ -305,7 +355,9 @@ export async function PUT(req: Request) {
 
     const loteIdsUnicos =
       Array.from(
-        new Set(loteIds)
+        new Set(
+          loteIds
+        )
       );
 
     // =================================================
@@ -316,12 +368,14 @@ export async function PUT(req: Request) {
       await prisma.lote.updateMany({
         where: {
           id: {
-            in: loteIdsUnicos,
+            in:
+              loteIdsUnicos,
           },
         },
 
         data:
-          tipoCusto === "USD"
+          tipoCusto ===
+          "USD"
             ? {
                 precoCompraUsd:
                   preco,
