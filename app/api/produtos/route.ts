@@ -267,7 +267,7 @@ export async function POST(req: Request) {
 
             produto =
               produtos.find(
-                (item) =>
+                (item: any) =>
                   item.nome.trim().toLowerCase() ===
                   nome.trim().toLowerCase()
               ) || null;
