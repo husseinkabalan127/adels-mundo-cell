@@ -58,80 +58,91 @@ export async function GET() {
       },
     });
 
-    const vendasPreparadas = vendas.map((venda: (typeof vendas)[number]) => {
-      // =================================================
-      // VALOR TOTAL DA VENDA
-      // =================================================
+    const vendasPreparadas = vendas.map(
+      (venda: (typeof vendas)[number]) => {
+        // =================================================
+        // VALOR TOTAL DA VENDA
+        // =================================================
 
-      const valorVenda = venda.itens.reduce(
-        (total, item) => {
-          return total + Number(item.total || 0);
-        },
-        0
-      );
+        const valorVenda = venda.itens.reduce(
+          (
+            total: number,
+            item: (typeof venda.itens)[number]
+          ) => {
+            return total + Number(item.total || 0);
+          },
+          0
+        );
 
-      // =================================================
-      // QUANTIDADE
-      // =================================================
+        // =================================================
+        // QUANTIDADE
+        // =================================================
 
-      const quantidade = venda.itens.reduce(
-        (total, item) => {
-          return total + Number(item.quantidade || 0);
-        },
-        0
-      );
+        const quantidade = venda.itens.reduce(
+          (
+            total: number,
+            item: (typeof venda.itens)[number]
+          ) => {
+            return total + Number(item.quantidade || 0);
+          },
+          0
+        );
 
-      // =================================================
-      // CUSTO TOTAL USD
-      // =================================================
+        // =================================================
+        // CUSTO TOTAL USD
+        // =================================================
 
-      const custoTotalUsd = venda.itens.reduce(
-        (total, item) => {
-          return total + Number(item.custoTotal || 0);
-        },
-        0
-      );
+        const custoTotalUsd = venda.itens.reduce(
+          (
+            total: number,
+            item: (typeof venda.itens)[number]
+          ) => {
+            return total + Number(item.custoTotal || 0);
+          },
+          0
+        );
 
-      // =================================================
-      // TAXA
-      // =================================================
+        // =================================================
+        // TAXA
+        // =================================================
 
-      const taxa =
-        venda.taxa !== null &&
-        venda.taxa !== undefined
-          ? Number(venda.taxa)
-          : null;
+        const taxa =
+          venda.taxa !== null &&
+          venda.taxa !== undefined
+            ? Number(venda.taxa)
+            : null;
 
-      // =================================================
-      // CUSTO EM REAIS
-      // =================================================
+        // =================================================
+        // CUSTO EM REAIS
+        // =================================================
 
-      const custoTotalReais =
-        taxa !== null &&
-        Number.isFinite(taxa)
-          ? custoTotalUsd * taxa
-          : 0;
+        const custoTotalReais =
+          taxa !== null &&
+          Number.isFinite(taxa)
+            ? custoTotalUsd * taxa
+            : 0;
 
-      // =================================================
-      // LUCRO
-      // =================================================
+        // =================================================
+        // LUCRO
+        // =================================================
 
-      const lucro =
-        taxa !== null &&
-        Number.isFinite(taxa)
-          ? valorVenda - custoTotalReais
-          : 0;
+        const lucro =
+          taxa !== null &&
+          Number.isFinite(taxa)
+            ? valorVenda - custoTotalReais
+            : 0;
 
-      return {
-        ...venda,
+        return {
+          ...venda,
 
-        valorVenda,
-        quantidade,
-        custoTotalUsd,
-        custoTotalReais,
-        lucro,
-      };
-    });
+          valorVenda,
+          quantidade,
+          custoTotalUsd,
+          custoTotalReais,
+          lucro,
+        };
+      }
+    );
 
     return NextResponse.json(vendasPreparadas);
   } catch (error) {
@@ -1252,8 +1263,8 @@ export async function PATCH(req: Request) {
           const novoTotalVenda =
             itensAtualizados.reduce(
               (
-                total,
-                item
+                total: number,
+                item: (typeof itensAtualizados)[number]
               ) => {
                 return (
                   total +
@@ -1273,8 +1284,8 @@ export async function PATCH(req: Request) {
           const novoCustoTotalUsd =
             itensAtualizados.reduce(
               (
-                total,
-                item
+                total: number,
+                item: (typeof itensAtualizados)[number]
               ) => {
                 return (
                   total +
