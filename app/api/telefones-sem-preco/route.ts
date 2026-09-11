@@ -24,6 +24,19 @@ type Produto = {
   aparelhos: Aparelho[];
 };
 
+type AparelhoComLote = {
+  id: number;
+  lote: {
+    id: number;
+  } | null;
+};
+
+type ProdutoComLotes = {
+  id: number;
+  nome: string;
+  aparelhos: AparelhoComLote[];
+};
+
 // =====================================================
 // GET — TELEFONES E CUSTOS
 // =====================================================
@@ -226,7 +239,7 @@ export async function PUT(req: Request) {
     // =================================================
 
     const produto =
-      await prisma.produto.findUnique({
+      (await prisma.produto.findUnique({
         where: {
           id: produtoId,
         },
@@ -247,7 +260,7 @@ export async function PUT(req: Request) {
             },
           },
         },
-      });
+      })) as ProdutoComLotes | null;
 
     if (!produto) {
       return NextResponse.json(
@@ -264,23 +277,25 @@ export async function PUT(req: Request) {
     // PEGAR IDS DOS LOTES
     // =================================================
 
-    const loteIds = produto.aparelhos
-      .map(
-        (aparelho) =>
-          aparelho.lote?.id
-      )
-      .filter(
-        (
-          id
-        ): id is number =>
-          Number.isInteger(id)
-      );
+    const loteIds = produto.aparelhos.map(
+      (aparelho: AparelhoComLote) =>
+        aparelho.lote?.id ?? null
+    );
+
+    // =================================================
+    // REMOVER IDS NULOS
+    // =================================================
+
+    const loteIdsValidos = loteIds.filter(
+      (id): id is number =>
+        Number.isInteger(id)
+    );
 
     // =================================================
     // VERIFICAR LOTES
     // =================================================
 
-    if (loteIds.length === 0) {
+    if (loteIdsValidos.length === 0) {
       return NextResponse.json(
         {
           error:
@@ -298,7 +313,7 @@ export async function PUT(req: Request) {
 
     const loteIdsUnicos =
       Array.from(
-        new Set(loteIds)
+        new Set(loteIdsValidos)
       );
 
     // =================================================
