@@ -40,71 +40,63 @@ export async function GET() {
     // PREPARAR PRODUTOS
     // =================================================
 
-    const produtosPreparados = produtos.map(
-      (produto: (typeof produtos)[number]) => {
-        // -------------------------------------------------
-        // PEGAR APARELHOS QUE POSSUEM CUSTO
-        // -------------------------------------------------
+    const produtosPreparados = produtos.map((produto) => {
+      // -------------------------------------------------
+      // PEGAR APARELHOS QUE POSSUEM CUSTO
+      // -------------------------------------------------
 
-        const aparelhosComCusto = produto.aparelhos.filter(
-          (aparelho) =>
-            aparelho.lote &&
-            (
-              aparelho.lote.precoCompraUsd !== null ||
-              aparelho.lote.precoCompraBrl !== null
-            )
-        );
+      const aparelhosComCusto = produto.aparelhos.filter(
+        (aparelho) =>
+          aparelho.lote !== null &&
+          (
+            aparelho.lote.precoCompraUsd !== null ||
+            aparelho.lote.precoCompraBrl !== null
+          )
+      );
 
-        // -------------------------------------------------
-        // PEGAR O PRIMEIRO CUSTO CADASTRADO
-        // -------------------------------------------------
+      // -------------------------------------------------
+      // PEGAR O PRIMEIRO CUSTO CADASTRADO
+      // -------------------------------------------------
 
-        const aparelhoComCusto =
-          aparelhosComCusto[0];
+      const aparelhoComCusto = aparelhosComCusto[0];
 
-        const lote =
-          aparelhoComCusto?.lote ?? null;
+      const lote = aparelhoComCusto?.lote ?? null;
 
-        return {
-          id: produto.id,
+      return {
+        id: produto.id,
 
-          nome: produto.nome,
+        nome: produto.nome,
 
-          quantidade: produto.quantidade,
+        quantidade: produto.quantidade,
 
-          // =================================================
-          // CUSTO
-          // =================================================
+        // =================================================
+        // CUSTO
+        // =================================================
 
-          precoCompraUsd:
-            lote?.precoCompraUsd ?? null,
+        precoCompraUsd:
+          lote?.precoCompraUsd ?? null,
 
-          precoCompraBrl:
-            lote?.precoCompraBrl ?? null,
+        precoCompraBrl:
+          lote?.precoCompraBrl ?? null,
 
-          tipoCusto:
-            lote?.tipoCusto ?? null,
+        tipoCusto:
+          lote?.tipoCusto ?? null,
 
-          // =================================================
-          // APARELHOS
-          // =================================================
+        // =================================================
+        // APARELHOS
+        // =================================================
 
-          aparelhos: produto.aparelhos.map(
-            (aparelho) => ({
-              id: aparelho.id,
+        aparelhos: produto.aparelhos.map((aparelho) => ({
+          id: aparelho.id,
 
-              imei: aparelho.imei,
+          imei: aparelho.imei,
 
-              vendido: aparelho.vendido,
-            })
-          ),
-        };
-      }
-    );
+          vendido: aparelho.vendido,
+        })),
+      };
+    });
 
-    return NextResponse.json(
-      produtosPreparados
-    );
+    return NextResponse.json(produtosPreparados);
   } catch (error) {
     console.error(
       "ERRO AO BUSCAR CUSTOS:",
