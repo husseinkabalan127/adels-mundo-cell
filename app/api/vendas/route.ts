@@ -4,6 +4,17 @@ import { prisma } from "@/lib/prisma";
 import { obterSessao } from "@/lib/auth";
 
 // =====================================================
+// TIPOS
+// =====================================================
+
+type ItemPreparado = {
+  produtoId: number;
+  quantidade: number;
+  valorUnitario: number;
+  imeis: string[];
+};
+
+// =====================================================
 // GET — JUNTAR TODAS AS VENDAS
 // =====================================================
 
@@ -31,7 +42,11 @@ export async function GET() {
         itens: {
           include: {
             produto: true,
-            aparelhos: true,
+            aparelhos: {
+              include: {
+                lote: true,
+              },
+            },
           },
         },
 
@@ -44,12 +59,20 @@ export async function GET() {
     });
 
     const vendasPreparadas = vendas.map((venda) => {
+      // =================================================
+      // VALOR TOTAL DA VENDA
+      // =================================================
+
       const valorVenda = venda.itens.reduce(
         (total, item) => {
           return total + Number(item.total || 0);
         },
         0
       );
+
+      // =================================================
+      // QUANTIDADE
+      // =================================================
 
       const quantidade = venda.itens.reduce(
         (total, item) => {
@@ -58,6 +81,10 @@ export async function GET() {
         0
       );
 
+      // =================================================
+      // CUSTO TOTAL USD
+      // =================================================
+
       const custoTotalUsd = venda.itens.reduce(
         (total, item) => {
           return total + Number(item.custoTotal || 0);
@@ -65,19 +92,33 @@ export async function GET() {
         0
       );
 
+      // =================================================
+      // TAXA
+      // =================================================
+
       const taxa =
         venda.taxa !== null &&
         venda.taxa !== undefined
           ? Number(venda.taxa)
           : null;
 
+      // =================================================
+      // CUSTO EM REAIS
+      // =================================================
+
       const custoTotalReais =
-        taxa !== null && Number.isFinite(taxa)
+        taxa !== null &&
+        Number.isFinite(taxa)
           ? custoTotalUsd * taxa
           : 0;
 
+      // =================================================
+      // LUCRO
+      // =================================================
+
       const lucro =
-        taxa !== null && Number.isFinite(taxa)
+        taxa !== null &&
+        Number.isFinite(taxa)
           ? valorVenda - custoTotalReais
           : 0;
 
@@ -101,7 +142,10 @@ export async function GET() {
 
     return NextResponse.json(
       {
-        error: "Erro ao buscar vendas.",
+        error:
+          error instanceof Error
+            ? error.message
+            : "Erro ao buscar vendas.",
       },
       {
         status: 500,
@@ -157,7 +201,8 @@ export async function POST(req: Request) {
       ) {
         return NextResponse.json(
           {
-            error: "Data da venda inválida.",
+            error:
+              "Data da venda inválida.",
           },
           {
             status: 400,
@@ -166,7 +211,9 @@ export async function POST(req: Request) {
       }
 
       const [ano, mes, dia] =
-        dataTexto.split("-").map(Number);
+        dataTexto
+          .split("-")
+          .map(Number);
 
       dataVenda = new Date(
         ano,
@@ -185,7 +232,8 @@ export async function POST(req: Request) {
       ) {
         return NextResponse.json(
           {
-            error: "Data da venda inválida.",
+            error:
+              "Data da venda inválida.",
           },
           {
             status: 400,
@@ -234,7 +282,9 @@ export async function POST(req: Request) {
     // ITENS
     // =================================================
 
-    const itens = Array.isArray(body.itens)
+    const itens = Array.isArray(
+      body.itens
+    )
       ? body.itens
       : [];
 
@@ -244,7 +294,8 @@ export async function POST(req: Request) {
 
     if (
       taxa !== null &&
-      (!Number.isFinite(taxa) || taxa < 0)
+      (!Number.isFinite(taxa) ||
+        taxa < 0)
     ) {
       return NextResponse.json(
         {
@@ -272,38 +323,50 @@ export async function POST(req: Request) {
     // PREPARAR ITENS
     // =================================================
 
-    let itensPreparados;
+    let itensPreparados: ItemPreparado[];
 
     try {
       itensPreparados = itens.map(
         (
-          item: any,
+          item: unknown,
           index: number
-        ) => {
+        ): ItemPreparado => {
+          const itemObj =
+            item as Record<
+              string,
+              unknown
+            >;
+
           const produtoId = Number(
-            item.produtoId
+            itemObj.produtoId
           );
 
           const quantidade = Number(
-            item.quantidade
+            itemObj.quantidade
           );
 
           const valorUnitario = Number(
             String(
-              item.valorUnitario
+              itemObj.valorUnitario ?? ""
             ).replace(",", ".")
           );
 
           const imeis = Array.isArray(
-            item.imeis
+            itemObj.imeis
           )
-            ? item.imeis
+            ? itemObj.imeis
                 .map(
                   (imei: unknown) =>
-                    String(imei).trim()
+                    String(
+                      imei
+                    ).trim()
                 )
                 .filter(Boolean)
             : [];
+
+          // =================================================
+          // VALIDAR PRODUTO
+          // =================================================
 
           if (
             !Number.isInteger(
@@ -318,6 +381,10 @@ export async function POST(req: Request) {
             );
           }
 
+          // =================================================
+          // VALIDAR QUANTIDADE
+          // =================================================
+
           if (
             !Number.isInteger(
               quantidade
@@ -331,6 +398,10 @@ export async function POST(req: Request) {
             );
           }
 
+          // =================================================
+          // VALIDAR PREÇO
+          // =================================================
+
           if (
             !Number.isFinite(
               valorUnitario
@@ -343,6 +414,10 @@ export async function POST(req: Request) {
               }.`
             );
           }
+
+          // =================================================
+          // VALIDAR IMEIS
+          // =================================================
 
           if (
             imeis.length !==
@@ -397,11 +472,7 @@ export async function POST(req: Request) {
 
     const todosImeis =
       itensPreparados.flatMap(
-        (
-          item: {
-            imeis: string[];
-          }
-        ) => item.imeis
+        (item) => item.imeis
       );
 
     const imeisUnicos =
@@ -431,6 +502,10 @@ export async function POST(req: Request) {
         async (
           tx: Prisma.TransactionClient
         ) => {
+          // =================================================
+          // CRIAR VENDA
+          // =================================================
+
           const venda =
             await tx.venda.create({
               data: {
@@ -453,13 +528,18 @@ export async function POST(req: Request) {
 
           let totalVenda = 0;
 
+          // =================================================
+          // PROCESSAR ITENS
+          // =================================================
+
           for (
             const item of itensPreparados
           ) {
             const produto =
               await tx.produto.findUnique({
                 where: {
-                  id: item.produtoId,
+                  id:
+                    item.produtoId,
                 },
 
                 include: {
@@ -475,11 +555,19 @@ export async function POST(req: Request) {
                 },
               });
 
+            // =================================================
+            // PRODUTO NÃO ENCONTRADO
+            // =================================================
+
             if (!produto) {
               throw new Error(
                 "Produto não encontrado."
               );
             }
+
+            // =================================================
+            // ESTOQUE
+            // =================================================
 
             if (
               produto.quantidade <
@@ -490,11 +578,16 @@ export async function POST(req: Request) {
               );
             }
 
+            // =================================================
+            // BUSCAR APARELHOS PELOS IMEIS
+            // =================================================
+
             const aparelhos =
               await tx.aparelho.findMany({
                 where: {
                   imei: {
-                    in: item.imeis,
+                    in:
+                      item.imeis,
                   },
 
                   produtoId:
@@ -517,6 +610,10 @@ export async function POST(req: Request) {
               );
             }
 
+            // =================================================
+            // CALCULAR CUSTO
+            // =================================================
+
             let custoTotal = 0;
 
             for (
@@ -537,11 +634,19 @@ export async function POST(req: Request) {
               }
             }
 
+            // =================================================
+            // TOTAL DO ITEM
+            // =================================================
+
             const total =
               item.quantidade *
               item.valorUnitario;
 
             totalVenda += total;
+
+            // =================================================
+            // CRIAR VENDA ITEM
+            // =================================================
 
             const vendaItem =
               await tx.vendaItem.create({
@@ -555,7 +660,8 @@ export async function POST(req: Request) {
                   total,
 
                   precoCompraUsd:
-                    item.quantidade > 0
+                    item.quantidade >
+                    0
                       ? custoTotal /
                         item.quantidade
                       : null,
@@ -570,16 +676,20 @@ export async function POST(req: Request) {
                 },
               });
 
+            // =================================================
+            // MARCAR APARELHOS COMO VENDIDOS
+            // =================================================
+
             await tx.aparelho.updateMany({
               where: {
                 id: {
-                  in: aparelhos.map(
-                    (
-                      aparelho: {
-                        id: number;
-                      }
-                    ) => aparelho.id
-                  ),
+                  in:
+                    aparelhos.map(
+                      (
+                        aparelho
+                      ) =>
+                        aparelho.id
+                    ),
                 },
               },
 
@@ -591,9 +701,14 @@ export async function POST(req: Request) {
               },
             });
 
+            // =================================================
+            // DIMINUIR ESTOQUE
+            // =================================================
+
             await tx.produto.update({
               where: {
-                id: produto.id,
+                id:
+                  produto.id,
               },
 
               data: {
@@ -644,7 +759,8 @@ export async function POST(req: Request) {
 
             await tx.venda.update({
               where: {
-                id: venda.id,
+                id:
+                  venda.id,
               },
 
               data: {
@@ -664,7 +780,8 @@ export async function POST(req: Request) {
           const vendaCompleta =
             await tx.venda.findUnique({
               where: {
-                id: venda.id,
+                id:
+                  venda.id,
               },
 
               include: {
@@ -677,7 +794,8 @@ export async function POST(req: Request) {
 
                 pagamentos: {
                   orderBy: {
-                    createdAt: "asc",
+                    createdAt:
+                      "asc",
                   },
                 },
               },
@@ -691,6 +809,10 @@ export async function POST(req: Request) {
           };
         }
       );
+
+    // =================================================
+    // RESPOSTA
+    // =================================================
 
     return NextResponse.json(
       {
@@ -734,6 +856,10 @@ export async function PATCH(req: Request) {
   try {
     const usuario = await obterSessao();
 
+    // =================================================
+    // AUTORIZAÇÃO
+    // =================================================
+
     if (!usuario) {
       return NextResponse.json(
         {
@@ -745,7 +871,10 @@ export async function PATCH(req: Request) {
       );
     }
 
-    if (usuario.role !== "ADMIN") {
+    if (
+      usuario.role !==
+      "ADMIN"
+    ) {
       return NextResponse.json(
         {
           error:
@@ -757,7 +886,12 @@ export async function PATCH(req: Request) {
       );
     }
 
-    const body = await req.json();
+    const body =
+      await req.json();
+
+    // =================================================
+    // IDS
+    // =================================================
 
     const vendaId = Number(
       body.vendaId ??
@@ -765,20 +899,33 @@ export async function PATCH(req: Request) {
     );
 
     const aparelhoId =
-      body.aparelhoId !== undefined &&
-      body.aparelhoId !== null &&
+      body.aparelhoId !==
+        undefined &&
+      body.aparelhoId !==
+        null &&
       body.aparelhoId !== ""
-        ? Number(body.aparelhoId)
+        ? Number(
+            body.aparelhoId
+          )
         : null;
 
     const imei =
-      body.imei !== undefined &&
+      body.imei !==
+        undefined &&
       body.imei !== null
-        ? String(body.imei).trim()
+        ? String(
+            body.imei
+          ).trim()
         : "";
 
+    // =================================================
+    // VALIDAR VENDA
+    // =================================================
+
     if (
-      !Number.isInteger(vendaId) ||
+      !Number.isInteger(
+        vendaId
+      ) ||
       vendaId <= 0
     ) {
       return NextResponse.json(
@@ -792,9 +939,15 @@ export async function PATCH(req: Request) {
       );
     }
 
+    // =================================================
+    // VALIDAR APARELHO
+    // =================================================
+
     if (
       aparelhoId !== null &&
-      (!Number.isInteger(aparelhoId) ||
+      (!Number.isInteger(
+        aparelhoId
+      ) ||
         aparelhoId <= 0)
     ) {
       return NextResponse.json(
@@ -808,7 +961,10 @@ export async function PATCH(req: Request) {
       );
     }
 
-    if (!aparelhoId && !imei) {
+    if (
+      !aparelhoId &&
+      !imei
+    ) {
       return NextResponse.json(
         {
           error:
@@ -819,6 +975,10 @@ export async function PATCH(req: Request) {
         }
       );
     }
+
+    // =================================================
+    // TRANSACTION
+    // =================================================
 
     const resultado =
       await prisma.$transaction(
@@ -832,7 +992,8 @@ export async function PATCH(req: Request) {
           const venda =
             await tx.venda.findUnique({
               where: {
-                id: vendaId,
+                id:
+                  vendaId,
               },
 
               include: {
@@ -850,7 +1011,8 @@ export async function PATCH(req: Request) {
 
                 pagamentos: {
                   orderBy: {
-                    createdAt: "asc",
+                    createdAt:
+                      "asc",
                   },
                 },
               },
@@ -868,11 +1030,13 @@ export async function PATCH(req: Request) {
 
           let aparelhoEncontrado:
             | (typeof venda.itens[number]["aparelhos"][number])
-            | null = null;
+            | null =
+              null;
 
           let itemEncontrado:
             | (typeof venda.itens[number])
-            | null = null;
+            | null =
+              null;
 
           for (
             const item of venda.itens
@@ -881,7 +1045,8 @@ export async function PATCH(req: Request) {
               item.aparelhos.find(
                 (a) => {
                   if (
-                    aparelhoId !== null
+                    aparelhoId !==
+                    null
                   ) {
                     return (
                       a.id ===
@@ -890,7 +1055,8 @@ export async function PATCH(req: Request) {
                   }
 
                   return (
-                    a.imei === imei
+                    a.imei ===
+                    imei
                   );
                 }
               );
@@ -905,6 +1071,10 @@ export async function PATCH(req: Request) {
               break;
             }
           }
+
+          // =================================================
+          // APARELHO NÃO ENCONTRADO
+          // =================================================
 
           if (
             !aparelhoEncontrado ||
@@ -932,7 +1102,8 @@ export async function PATCH(req: Request) {
           // CUSTO DO APARELHO
           // =================================================
 
-          let custoAparelho = 0;
+          let custoAparelho =
+            0;
 
           if (
             aparelhoEncontrado.lote
@@ -942,24 +1113,27 @@ export async function PATCH(req: Request) {
               ?.precoCompraUsd !==
               undefined
           ) {
-            custoAparelho = Number(
-              aparelhoEncontrado.lote
-                .precoCompraUsd
-            );
+            custoAparelho =
+              Number(
+                aparelhoEncontrado
+                  .lote
+                  .precoCompraUsd
+              );
           }
 
           // =================================================
-          // VALOR DE VENDA
+          // VALOR UNITÁRIO
           // =================================================
 
           const valorUnitario =
             Number(
-              itemEncontrado.valorUnitario ||
+              itemEncontrado
+                .valorUnitario ||
                 0
             );
 
           // =================================================
-          // DEVOLVER APARELHO AO ESTOQUE
+          // DEVOLVER APARELHO
           // =================================================
 
           await tx.aparelho.update({
@@ -969,17 +1143,23 @@ export async function PATCH(req: Request) {
             },
 
             data: {
-              vendido: false,
+              vendido:
+                false,
 
               vendaItemId:
                 null,
             },
           });
 
+          // =================================================
+          // DEVOLVER PARA ESTOQUE
+          // =================================================
+
           await tx.produto.update({
             where: {
               id:
-                itemEncontrado.produtoId,
+                itemEncontrado
+                  .produtoId,
             },
 
             data: {
@@ -995,12 +1175,14 @@ export async function PATCH(req: Request) {
 
           const novaQuantidade =
             Number(
-              itemEncontrado.quantidade ||
+              itemEncontrado
+                .quantidade ||
                 0
             ) - 1;
 
           if (
-            novaQuantidade <= 0
+            novaQuantidade <=
+            0
           ) {
             await tx.vendaItem.delete({
               where: {
@@ -1015,7 +1197,8 @@ export async function PATCH(req: Request) {
 
             const custoAtual =
               Number(
-                itemEncontrado.custoTotal ||
+                itemEncontrado
+                  .custoTotal ||
                   0
               );
 
@@ -1027,7 +1210,8 @@ export async function PATCH(req: Request) {
               );
 
             const novoPrecoCompra =
-              novaQuantidade > 0
+              novaQuantidade >
+              0
                 ? novoCustoTotal /
                   novaQuantidade
                 : null;
@@ -1070,24 +1254,36 @@ export async function PATCH(req: Request) {
               (
                 total,
                 item
-              ) =>
-                total +
-                Number(
-                  item.total || 0
-                ),
+              ) => {
+                return (
+                  total +
+                  Number(
+                    item.total ||
+                      0
+                  )
+                );
+              },
               0
             );
+
+          // =================================================
+          // NOVO CUSTO TOTAL USD
+          // =================================================
 
           const novoCustoTotalUsd =
             itensAtualizados.reduce(
               (
                 total,
                 item
-              ) =>
-                total +
-                Number(
-                  item.custoTotal || 0
-                ),
+              ) => {
+                return (
+                  total +
+                  Number(
+                    item.custoTotal ||
+                      0
+                  )
+                );
+              },
               0
             );
 
@@ -1097,7 +1293,9 @@ export async function PATCH(req: Request) {
 
           const pagamentoAutomatico =
             venda.pagamentos.find(
-              (pagamento) =>
+              (
+                pagamento
+              ) =>
                 pagamento.observacao ===
                 "Pagamento registrado automaticamente na venda."
             );
@@ -1157,7 +1355,8 @@ export async function PATCH(req: Request) {
           const vendaAtualizada =
             await tx.venda.update({
               where: {
-                id: vendaId,
+                id:
+                  vendaId,
               },
 
               data: {
@@ -1182,6 +1381,10 @@ export async function PATCH(req: Request) {
               },
             });
 
+          // =================================================
+          // RESULTADO
+          // =================================================
+
           return {
             venda:
               vendaAtualizada,
@@ -1194,8 +1397,8 @@ export async function PATCH(req: Request) {
                 aparelhoEncontrado.imei,
 
               modelo:
-                itemEncontrado.produto
-                  .nome,
+                itemEncontrado
+                  .produto.nome,
             },
 
             novoTotalVenda,
@@ -1238,14 +1441,22 @@ export async function PATCH(req: Request) {
 // SOMENTE ADMIN
 // =====================================================
 
-export async function DELETE(req: Request) {
+export async function DELETE(
+  req: Request
+) {
   try {
-    const usuario = await obterSessao();
+    const usuario =
+      await obterSessao();
+
+    // =================================================
+    // AUTORIZAÇÃO
+    // =================================================
 
     if (!usuario) {
       return NextResponse.json(
         {
-          error: "Não autorizado.",
+          error:
+            "Não autorizado.",
         },
         {
           status: 401,
@@ -1253,7 +1464,10 @@ export async function DELETE(req: Request) {
       );
     }
 
-    if (usuario.role !== "ADMIN") {
+    if (
+      usuario.role !==
+      "ADMIN"
+    ) {
       return NextResponse.json(
         {
           error:
@@ -1265,12 +1479,18 @@ export async function DELETE(req: Request) {
       );
     }
 
-    const body = await req.json();
+    const body =
+      await req.json();
 
-    const vendaId = Number(
-      body.vendaId ??
-        body.id
-    );
+    const vendaId =
+      Number(
+        body.vendaId ??
+          body.id
+      );
+
+    // =================================================
+    // VALIDAR VENDA
+    // =================================================
 
     if (
       !Number.isInteger(
@@ -1289,6 +1509,10 @@ export async function DELETE(req: Request) {
       );
     }
 
+    // =================================================
+    // TRANSACTION
+    // =================================================
+
     await prisma.$transaction(
       async (
         tx: Prisma.TransactionClient
@@ -1300,7 +1524,8 @@ export async function DELETE(req: Request) {
         const venda =
           await tx.venda.findUnique({
             where: {
-              id: vendaId,
+              id:
+                vendaId,
             },
 
             include: {
@@ -1338,9 +1563,7 @@ export async function DELETE(req: Request) {
                   in:
                     aparelhos.map(
                       (
-                        aparelho: {
-                          id: number;
-                        }
+                        aparelho
                       ) =>
                         aparelho.id
                     ),
@@ -1355,6 +1578,10 @@ export async function DELETE(req: Request) {
                   null,
               },
             });
+
+            // =================================================
+            // DEVOLVER QUANTIDADE AO ESTOQUE
+            // =================================================
 
             await tx.produto.update({
               where: {
@@ -1398,11 +1625,16 @@ export async function DELETE(req: Request) {
 
         await tx.venda.delete({
           where: {
-            id: vendaId,
+            id:
+              vendaId,
           },
         });
       }
     );
+
+    // =================================================
+    // RESPOSTA
+    // =================================================
 
     return NextResponse.json({
       success: true,
