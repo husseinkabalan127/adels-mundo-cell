@@ -58,7 +58,7 @@ export async function GET() {
       },
     });
 
-    const vendasPreparadas = vendas.map((venda) => {
+    const vendasPreparadas = (vendas as VendaComDados[]).map((venda) => {
       // =================================================
       // VALOR TOTAL DA VENDA
       // =================================================
