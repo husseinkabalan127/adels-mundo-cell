@@ -2,12 +2,35 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 // =====================================================
+// TIPOS
+// =====================================================
+
+type Aparelho = {
+  id: number;
+  imei: string | null;
+  vendido: boolean;
+  lote: {
+    id: number;
+    precoCompraUsd: number | null;
+    precoCompraBrl: number | null;
+    tipoCusto: string | null;
+  } | null;
+};
+
+type Produto = {
+  id: number;
+  nome: string;
+  quantidade: number;
+  aparelhos: Aparelho[];
+};
+
+// =====================================================
 // GET — TELEFONES E CUSTOS
 // =====================================================
 
 export async function GET() {
   try {
-    const produtos = await prisma.produto.findMany({
+    const produtos = (await prisma.produto.findMany({
       orderBy: {
         nome: "asc",
       },
@@ -34,69 +57,78 @@ export async function GET() {
           },
         },
       },
-    });
+    })) as Produto[];
 
     // =================================================
     // PREPARAR PRODUTOS
     // =================================================
 
-    const produtosPreparados = produtos.map((produto) => {
-      // -------------------------------------------------
-      // PEGAR APARELHOS QUE POSSUEM CUSTO
-      // -------------------------------------------------
+    const produtosPreparados = produtos.map(
+      (produto: Produto) => {
+        // -------------------------------------------------
+        // PEGAR APARELHOS QUE POSSUEM CUSTO
+        // -------------------------------------------------
 
-      const aparelhosComCusto = produto.aparelhos.filter(
-        (aparelho) =>
-          aparelho.lote !== null &&
-          (
-            aparelho.lote.precoCompraUsd !== null ||
-            aparelho.lote.precoCompraBrl !== null
-          )
-      );
+        const aparelhosComCusto =
+          produto.aparelhos.filter(
+            (aparelho: Aparelho) =>
+              aparelho.lote &&
+              (
+                aparelho.lote.precoCompraUsd !== null ||
+                aparelho.lote.precoCompraBrl !== null
+              )
+          );
 
-      // -------------------------------------------------
-      // PEGAR O PRIMEIRO CUSTO CADASTRADO
-      // -------------------------------------------------
+        // -------------------------------------------------
+        // PEGAR O PRIMEIRO CUSTO CADASTRADO
+        // -------------------------------------------------
 
-      const aparelhoComCusto = aparelhosComCusto[0];
+        const aparelhoComCusto =
+          aparelhosComCusto[0];
 
-      const lote = aparelhoComCusto?.lote ?? null;
+        const lote =
+          aparelhoComCusto?.lote ?? null;
 
-      return {
-        id: produto.id,
+        return {
+          id: produto.id,
 
-        nome: produto.nome,
+          nome: produto.nome,
 
-        quantidade: produto.quantidade,
+          quantidade: produto.quantidade,
 
-        // =================================================
-        // CUSTO
-        // =================================================
+          // =================================================
+          // CUSTO
+          // =================================================
 
-        precoCompraUsd:
-          lote?.precoCompraUsd ?? null,
+          precoCompraUsd:
+            lote?.precoCompraUsd ?? null,
 
-        precoCompraBrl:
-          lote?.precoCompraBrl ?? null,
+          precoCompraBrl:
+            lote?.precoCompraBrl ?? null,
 
-        tipoCusto:
-          lote?.tipoCusto ?? null,
+          tipoCusto:
+            lote?.tipoCusto ?? null,
 
-        // =================================================
-        // APARELHOS
-        // =================================================
+          // =================================================
+          // APARELHOS
+          // =================================================
 
-        aparelhos: produto.aparelhos.map((aparelho) => ({
-          id: aparelho.id,
+          aparelhos: produto.aparelhos.map(
+            (aparelho: Aparelho) => ({
+              id: aparelho.id,
 
-          imei: aparelho.imei,
+              imei: aparelho.imei,
 
-          vendido: aparelho.vendido,
-        })),
-      };
-    });
+              vendido: aparelho.vendido,
+            })
+          ),
+        };
+      }
+    );
 
-    return NextResponse.json(produtosPreparados);
+    return NextResponse.json(
+      produtosPreparados
+    );
   } catch (error) {
     console.error(
       "ERRO AO BUSCAR CUSTOS:",
