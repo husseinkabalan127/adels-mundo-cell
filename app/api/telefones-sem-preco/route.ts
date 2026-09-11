@@ -7,55 +7,53 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   try {
-    const produtos =
-      await prisma.produto.findMany({
-        orderBy: {
-          nome: "asc",
-        },
+    const produtos = await prisma.produto.findMany({
+      orderBy: {
+        nome: "asc",
+      },
 
-        select: {
-          id: true,
-          nome: true,
-          quantidade: true,
+      select: {
+        id: true,
+        nome: true,
+        quantidade: true,
 
-          aparelhos: {
-            select: {
-              id: true,
-              imei: true,
-              vendido: true,
+        aparelhos: {
+          select: {
+            id: true,
+            imei: true,
+            vendido: true,
 
-              lote: {
-                select: {
-                  id: true,
-                  precoCompraUsd: true,
-                  precoCompraBrl: true,
-                  tipoCusto: true,
-                },
+            lote: {
+              select: {
+                id: true,
+                precoCompraUsd: true,
+                precoCompraBrl: true,
+                tipoCusto: true,
               },
             },
           },
         },
-      });
+      },
+    });
 
     // =================================================
     // PREPARAR PRODUTOS
     // =================================================
 
-    const produtosPreparados =
-      produtos.map((produto) => {
+    const produtosPreparados = produtos.map(
+      (produto: (typeof produtos)[number]) => {
         // -------------------------------------------------
         // PEGAR APARELHOS QUE POSSUEM CUSTO
         // -------------------------------------------------
 
-        const aparelhosComCusto =
-          produto.aparelhos.filter(
-            (aparelho) =>
-              aparelho.lote &&
-              (
-                aparelho.lote.precoCompraUsd !== null ||
-                aparelho.lote.precoCompraBrl !== null
-              )
-          );
+        const aparelhosComCusto = produto.aparelhos.filter(
+          (aparelho) =>
+            aparelho.lote &&
+            (
+              aparelho.lote.precoCompraUsd !== null ||
+              aparelho.lote.precoCompraBrl !== null
+            )
+        );
 
         // -------------------------------------------------
         // PEGAR O PRIMEIRO CUSTO CADASTRADO
@@ -91,18 +89,18 @@ export async function GET() {
           // APARELHOS
           // =================================================
 
-          aparelhos:
-            produto.aparelhos.map(
-              (aparelho) => ({
-                id: aparelho.id,
+          aparelhos: produto.aparelhos.map(
+            (aparelho) => ({
+              id: aparelho.id,
 
-                imei: aparelho.imei,
+              imei: aparelho.imei,
 
-                vendido: aparelho.vendido,
-              })
-            ),
+              vendido: aparelho.vendido,
+            })
+          ),
         };
-      });
+      }
+    );
 
     return NextResponse.json(
       produtosPreparados
@@ -131,47 +129,31 @@ export async function GET() {
 // PUT — SALVAR / ALTERAR CUSTO
 // =====================================================
 
-export async function PUT(
-  req: Request
-) {
+export async function PUT(req: Request) {
   try {
-    const body =
-      await req.json();
+    const body = await req.json();
 
-    const produtoId =
-      Number(
-        body.produtoId
-      );
+    const produtoId = Number(body.produtoId);
 
-    const tipoCusto =
-      String(
-        body.tipoCusto || ""
-      ).toUpperCase();
+    const tipoCusto = String(
+      body.tipoCusto || ""
+    ).toUpperCase();
 
-    const preco =
-      Number(
-        String(
-          body.preco ?? ""
-        ).replace(
-          ",",
-          "."
-        )
-      );
+    const preco = Number(
+      String(body.preco ?? "").replace(",", ".")
+    );
 
     // =================================================
     // VALIDAR PRODUTO
     // =================================================
 
     if (
-      !Number.isInteger(
-        produtoId
-      ) ||
+      !Number.isInteger(produtoId) ||
       produtoId <= 0
     ) {
       return NextResponse.json(
         {
-          error:
-            "Produto inválido.",
+          error: "Produto inválido.",
         },
         {
           status: 400,
@@ -189,8 +171,7 @@ export async function PUT(
     ) {
       return NextResponse.json(
         {
-          error:
-            "Escolha USD ou BRL.",
+          error: "Escolha USD ou BRL.",
         },
         {
           status: 400,
@@ -203,15 +184,12 @@ export async function PUT(
     // =================================================
 
     if (
-      !Number.isFinite(
-        preco
-      ) ||
+      !Number.isFinite(preco) ||
       preco <= 0
     ) {
       return NextResponse.json(
         {
-          error:
-            "Informe um custo válido.",
+          error: "Informe um custo válido.",
         },
         {
           status: 400,
@@ -224,36 +202,33 @@ export async function PUT(
     // =================================================
 
     const produto =
-      await prisma.produto.findUnique(
-        {
-          where: {
-            id: produtoId,
-          },
+      await prisma.produto.findUnique({
+        where: {
+          id: produtoId,
+        },
 
-          select: {
-            id: true,
-            nome: true,
+        select: {
+          id: true,
+          nome: true,
 
-            aparelhos: {
-              select: {
-                id: true,
+          aparelhos: {
+            select: {
+              id: true,
 
-                lote: {
-                  select: {
-                    id: true,
-                  },
+              lote: {
+                select: {
+                  id: true,
                 },
               },
             },
           },
-        }
-      );
+        },
+      });
 
     if (!produto) {
       return NextResponse.json(
         {
-          error:
-            "Produto não encontrado.",
+          error: "Produto não encontrado.",
         },
         {
           status: 404,
@@ -265,26 +240,23 @@ export async function PUT(
     // PEGAR IDS DOS LOTES
     // =================================================
 
-    const loteIds =
-      produto.aparelhos
-        .map(
-          (aparelho) =>
-            aparelho.lote?.id
-        )
-        .filter(
-          (
-            id
-          ): id is number =>
-            Number.isInteger(id)
-        );
+    const loteIds = produto.aparelhos
+      .map(
+        (aparelho) =>
+          aparelho.lote?.id
+      )
+      .filter(
+        (
+          id
+        ): id is number =>
+          Number.isInteger(id)
+      );
 
     // =================================================
     // VERIFICAR LOTES
     // =================================================
 
-    if (
-      loteIds.length === 0
-    ) {
+    if (loteIds.length === 0) {
       return NextResponse.json(
         {
           error:
@@ -302,9 +274,7 @@ export async function PUT(
 
     const loteIdsUnicos =
       Array.from(
-        new Set(
-          loteIds
-        )
+        new Set(loteIds)
       );
 
     // =================================================
@@ -322,24 +292,14 @@ export async function PUT(
         data:
           tipoCusto === "USD"
             ? {
-                precoCompraUsd:
-                  preco,
-
-                precoCompraBrl:
-                  null,
-
-                tipoCusto:
-                  "USD",
+                precoCompraUsd: preco,
+                precoCompraBrl: null,
+                tipoCusto: "USD",
               }
             : {
-                precoCompraUsd:
-                  null,
-
-                precoCompraBrl:
-                  preco,
-
-                tipoCusto:
-                  "BRL",
+                precoCompraUsd: null,
+                precoCompraBrl: preco,
+                tipoCusto: "BRL",
               },
       });
 
@@ -355,8 +315,7 @@ export async function PUT(
 
       produtoId,
 
-      produto:
-        produto.nome,
+      produto: produto.nome,
 
       tipoCusto,
 
