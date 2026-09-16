@@ -60,15 +60,6 @@ export async function GET() {
 
     // =================================================
     // FUNCIONARIO
-    //
-    // Pode ver:
-    // - Modelo
-    // - Quantidade
-    // - IMEI
-    //
-    // Não pode receber:
-    // - Fornecedor
-    // - Preço de compra USD
     // =================================================
 
     const produtosFuncionario = produtos.map(
@@ -103,10 +94,6 @@ export async function GET() {
 
             createdAt: lote.createdAt,
 
-            // IMPORTANTE:
-            // NÃO enviar fornecedor
-            // NÃO enviar preço de compra
-
             aparelhos: lote.aparelhos.map(
               (aparelho: any) => ({
                 id: aparelho.id,
@@ -136,8 +123,7 @@ export async function GET() {
 
     return NextResponse.json(
       {
-        error:
-          "Erro ao buscar estoque.",
+        error: "Erro ao buscar estoque.",
       },
       {
         status: 500,
@@ -151,18 +137,14 @@ export async function GET() {
 // SOMENTE ADMIN
 // =====================================================
 
-export async function POST(
-  req: Request
-) {
+export async function POST(req: Request) {
   try {
-    const usuario =
-      await obterSessao();
+    const usuario = await obterSessao();
 
     if (!usuario) {
       return NextResponse.json(
         {
-          error:
-            "Não autorizado.",
+          error: "Não autorizado.",
         },
         {
           status: 401,
@@ -170,9 +152,7 @@ export async function POST(
       );
     }
 
-    if (
-      usuario.role !== "ADMIN"
-    ) {
+    if (usuario.role !== "ADMIN") {
       return NextResponse.json(
         {
           error:
@@ -184,8 +164,7 @@ export async function POST(
       );
     }
 
-    const body =
-      await req.json();
+    const body = await req.json();
 
     const nome = String(
       body.nome || ""
@@ -207,25 +186,16 @@ export async function POST(
         : Number(
             String(
               body.precoCompraUsd
-            ).replace(
-              ",",
-              "."
-            )
+            ).replace(",", ".")
           );
 
-    const imeis =
-      Array.isArray(
-        body.imeis
-      )
-        ? body.imeis
-            .map(
-              (imei: unknown) =>
-                String(
-                  imei
-                ).trim()
-            )
-            .filter(Boolean)
-        : [];
+    const imeis = Array.isArray(body.imeis)
+      ? body.imeis
+          .map((imei: unknown) =>
+            String(imei).trim()
+          )
+          .filter(Boolean)
+      : [];
 
     // =================================================
     // VALIDAÇÕES
@@ -243,11 +213,7 @@ export async function POST(
       );
     }
 
-    if (
-      !Number.isFinite(
-        quantidade
-      )
-    ) {
+    if (!Number.isFinite(quantidade)) {
       return NextResponse.json(
         {
           error:
@@ -260,9 +226,7 @@ export async function POST(
     }
 
     if (
-      !Number.isInteger(
-        quantidade
-      ) ||
+      !Number.isInteger(quantidade) ||
       quantidade <= 0
     ) {
       return NextResponse.json(
@@ -276,10 +240,7 @@ export async function POST(
       );
     }
 
-    if (
-      imeis.length !==
-      quantidade
-    ) {
+    if (imeis.length !== quantidade) {
       return NextResponse.json(
         {
           error:
@@ -291,8 +252,7 @@ export async function POST(
       );
     }
 
-    const imeisUnicos =
-      new Set(imeis);
+    const imeisUnicos = new Set(imeis);
 
     if (
       imeisUnicos.size !==
@@ -310,8 +270,7 @@ export async function POST(
     }
 
     if (
-      precoCompraUsd !==
-        null &&
+      precoCompraUsd !== null &&
       (
         !Number.isFinite(
           precoCompraUsd
@@ -335,23 +294,20 @@ export async function POST(
     // =================================================
 
     const aparelhosExistentes =
-      await prisma.aparelho.findMany(
-        {
-          where: {
-            imei: {
-              in: imeis,
-            },
+      await prisma.aparelho.findMany({
+        where: {
+          imei: {
+            in: imeis,
           },
+        },
 
-          select: {
-            imei: true,
-          },
-        }
-      );
+        select: {
+          imei: true,
+        },
+      });
 
     if (
-      aparelhosExistentes.length >
-      0
+      aparelhosExistentes.length > 0
     ) {
       const repetidos =
         aparelhosExistentes
@@ -385,25 +341,21 @@ export async function POST(
           tx: Prisma.TransactionClient
         ) => {
           let produto =
-            await tx.produto.findFirst(
-              {
-                where: {
-                  nome,
-                },
-              }
-            );
+            await tx.produto.findFirst({
+              where: {
+                nome,
+              },
+            });
 
           if (!produto) {
             produto =
-              await tx.produto.create(
-                {
-                  data: {
-                    nome,
+              await tx.produto.create({
+                data: {
+                  nome,
 
-                    quantidade: 0,
-                  },
-                }
-              );
+                  quantidade: 0,
+                },
+              });
           }
 
           const lote =
@@ -414,73 +366,63 @@ export async function POST(
                 precoCompraUsd,
 
                 fornecedor:
-                  fornecedor ||
-                  null,
+                  fornecedor || null,
 
                 produtoId:
                   produto.id,
               },
             });
 
-          await tx.aparelho.createMany(
-            {
-              data: imeis.map(
-                (
-                  imei: string
-                ) => ({
-                  imei,
+          await tx.aparelho.createMany({
+            data: imeis.map(
+              (imei: string) => ({
+                imei,
 
-                  vendido: false,
+                vendido: false,
 
-                  loteId:
-                    lote.id,
+                loteId:
+                  lote.id,
 
-                  produtoId:
-                    produto.id,
-                })
-              ),
-            }
-          );
+                produtoId:
+                  produto.id,
+              })
+            ),
+          });
 
           const produtoAtualizado =
-            await tx.produto.update(
-              {
-                where: {
-                  id: produto.id,
-                },
+            await tx.produto.update({
+              where: {
+                id: produto.id,
+              },
 
-                data: {
-                  quantidade: {
-                    increment:
-                      quantidade,
+              data: {
+                quantidade: {
+                  increment:
+                    quantidade,
+                },
+              },
+
+              include: {
+                lotes: {
+                  include: {
+                    aparelhos: true,
                   },
                 },
 
-                include: {
-                  lotes: {
-                    include: {
-                      aparelhos:
-                        true,
-                    },
-                  },
-
-                  aparelhos: true,
-                },
-              }
-            );
+                aparelhos: true,
+              },
+            });
 
           const loteCompleto =
-            await tx.lote.findUnique(
-              {
-                where: {
-                  id: lote.id,
-                },
+            await tx.lote.findUnique({
+              where: {
+                id: lote.id,
+              },
 
-                include: {
-                  aparelhos: true,
-                },
-              }
-            );
+              include: {
+                aparelhos: true,
+              },
+            });
 
           return {
             produto:
@@ -534,18 +476,14 @@ export async function POST(
 // SOMENTE ADMIN
 // =====================================================
 
-export async function PATCH(
-  req: Request
-) {
+export async function PATCH(req: Request) {
   try {
-    const usuario =
-      await obterSessao();
+    const usuario = await obterSessao();
 
     if (!usuario) {
       return NextResponse.json(
         {
-          error:
-            "Não autorizado.",
+          error: "Não autorizado.",
         },
         {
           status: 401,
@@ -553,9 +491,7 @@ export async function PATCH(
       );
     }
 
-    if (
-      usuario.role !== "ADMIN"
-    ) {
+    if (usuario.role !== "ADMIN") {
       return NextResponse.json(
         {
           error:
@@ -567,8 +503,7 @@ export async function PATCH(
       );
     }
 
-    const body =
-      await req.json();
+    const body = await req.json();
 
     // =================================================
     // ATUALIZAR PREÇO
@@ -583,26 +518,18 @@ export async function PATCH(
       );
 
       const precoCompraUsd =
-        body.precoCompraUsd ===
-          null ||
-        body.precoCompraUsd ===
-          undefined ||
-        body.precoCompraUsd ===
-          ""
+        body.precoCompraUsd === null ||
+        body.precoCompraUsd === undefined ||
+        body.precoCompraUsd === ""
           ? null
           : Number(
               String(
                 body.precoCompraUsd
-              ).replace(
-                ",",
-                "."
-              )
+              ).replace(",", ".")
             );
 
       if (
-        !Number.isInteger(
-          loteId
-        ) ||
+        !Number.isInteger(loteId) ||
         loteId <= 0
       ) {
         return NextResponse.json(
@@ -617,8 +544,7 @@ export async function PATCH(
       }
 
       if (
-        precoCompraUsd ===
-          null ||
+        precoCompraUsd === null ||
         !Number.isFinite(
           precoCompraUsd
         ) ||
@@ -636,13 +562,11 @@ export async function PATCH(
       }
 
       const lote =
-        await prisma.lote.findUnique(
-          {
-            where: {
-              id: loteId,
-            },
-          }
-        );
+        await prisma.lote.findUnique({
+          where: {
+            id: loteId,
+          },
+        });
 
       if (!lote) {
         return NextResponse.json(
@@ -657,21 +581,19 @@ export async function PATCH(
       }
 
       const loteAtualizado =
-        await prisma.lote.update(
-          {
-            where: {
-              id: loteId,
-            },
+        await prisma.lote.update({
+          where: {
+            id: loteId,
+          },
 
-            data: {
-              precoCompraUsd,
-            },
+          data: {
+            precoCompraUsd,
+          },
 
-            include: {
-              aparelhos: true,
-            },
-          }
-        );
+          include: {
+            aparelhos: true,
+          },
+        });
 
       return NextResponse.json({
         success: true,
@@ -688,17 +610,13 @@ export async function PATCH(
     // TROCAR IMEI
     // =================================================
 
-    const imeiAntigo =
-      String(
-        body.imeiAntigo ||
-          ""
-      ).trim();
+    const imeiAntigo = String(
+      body.imeiAntigo || ""
+    ).trim();
 
-    const imeiNovo =
-      String(
-        body.imeiNovo ||
-          ""
-      ).trim();
+    const imeiNovo = String(
+      body.imeiNovo || ""
+    ).trim();
 
     if (!imeiAntigo) {
       return NextResponse.json(
@@ -725,8 +643,7 @@ export async function PATCH(
     }
 
     if (
-      imeiAntigo ===
-      imeiNovo
+      imeiAntigo === imeiNovo
     ) {
       return NextResponse.json(
         {
@@ -740,13 +657,11 @@ export async function PATCH(
     }
 
     const aparelho =
-      await prisma.aparelho.findUnique(
-        {
-          where: {
-            imei: imeiAntigo,
-          },
-        }
-      );
+      await prisma.aparelho.findUnique({
+        where: {
+          imei: imeiAntigo,
+        },
+      });
 
     if (!aparelho) {
       return NextResponse.json(
@@ -760,9 +675,7 @@ export async function PATCH(
       );
     }
 
-    if (
-      aparelho.vendido
-    ) {
+    if (aparelho.vendido) {
       return NextResponse.json(
         {
           error:
@@ -775,17 +688,13 @@ export async function PATCH(
     }
 
     const imeiNovoExistente =
-      await prisma.aparelho.findUnique(
-        {
-          where: {
-            imei: imeiNovo,
-          },
-        }
-      );
+      await prisma.aparelho.findUnique({
+        where: {
+          imei: imeiNovo,
+        },
+      });
 
-    if (
-      imeiNovoExistente
-    ) {
+    if (imeiNovoExistente) {
       return NextResponse.json(
         {
           error:
@@ -798,17 +707,15 @@ export async function PATCH(
     }
 
     const aparelhoAtualizado =
-      await prisma.aparelho.update(
-        {
-          where: {
-            id: aparelho.id,
-          },
+      await prisma.aparelho.update({
+        where: {
+          id: aparelho.id,
+        },
 
-          data: {
-            imei: imeiNovo,
-          },
-        }
-      );
+        data: {
+          imei: imeiNovo,
+        },
+      });
 
     return NextResponse.json({
       success: true,
@@ -842,14 +749,16 @@ export async function PATCH(
 // =====================================================
 // DELETE
 // SOMENTE ADMIN
+//
+// Suporta:
+// 1. Excluir um aparelho pelo aparelhoId
+// 2. Excluir um aparelho pelo IMEI
+// 3. Excluir um produto inteiro pelo produtoId
 // =====================================================
 
-export async function DELETE(
-  req: Request
-) {
+export async function DELETE(req: Request) {
   try {
-    const usuario =
-      await obterSessao();
+    const usuario = await obterSessao();
 
     // =================================================
     // VERIFICAR LOGIN
@@ -858,8 +767,7 @@ export async function DELETE(
     if (!usuario) {
       return NextResponse.json(
         {
-          error:
-            "Não autorizado.",
+          error: "Não autorizado.",
         },
         {
           status: 401,
@@ -871,9 +779,7 @@ export async function DELETE(
     // SOMENTE ADMIN PODE EXCLUIR
     // =================================================
 
-    if (
-      usuario.role !== "ADMIN"
-    ) {
+    if (usuario.role !== "ADMIN") {
       return NextResponse.json(
         {
           error:
@@ -889,17 +795,160 @@ export async function DELETE(
     // LER DADOS
     // =================================================
 
-    const body =
-      await req.json();
+    const body = await req.json();
+
+    // =================================================
+    // OPÇÃO 1 - EXCLUIR APARELHO INDIVIDUAL
+    // =================================================
+
+    if (
+      body.aparelhoId !== undefined ||
+      body.imei !== undefined
+    ) {
+      const aparelhoId =
+        body.aparelhoId !== undefined
+          ? Number(body.aparelhoId)
+          : null;
+
+      const imei =
+        body.imei !== undefined
+          ? String(body.imei).trim()
+          : "";
+
+      if (
+        aparelhoId !== null &&
+        (
+          !Number.isInteger(
+            aparelhoId
+          ) ||
+          aparelhoId <= 0
+        )
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "ID do aparelho inválido.",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      if (
+        aparelhoId === null &&
+        !imei
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Informe o aparelhoId ou o IMEI.",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      const aparelho =
+        aparelhoId !== null
+          ? await prisma.aparelho.findUnique(
+              {
+                where: {
+                  id: aparelhoId,
+                },
+              }
+            )
+          : await prisma.aparelho.findUnique(
+              {
+                where: {
+                  imei,
+                },
+              }
+            );
+
+      if (!aparelho) {
+        return NextResponse.json(
+          {
+            error:
+              "Aparelho não encontrado.",
+          },
+          {
+            status: 404,
+          }
+        );
+      }
+
+      // NÃO DEIXAR APAGAR APARELHO VENDIDO
+      if (aparelho.vendido) {
+        return NextResponse.json(
+          {
+            error:
+              "Não é possível excluir um aparelho que já foi vendido.",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      await prisma.$transaction(
+        async (
+          tx: Prisma.TransactionClient
+        ) => {
+          // Excluir o aparelho
+          await tx.aparelho.delete({
+            where: {
+              id: aparelho.id,
+            },
+          });
+
+          // Diminuir quantidade do produto
+          await tx.produto.update({
+            where: {
+              id: aparelho.produtoId,
+            },
+
+            data: {
+              quantidade: {
+                decrement: 1,
+              },
+            },
+          });
+
+          // Atualizar quantidade do lote
+          if (aparelho.loteId) {
+            await tx.lote.update({
+              where: {
+                id: aparelho.loteId,
+              },
+
+              data: {
+                quantidade: {
+                  decrement: 1,
+                },
+              },
+            });
+          }
+        }
+      );
+
+      return NextResponse.json({
+        success: true,
+
+        message:
+          "Aparelho removido do estoque com sucesso.",
+      });
+    }
+
+    // =================================================
+    // OPÇÃO 2 - EXCLUIR PRODUTO INTEIRO
+    // =================================================
 
     const produtoId = Number(
       body.produtoId ??
         body.id
     );
-
-    // =================================================
-    // VALIDAR ID
-    // =================================================
 
     if (
       !Number.isInteger(
@@ -923,19 +972,17 @@ export async function DELETE(
     // =================================================
 
     const produto =
-      await prisma.produto.findUnique(
-        {
-          where: {
-            id: produtoId,
-          },
+      await prisma.produto.findUnique({
+        where: {
+          id: produtoId,
+        },
 
-          include: {
-            aparelhos: true,
+        include: {
+          aparelhos: true,
 
-            lotes: true,
-          },
-        }
-      );
+          lotes: true,
+        },
+      });
 
     if (!produto) {
       return NextResponse.json(
@@ -956,8 +1003,11 @@ export async function DELETE(
 
     const aparelhoVendido =
       produto.aparelhos.some(
-        (aparelho: { vendido: boolean }) =>
-          aparelho.vendido
+        (
+          aparelho: {
+            vendido: boolean;
+          }
+        ) => aparelho.vendido
       );
 
     if (aparelhoVendido) {
@@ -975,30 +1025,55 @@ export async function DELETE(
     // =================================================
     // EXCLUIR TUDO
     //
-    // 1. Aparelhos
-    // 2. Lotes
-    // 3. Produto
+    // ORDEM:
+    // 1. Assistências vinculadas ao produto
+    // 2. Aparelhos
+    // 3. Lotes
+    // 4. Produto
+    //
+    // IMPORTANTE:
+    // A Assistência possui uma FK para Produto.
+    // Por isso ela precisa ser removida antes
+    // do produto.
     // =================================================
 
     await prisma.$transaction(
       async (
         tx: Prisma.TransactionClient
       ) => {
-        await tx.aparelho.deleteMany(
-          {
-            where: {
-              produtoId:
-                produtoId,
-            },
-          }
-        );
+        // -------------------------------------------------
+        // 1. EXCLUIR ASSISTÊNCIAS DO PRODUTO
+        // -------------------------------------------------
+
+        await tx.assistencia.deleteMany({
+          where: {
+            produtoId,
+          },
+        });
+
+        // -------------------------------------------------
+        // 2. EXCLUIR APARELHOS
+        // -------------------------------------------------
+
+        await tx.aparelho.deleteMany({
+          where: {
+            produtoId,
+          },
+        });
+
+        // -------------------------------------------------
+        // 3. EXCLUIR LOTES
+        // -------------------------------------------------
 
         await tx.lote.deleteMany({
           where: {
-            produtoId:
-              produtoId,
+            produtoId,
           },
         });
+
+        // -------------------------------------------------
+        // 4. EXCLUIR PRODUTO
+        // -------------------------------------------------
 
         await tx.produto.delete({
           where: {

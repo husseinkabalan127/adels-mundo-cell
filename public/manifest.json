@@ -1,0 +1,10 @@
+{
+  "name": "Adel's Mundo Cell",
+  "short_name": "Adel's Cell",
+  "description": "Sistema de gerenciamento da loja",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#111827",
+  "orientation": "portrait"
+}
