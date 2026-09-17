@@ -54,12 +54,16 @@ export default function EstoquePage() {
 
   const [nome, setNome] = useState("");
   const [fornecedor, setFornecedor] = useState("");
-  const [quantidade, setQuantidade] = useState("1");
   const [precoCompraUsd, setPrecoCompraUsd] =
     useState("");
 
+  // IMEIs adicionados
   const [imeis, setImeis] =
-    useState<string[]>([""]);
+    useState<string[]>([]);
+
+  // Campo onde digita/escaneia o próximo IMEI
+  const [imeiBusca, setImeiBusca] =
+    useState("");
 
   const [salvando, setSalvando] =
     useState(false);
@@ -211,65 +215,43 @@ export default function EstoquePage() {
   }, []);
 
   // =====================================================
-  // ALTERAR QUANTIDADE
+  // ADICIONAR IMEI
   // =====================================================
 
-  function alterarQuantidade(
-    valor: string
-  ) {
-    const numero = Number(valor);
+  function adicionarImei() {
+    const imei = imeiBusca.trim();
 
-    const qtd =
-      Number.isFinite(numero) &&
-      numero >= 1
-        ? Math.floor(numero)
-        : 1;
+    if (!imei) {
+      return;
+    }
 
-    setQuantidade(String(qtd));
+    setMensagem("");
+    setErro("");
 
-    setImeis((lista) => {
-      const novaLista = [...lista];
+    // Não permite IMEI repetido dentro desta compra
+    if (imeis.includes(imei)) {
+      setErro(
+        "Este IMEI já foi adicionado."
+      );
+      return;
+    }
 
-      while (
-        novaLista.length < qtd
-      ) {
-        novaLista.push("");
-      }
+    // Adiciona o IMEI na lista
+    setImeis((lista) => [
+      ...lista,
+      imei,
+    ]);
 
-      while (
-        novaLista.length > qtd
-      ) {
-        novaLista.pop();
-      }
-
-      return novaLista;
-    });
+    // Limpa a caixa para o próximo IMEI
+    setImeiBusca("");
   }
 
   // =====================================================
-  // ALTERAR IMEI
-  // =====================================================
-
-  function alterarImei(
-    index: number,
-    valor: string
-  ) {
-    setImeis((lista) => {
-      const novaLista = [...lista];
-
-      novaLista[index] = valor;
-
-      return novaLista;
-    });
-  }
-
-  // =====================================================
-  // ENTER NO IMEI
+  // ENTER NO CAMPO DE IMEI
   // =====================================================
 
   function handleImeiKeyDown(
-    e: React.KeyboardEvent<HTMLInputElement>,
-    index: number
+    e: React.KeyboardEvent<HTMLInputElement>
   ) {
     if (e.key !== "Enter") {
       return;
@@ -277,40 +259,22 @@ export default function EstoquePage() {
 
     e.preventDefault();
 
-    setImeis((lista) => {
-      const novaLista = [...lista];
+    adicionarImei();
+  }
 
-      const imeiAtual =
-        novaLista[index]?.trim();
+  // =====================================================
+  // REMOVER IMEI
+  // =====================================================
 
-      if (!imeiAtual) {
-        return novaLista;
-      }
+  function removerImei(index: number) {
+    setImeis((lista) =>
+      lista.filter(
+        (_, i) => i !== index
+      )
+    );
 
-      if (
-        index ===
-        novaLista.length - 1
-      ) {
-        novaLista.push("");
-
-        setQuantidade(
-          String(novaLista.length)
-        );
-      }
-
-      return novaLista;
-    });
-
-    setTimeout(() => {
-      const proximoIndex = index + 1;
-
-      const elemento =
-        document.getElementById(
-          `imei-${proximoIndex}`
-        ) as HTMLInputElement | null;
-
-      elemento?.focus();
-    }, 50);
+    setMensagem("");
+    setErro("");
   }
 
   // =====================================================
@@ -332,18 +296,25 @@ export default function EstoquePage() {
       return;
     }
 
-    const qtd = Number(quantidade);
-
-    const imeisLimpos =
-      imeis
-        .map((item) => item.trim())
-        .filter(Boolean);
-
     const nomeLimpo =
       nome.trim();
 
     const fornecedorLimpo =
       fornecedor.trim();
+
+    /*
+     * A quantidade agora é automática.
+     *
+     * Quantidade = quantidade de IMEIs
+     * adicionados na lista.
+     */
+    const imeisLimpos =
+      imeis
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+    const quantidadeReal =
+      imeisLimpos.length;
 
     if (!nomeLimpo) {
       setErro(
@@ -359,25 +330,19 @@ export default function EstoquePage() {
       return;
     }
 
-    if (
-      !Number.isInteger(qtd) ||
-      qtd <= 0
-    ) {
+    /*
+     * Precisa ter pelo menos um IMEI.
+     */
+    if (quantidadeReal <= 0) {
       setErro(
-        "Quantidade inválida."
+        "Adicione pelo menos um IMEI."
       );
       return;
     }
 
-    if (
-      imeisLimpos.length !== qtd
-    ) {
-      setErro(
-        "Informe um IMEI para cada aparelho."
-      );
-      return;
-    }
-
+    /*
+     * Não pode haver IMEI repetido.
+     */
     const imeisUnicos =
       new Set(imeisLimpos);
 
@@ -436,7 +401,12 @@ export default function EstoquePage() {
               fornecedor:
                 fornecedorLimpo,
 
-              quantidade: qtd,
+              /*
+               * Quantidade automática:
+               * igual ao número de IMEIs.
+               */
+              quantidade:
+                quantidadeReal,
 
               precoCompraUsd:
                 precoUsd,
@@ -461,11 +431,12 @@ export default function EstoquePage() {
         "Aparelho(s) cadastrado(s) com sucesso!"
       );
 
+      // Limpar formulário
       setNome("");
       setFornecedor("");
-      setQuantidade("1");
       setPrecoCompraUsd("");
-      setImeis([""]);
+      setImeis([]);
+      setImeiBusca("");
 
       await carregarEstoque();
     } catch (error: any) {
@@ -860,9 +831,7 @@ export default function EstoquePage() {
           margin: "0 auto",
         }}
       >
-        {/* =================================================
-            CABEÇALHO
-        ================================================== */}
+        {/* CABEÇALHO */}
 
         <div
           style={{
@@ -924,11 +893,9 @@ export default function EstoquePage() {
                 background: isAdmin
                   ? "#dcfce7"
                   : "#dbeafe",
-
                 color: isAdmin
                   ? "#166534"
                   : "#1e40af",
-
                 padding: "15px 22px",
                 borderRadius: "12px",
                 fontWeight: 700,
@@ -941,9 +908,7 @@ export default function EstoquePage() {
           </div>
         </div>
 
-        {/* =================================================
-            MENSAGENS
-        ================================================== */}
+        {/* MENSAGENS */}
 
         {mensagem && (
           <div
@@ -975,15 +940,11 @@ export default function EstoquePage() {
           </div>
         )}
 
-        {/* =================================================
-            ÁREA ADMIN
-        ================================================== */}
+        {/* ÁREA ADMIN */}
 
         {isAdmin && (
           <>
-            {/* =================================================
-                ADICIONAR ESTOQUE
-            ================================================== */}
+            {/* ADICIONAR ESTOQUE */}
 
             <section
               style={{
@@ -1058,19 +1019,28 @@ export default function EstoquePage() {
                       Quantidade
                     </label>
 
-                    <input
-                      type="number"
-                      min="1"
-                      value={
-                        quantidade
-                      }
-                      onChange={(e) =>
-                        alterarQuantidade(
-                          e.target.value
-                        )
-                      }
-                      style={inputStyle}
-                    />
+                    <div
+                      style={{
+                        ...inputStyle,
+                        background:
+                          "#f1f5f9",
+                        color: "#111827",
+                        fontWeight: 700,
+                      }}
+                    >
+                      {imeis.length}
+                    </div>
+
+                    <small
+                      style={{
+                        display: "block",
+                        marginTop: "5px",
+                        color: "#777",
+                      }}
+                    >
+                      Calculada automaticamente
+                      pelos IMEIs adicionados.
+                    </small>
                   </div>
 
                   <div>
@@ -1106,64 +1076,150 @@ export default function EstoquePage() {
                   </div>
                 </div>
 
+                {/* =================================================
+                    IMEIS
+                ================================================= */}
+
                 <div
                   style={{
-                    marginTop: "20px",
+                    marginTop: "25px",
                   }}
                 >
-                  <h3>
-                    IMEI dos aparelhos
+                  <h3
+                    style={{
+                      margin: 0,
+                      marginBottom: "8px",
+                    }}
+                  >
+                    IMEIs adicionados ({imeis.length})
                   </h3>
 
                   <p
                     style={{
                       color: "#666",
                       fontSize: "14px",
+                      marginTop: "5px",
                     }}
                   >
-                    Digite o IMEI e aperte
-                    Enter para adicionar
-                    outro.
+                    Digite ou faça Scan do IMEI
+                    e aperte Enter.
                   </p>
 
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns:
-                        "repeat(auto-fit, minmax(250px, 1fr))",
-                      gap: "10px",
-                    }}
-                  >
-                    {imeis.map(
-                      (
-                        imei,
-                        index
-                      ) => (
-                        <input
-                          id={`imei-${index}`}
-                          key={index}
-                          value={imei}
-                          onChange={(e) =>
-                            alterarImei(
-                              index,
-                              e.target
-                                .value
-                            )
-                          }
-                          onKeyDown={(e) =>
-                            handleImeiKeyDown(
-                              e,
-                              index
-                            )
-                          }
-                          placeholder={`IMEI ${index + 1}`}
-                          style={
-                            inputStyle
-                          }
-                        />
+                  {/* CAMPO DE ENTRADA */}
+
+                  <input
+                    value={imeiBusca}
+                    onChange={(e) =>
+                      setImeiBusca(
+                        e.target.value
                       )
-                    )}
-                  </div>
+                    }
+                    onKeyDown={
+                      handleImeiKeyDown
+                    }
+                    placeholder="Digite ou faça Scan do IMEI"
+                    autoComplete="off"
+                    inputMode="numeric"
+                    style={{
+                      ...inputStyle,
+                      marginTop: "10px",
+                      fontSize: "16px",
+                    }}
+                  />
+
+                  {/* IMEIS ADICIONADOS */}
+
+                  {imeis.length > 0 && (
+                    <div
+                      style={{
+                        marginTop: "15px",
+                        display: "grid",
+                        gap: "8px",
+                      }}
+                    >
+                      {imeis.map(
+                        (
+                          imei,
+                          index
+                        ) => (
+                          <div
+                            key={`${imei}-${index}`}
+                            style={{
+                              display:
+                                "flex",
+                              alignItems:
+                                "center",
+                              justifyContent:
+                                "space-between",
+                              gap: "10px",
+                              background:
+                                "#f8fafc",
+                              border:
+                                "1px solid #e2e8f0",
+                              borderRadius:
+                                "9px",
+                              padding:
+                                "11px 13px",
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontSize:
+                                  "14px",
+                                fontWeight:
+                                  600,
+                                wordBreak:
+                                  "break-all",
+                              }}
+                            >
+                              IMEI:{" "}
+                              {imei}
+                            </span>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                removerImei(
+                                  index
+                                )
+                              }
+                              title="Remover IMEI"
+                              style={{
+                                border:
+                                  "none",
+                                background:
+                                  "#fee2e2",
+                                color:
+                                  "#dc2626",
+                                width:
+                                  "32px",
+                                height:
+                                  "32px",
+                                minWidth:
+                                  "32px",
+                                borderRadius:
+                                  "50%",
+                                cursor:
+                                  "pointer",
+                                fontWeight:
+                                  800,
+                                fontSize:
+                                  "17px",
+                                display:
+                                  "flex",
+                                alignItems:
+                                  "center",
+                                justifyContent:
+                                  "center",
+                              }}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <button
@@ -1185,9 +1241,7 @@ export default function EstoquePage() {
               </form>
             </section>
 
-            {/* =================================================
-                TROCAR IMEI
-            ================================================== */}
+            {/* TROCAR IMEI */}
 
             <section
               style={{
@@ -1262,9 +1316,7 @@ export default function EstoquePage() {
           </>
         )}
 
-        {/* =================================================
-            LISTA ESTOQUE
-        ================================================== */}
+        {/* LISTA ESTOQUE */}
 
         <section
           style={{
@@ -1336,9 +1388,7 @@ export default function EstoquePage() {
                           "#ffffff",
                       }}
                     >
-                      {/* =================================================
-                          PRODUTO
-                      ================================================== */}
+                      {/* PRODUTO */}
 
                       <div
                         style={{
@@ -1402,8 +1452,6 @@ export default function EstoquePage() {
                           </div>
                         </div>
 
-                        {/* DELETE */}
-
                         {isAdmin && (
                           <button
                             type="button"
@@ -1425,9 +1473,7 @@ export default function EstoquePage() {
                         )}
                       </div>
 
-                      {/* =================================================
-                          TODOS OS IMEIS DISPONÍVEIS
-                      ================================================== */}
+                      {/* TODOS OS IMEIS DISPONÍVEIS */}
 
                       <div
                         style={{
@@ -1493,9 +1539,7 @@ export default function EstoquePage() {
                         </div>
                       </div>
 
-                      {/* =================================================
-                          COMPRAS / LOTES
-                      ================================================== */}
+                      {/* COMPRAS / LOTES */}
 
                       {lotes.length >
                         0 && (
@@ -1756,29 +1800,22 @@ export default function EstoquePage() {
                                                     aparelho.vendido
                                                       ? "#fee2e2"
                                                       : "#dcfce7",
-
                                                   color:
                                                     aparelho.vendido
                                                       ? "#991b1b"
                                                       : "#166534",
-
                                                   padding:
                                                     "7px 9px",
-
                                                   borderRadius:
                                                     "7px",
-
                                                   fontSize:
                                                     "12px",
-
                                                   fontWeight:
                                                     600,
-
                                                   textDecoration:
                                                     aparelho.vendido
                                                       ? "line-through"
                                                       : "none",
-
                                                   wordBreak:
                                                     "break-all",
                                                 }}
@@ -1954,9 +1991,7 @@ export default function EstoquePage() {
         </section>
       </div>
 
-      {/* =====================================================
-          MODAL SENHA ADMIN
-      ===================================================== */}
+      {/* MODAL SENHA ADMIN */}
 
       {isAdmin &&
         produtoParaExcluir && (
