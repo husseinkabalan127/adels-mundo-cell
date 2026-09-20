@@ -94,19 +94,28 @@ export async function GET() {
 
             createdAt: lote.createdAt,
 
-            aparelhos: lote.aparelhos.map(
-              (aparelho: any) => ({
-                id: aparelho.id,
+            fornecedor:
+              lote.fornecedor,
 
-                imei: aparelho.imei,
+            precoCompraUsd:
+              lote.precoCompraUsd,
 
-                vendido: aparelho.vendido,
+            aparelhos:
+              lote.aparelhos.map(
+                (aparelho: any) => ({
+                  id: aparelho.id,
 
-                produtoId: aparelho.produtoId,
+                  imei: aparelho.imei,
 
-                loteId: aparelho.loteId,
-              })
-            ),
+                  vendido: aparelho.vendido,
+
+                  produtoId:
+                    aparelho.produtoId,
+
+                  loteId:
+                    aparelho.loteId,
+                })
+              ),
           })
         ),
       })
@@ -123,7 +132,8 @@ export async function GET() {
 
     return NextResponse.json(
       {
-        error: "Erro ao buscar estoque.",
+        error:
+          "Erro ao buscar estoque.",
       },
       {
         status: 500,
@@ -506,6 +516,312 @@ export async function PATCH(req: Request) {
     const body = await req.json();
 
     // =================================================
+    // ALTERAR NOME DO PRODUTO
+    //
+    // Se já existir outro produto com o mesmo nome:
+    // os dois produtos serão unidos.
+    // =================================================
+
+    if (
+      body.action ===
+      "atualizarNome"
+    ) {
+      const produtoId = Number(
+        body.produtoId
+      );
+
+      const novoNome = String(
+        body.nome || ""
+      ).trim();
+
+      if (
+        !Number.isInteger(
+          produtoId
+        ) ||
+        produtoId <= 0
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "ID do produto inválido.",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      if (!novoNome) {
+        return NextResponse.json(
+          {
+            error:
+              "Digite o novo nome do aparelho.",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      // =================================================
+      // BUSCAR PRODUTO ORIGINAL
+      // =================================================
+
+      const produto =
+        await prisma.produto.findUnique({
+          where: {
+            id: produtoId,
+          },
+
+          include: {
+            aparelhos: true,
+
+            lotes: true,
+          },
+        });
+
+      if (!produto) {
+        return NextResponse.json(
+          {
+            error:
+              "Produto não encontrado.",
+          },
+          {
+            status: 404,
+          }
+        );
+      }
+
+      // =================================================
+      // SE O NOME NÃO MUDOU
+      // =================================================
+
+      if (
+        produto.nome ===
+        novoNome
+      ) {
+        return NextResponse.json({
+          success: true,
+
+          message:
+            "O nome já está igual.",
+
+          produto,
+        });
+      }
+
+      // =================================================
+      // PROCURAR OUTRO PRODUTO COM O MESMO NOME
+      // =================================================
+
+      const produtoExistente =
+        await prisma.produto.findFirst({
+          where: {
+            nome: novoNome,
+
+            NOT: {
+              id: produtoId,
+            },
+          },
+
+          include: {
+            aparelhos: true,
+
+            lotes: true,
+          },
+        });
+
+      // =================================================
+      // CASO NÃO EXISTA
+      // APENAS ALTERAR O NOME
+      // =================================================
+
+      if (!produtoExistente) {
+        const produtoAtualizado =
+          await prisma.produto.update({
+            where: {
+              id: produtoId,
+            },
+
+            data: {
+              nome: novoNome,
+            },
+
+            include: {
+              aparelhos: true,
+
+              lotes: {
+                include: {
+                  aparelhos: true,
+                },
+              },
+            },
+          });
+
+        return NextResponse.json({
+          success: true,
+
+          message:
+            "Nome do aparelho atualizado com sucesso.",
+
+          produto:
+            produtoAtualizado,
+        });
+      }
+
+      // =================================================
+      // EXISTE OUTRO PRODUTO COM O MESMO NOME
+      // JUNTAR OS DOIS
+      // =================================================
+
+      const resultado =
+        await prisma.$transaction(
+          async (
+            tx: Prisma.TransactionClient
+          ) => {
+
+            // =================================================
+            // IMPORTANTE:
+            // PRIMEIRO TRANSFERIR AS VENDAS ANTIGAS
+            //
+            // Isso resolve o erro:
+            // P2003
+            // VendaItem_produtoId_fkey
+            //
+            // As vendas antigas passam a apontar para
+            // o produto que continuará existindo.
+            // =================================================
+
+            await tx.vendaItem.updateMany({
+              where: {
+                produtoId:
+                  produtoId,
+              },
+
+              data: {
+                produtoId:
+                  produtoExistente.id,
+              },
+            });
+
+            // =================================================
+            // TRANSFERIR APARELHOS / IMEIS
+            // =================================================
+
+            await tx.aparelho.updateMany({
+              where: {
+                produtoId:
+                  produtoId,
+              },
+
+              data: {
+                produtoId:
+                  produtoExistente.id,
+              },
+            });
+
+            // =================================================
+            // TRANSFERIR LOTES
+            // =================================================
+
+            await tx.lote.updateMany({
+              where: {
+                produtoId:
+                  produtoId,
+              },
+
+              data: {
+                produtoId:
+                  produtoExistente.id,
+              },
+            });
+
+            // =================================================
+            // TRANSFERIR ASSISTÊNCIAS
+            // =================================================
+
+            await tx.assistencia.updateMany({
+              where: {
+                produtoId:
+                  produtoId,
+              },
+
+              data: {
+                produtoId:
+                  produtoExistente.id,
+              },
+            });
+
+            // =================================================
+            // SOMAR QUANTIDADE DO PRODUTO
+            // =================================================
+
+            await tx.produto.update({
+              where: {
+                id:
+                  produtoExistente.id,
+              },
+
+              data: {
+                quantidade: {
+                  increment:
+                    produto.quantidade,
+                },
+              },
+            });
+
+            // =================================================
+            // EXCLUIR PRODUTO ANTIGO
+            //
+            // Agora pode excluir porque:
+            // - VendaItem foi transferido
+            // - Aparelhos foram transferidos
+            // - Lotes foram transferidos
+            // - Assistências foram transferidas
+            // =================================================
+
+            await tx.produto.delete({
+              where: {
+                id:
+                  produtoId,
+              },
+            });
+
+            // =================================================
+            // BUSCAR PRODUTO FINAL
+            // =================================================
+
+            return await tx.produto.findUnique({
+              where: {
+                id:
+                  produtoExistente.id,
+              },
+
+              include: {
+                aparelhos: true,
+
+                lotes: {
+                  include: {
+                    aparelhos: true,
+                  },
+                },
+              },
+            });
+          }
+        );
+
+      return NextResponse.json({
+        success: true,
+
+        message:
+          "Os aparelhos foram unidos ao modelo existente com sucesso.",
+
+        produto:
+          resultado,
+      });
+    }
+
+    // =================================================
     // ATUALIZAR PREÇO
     // =================================================
 
@@ -529,7 +845,9 @@ export async function PATCH(req: Request) {
             );
 
       if (
-        !Number.isInteger(loteId) ||
+        !Number.isInteger(
+          loteId
+        ) ||
         loteId <= 0
       ) {
         return NextResponse.json(
@@ -880,6 +1198,7 @@ export async function DELETE(req: Request) {
       }
 
       // NÃO DEIXAR APAGAR APARELHO VENDIDO
+
       if (aparelho.vendido) {
         return NextResponse.json(
           {
@@ -897,6 +1216,7 @@ export async function DELETE(req: Request) {
           tx: Prisma.TransactionClient
         ) => {
           // Excluir o aparelho
+
           await tx.aparelho.delete({
             where: {
               id: aparelho.id,
@@ -904,6 +1224,7 @@ export async function DELETE(req: Request) {
           });
 
           // Diminuir quantidade do produto
+
           await tx.produto.update({
             where: {
               id: aparelho.produtoId,
@@ -917,6 +1238,7 @@ export async function DELETE(req: Request) {
           });
 
           // Atualizar quantidade do lote
+
           if (aparelho.loteId) {
             await tx.lote.update({
               where: {
@@ -1024,17 +1346,6 @@ export async function DELETE(req: Request) {
 
     // =================================================
     // EXCLUIR TUDO
-    //
-    // ORDEM:
-    // 1. Assistências vinculadas ao produto
-    // 2. Aparelhos
-    // 3. Lotes
-    // 4. Produto
-    //
-    // IMPORTANTE:
-    // A Assistência possui uma FK para Produto.
-    // Por isso ela precisa ser removida antes
-    // do produto.
     // =================================================
 
     await prisma.$transaction(

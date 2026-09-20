@@ -7,6 +7,7 @@ type Aparelho = {
   id: number;
   imei: string;
   vendido: boolean;
+  loteId?: number;
 };
 
 type Produto = {
@@ -16,11 +17,33 @@ type Produto = {
   aparelhos?: Aparelho[];
 };
 
+type LoteEstoque = {
+  id: number;
+  precoCompraUsd?: number | null;
+  aparelhos?: Aparelho[];
+};
+
+type ProdutoEstoque = {
+  id: number;
+  nome: string;
+  quantidade: number;
+  lotes?: LoteEstoque[];
+};
+
+type VendaItem = {
+  id: number;
+  quantidade?: number;
+  total?: number;
+  valorUnitario?: number;
+  precoCompraUsd?: number | null;
+  custoTotal?: number | null;
+};
+
 type Venda = {
   id: number;
-  valorVenda?: number;
-  lucro?: number;
-  quantidade?: number;
+  taxa?: number | null;
+  taxaFechada?: boolean;
+  itens?: VendaItem[];
 };
 
 type ContaReceber = {
@@ -33,14 +56,34 @@ type ContaReceber = {
   estadoFatura?: string | null;
 };
 
+type ResumoRelatorio = {
+  valorVendas: number;
+  custoTotal: number;
+  lucroTotal: number;
+};
+
 export default function DashboardPage() {
   const router = useRouter();
 
   const [produtos, setProdutos] = useState<Produto[]>([]);
-  const [vendas, setVendas] = useState<Venda[]>([]);
-  const [contas, setContas] = useState<ContaReceber[]>([]);
 
-  const [carregando, setCarregando] = useState(true);
+  const [estoque, setEstoque] =
+    useState<ProdutoEstoque[]>([]);
+
+  const [vendas, setVendas] = useState<Venda[]>([]);
+
+  const [contas, setContas] =
+    useState<ContaReceber[]>([]);
+
+  const [resumoRelatorio, setResumoRelatorio] =
+    useState<ResumoRelatorio>({
+      valorVendas: 0,
+      custoTotal: 0,
+      lucroTotal: 0,
+    });
+
+  const [carregando, setCarregando] =
+    useState(true);
 
   const [mostrarDisponiveis, setMostrarDisponiveis] =
     useState(false);
@@ -49,14 +92,31 @@ export default function DashboardPage() {
     useState(false);
 
   // =====================================================
-  // MOEDA
+  // MOEDA BRL
   // =====================================================
 
   function moeda(valor: number) {
-    return Number(valor || 0).toLocaleString("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    });
+    return Number(valor || 0).toLocaleString(
+      "pt-BR",
+      {
+        style: "currency",
+        currency: "BRL",
+      }
+    );
+  }
+
+  // =====================================================
+  // MOEDA USD
+  // =====================================================
+
+  function moedaUsd(valor: number) {
+    return Number(valor || 0).toLocaleString(
+      "pt-BR",
+      {
+        style: "currency",
+        currency: "USD",
+      }
+    );
   }
 
   // =====================================================
@@ -71,6 +131,8 @@ export default function DashboardPage() {
         produtosRes,
         vendasRes,
         contasRes,
+        relatorioRes,
+        estoqueRes,
       ] = await Promise.all([
         fetch("/api/produtos", {
           cache: "no-store",
@@ -81,6 +143,14 @@ export default function DashboardPage() {
         }),
 
         fetch("/api/contas-a-receber", {
+          cache: "no-store",
+        }),
+
+        fetch("/api/relatorio", {
+          cache: "no-store",
+        }),
+
+        fetch("/api/estoque", {
           cache: "no-store",
         }),
       ]);
@@ -94,7 +164,41 @@ export default function DashboardPage() {
       const contasData =
         await contasRes.json();
 
+      const relatorioData =
+        await relatorioRes.json();
+
+      const estoqueData =
+        await estoqueRes.json();
+
+      if (!relatorioRes.ok) {
+        throw new Error(
+          relatorioData?.error ||
+            "Erro ao carregar relatório."
+        );
+      }
+
+      // =================================================
+      // VALORES DO RELATÓRIO
+      // =================================================
+
+      setResumoRelatorio({
+        valorVendas: Number(
+          relatorioData?.valorVendas ?? 0
+        ),
+
+        custoTotal: Number(
+          relatorioData?.custoTotal ?? 0
+        ),
+
+        lucroTotal: Number(
+          relatorioData?.lucroTotal ?? 0
+        ),
+      });
+
+      // =================================================
       // PRODUTOS
+      // =================================================
+
       if (Array.isArray(produtosData)) {
         setProdutos(produtosData);
       } else {
@@ -105,7 +209,26 @@ export default function DashboardPage() {
         );
       }
 
+      // =================================================
+      // ESTOQUE
+      // =================================================
+
+      if (Array.isArray(estoqueData)) {
+        setEstoque(estoqueData);
+      } else {
+        setEstoque(
+          Array.isArray(
+            estoqueData?.produtos
+          )
+            ? estoqueData.produtos
+            : []
+        );
+      }
+
+      // =================================================
       // VENDAS
+      // =================================================
+
       if (Array.isArray(vendasData)) {
         setVendas(vendasData);
       } else {
@@ -116,7 +239,10 @@ export default function DashboardPage() {
         );
       }
 
+      // =================================================
       // CONTAS A RECEBER
+      // =================================================
+
       if (Array.isArray(contasData)) {
         setContas(contasData);
       } else {
@@ -200,28 +326,32 @@ export default function DashboardPage() {
     }, [produtos]);
 
   // =====================================================
-  // CÁLCULOS
+  // VALORES DO RELATÓRIO
   // =====================================================
 
-  const totalVendas = vendas.reduce(
-    (total, venda) =>
-      total +
-      Number(venda.valorVenda || 0),
-    0
+  const totalVendas = Number(
+    resumoRelatorio.valorVendas || 0
   );
 
-  const lucroTotal = vendas.reduce(
-    (total, venda) =>
-      total +
-      Number(venda.lucro || 0),
-    0
+  const custoTotal = Number(
+    resumoRelatorio.custoTotal || 0
   );
 
-  // Quantidade real de aparelhos vendidos
+  const lucroTotal = Number(
+    resumoRelatorio.lucroTotal || 0
+  );
+
+  // =====================================================
+  // QUANTIDADE REAL DE APARELHOS VENDIDOS
+  // =====================================================
+
   const aparelhosVendidos =
     aparelhosVendidosLista.length;
 
-  // Quantidade real disponível pelos aparelhos
+  // =====================================================
+  // QUANTIDADE REAL DISPONÍVEL
+  // =====================================================
+
   const aparelhosEstoque =
     produtosDisponiveis.reduce(
       (total, produto) =>
@@ -230,7 +360,10 @@ export default function DashboardPage() {
       0
     );
 
-  // Valor do estoque pelo preço de venda
+  // =====================================================
+  // VALOR DO ESTOQUE PELO PREÇO DE VENDA
+  // =====================================================
+
   const valorEstoque = produtos.reduce(
     (total, produto) => {
       const disponiveis =
@@ -250,6 +383,46 @@ export default function DashboardPage() {
     },
     0
   );
+
+  // =====================================================
+  // CUSTO REAL DO ESTOQUE EM USD
+  // SOMENTE APARELHOS DISPONÍVEIS
+  // =====================================================
+
+  const custoEstoqueUsd =
+    useMemo(() => {
+      let total = 0;
+      let quantidade = 0;
+
+      estoque.forEach((produto) => {
+        (produto.lotes || []).forEach(
+          (lote) => {
+            const aparelhosDisponiveis =
+              (lote.aparelhos || []).filter(
+                (aparelho) =>
+                  aparelho.vendido === false
+              );
+
+            const precoCompraUsd =
+              Number(
+                lote.precoCompraUsd || 0
+              );
+
+            quantidade +=
+              aparelhosDisponiveis.length;
+
+            total +=
+              aparelhosDisponiveis.length *
+              precoCompraUsd;
+          }
+        );
+      });
+
+      return {
+        total,
+        quantidade,
+      };
+    }, [estoque]);
 
   // =====================================================
   // CONTAS A RECEBER
@@ -308,7 +481,6 @@ export default function DashboardPage() {
         {/* ================================================= */}
 
         <div className="mb-8 rounded-2xl bg-white p-6 shadow-lg">
-
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
               📊 Dashboard
@@ -318,16 +490,17 @@ export default function DashboardPage() {
               Adel's Mundo Cell
             </p>
           </div>
-
         </div>
 
         {/* ================================================= */}
         {/* CARDS PRINCIPAIS */}
         {/* ================================================= */}
 
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-5">
 
+          {/* ================================================= */}
           {/* TOTAL VENDAS */}
+          {/* ================================================= */}
 
           <div className="rounded-2xl bg-white p-6 shadow">
             <p className="text-sm font-medium text-gray-500">
@@ -337,9 +510,33 @@ export default function DashboardPage() {
             <p className="mt-3 text-3xl font-bold text-gray-900">
               {moeda(totalVendas)}
             </p>
+
+            <p className="mt-2 text-xs text-gray-500">
+              Mesmo valor do Relatório
+            </p>
           </div>
 
+          {/* ================================================= */}
+          {/* CUSTO TOTAL */}
+          {/* ================================================= */}
+
+          <div className="rounded-2xl bg-white p-6 shadow">
+            <p className="text-sm font-medium text-gray-500">
+              💵 Custo total
+            </p>
+
+            <p className="mt-3 text-3xl font-bold text-gray-900">
+              {moeda(custoTotal)}
+            </p>
+
+            <p className="mt-2 text-xs text-gray-500">
+              Mesmo valor do Relatório
+            </p>
+          </div>
+
+          {/* ================================================= */}
           {/* LUCRO */}
+          {/* ================================================= */}
 
           <div className="rounded-2xl bg-white p-6 shadow">
             <p className="text-sm font-medium text-gray-500">
@@ -349,9 +546,15 @@ export default function DashboardPage() {
             <p className="mt-3 text-3xl font-bold text-green-600">
               {moeda(lucroTotal)}
             </p>
+
+            <p className="mt-2 text-xs text-gray-500">
+              Mesmo valor do Relatório
+            </p>
           </div>
 
+          {/* ================================================= */}
           {/* ESTOQUE */}
+          {/* ================================================= */}
 
           <button
             type="button"
@@ -377,7 +580,9 @@ export default function DashboardPage() {
             </p>
           </button>
 
+          {/* ================================================= */}
           {/* VENDIDOS */}
+          {/* ================================================= */}
 
           <button
             type="button"
@@ -684,20 +889,52 @@ export default function DashboardPage() {
         {/* VALOR DO ESTOQUE */}
         {/* ================================================= */}
 
-        <div className="mt-6 rounded-2xl bg-white p-8 shadow-lg">
+        <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2">
 
-          <p className="text-sm font-medium text-gray-500">
-            💵 Valor do estoque pelo preço de venda
-          </p>
+          {/* VALOR DE VENDA */}
 
-          <p className="mt-3 text-4xl font-bold text-gray-900">
-            {moeda(valorEstoque)}
-          </p>
+          <div className="rounded-2xl bg-white p-8 shadow-lg">
 
-          <p className="mt-2 text-sm text-gray-500">
-            Considerando somente aparelhos
-            disponíveis.
-          </p>
+            <p className="text-sm font-medium text-gray-500">
+              💵 Valor do estoque pelo preço de venda
+            </p>
+
+            <p className="mt-3 text-4xl font-bold text-gray-900">
+              {moeda(valorEstoque)}
+            </p>
+
+            <p className="mt-2 text-sm text-gray-500">
+              Considerando somente aparelhos
+              disponíveis.
+            </p>
+
+          </div>
+
+          {/* CUSTO EM USD */}
+
+          <div className="rounded-2xl bg-white p-8 shadow-lg">
+
+            <p className="text-sm font-medium text-gray-500">
+              🇺🇸 Custo do estoque
+            </p>
+
+            <p className="mt-3 text-4xl font-bold text-gray-900">
+              {moedaUsd(
+                custoEstoqueUsd.total
+              )}
+            </p>
+
+            <p className="mt-2 text-sm text-gray-500">
+              Custo de compra dos aparelhos
+              disponíveis.
+            </p>
+
+            <p className="mt-1 text-sm font-semibold text-blue-600">
+              {custoEstoqueUsd.quantidade}{" "}
+              aparelho(s) em estoque
+            </p>
+
+          </div>
 
         </div>
 
@@ -773,6 +1010,18 @@ export default function DashboardPage() {
               </strong>
 
             </button>
+
+            {/* CUSTO TOTAL */}
+
+            <div className="flex justify-between border-b p-4">
+              <span>
+                💵 Custo total
+              </span>
+
+              <strong>
+                {moeda(custoTotal)}
+              </strong>
+            </div>
 
             {/* LUCRO */}
 

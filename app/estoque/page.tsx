@@ -39,6 +39,22 @@ export default function EstoquePage() {
   const [produtos, setProdutos] =
     useState<Produto[]>([]);
 
+  // Busca de aparelhos
+  const [buscaProduto, setBuscaProduto] =
+    useState("");
+
+  // Produto aberto para ver os detalhes
+  const [produtoAberto, setProdutoAberto] =
+    useState<number | null>(null);
+
+  // Editar nome do produto
+  const [produtoEditandoNome, setProdutoEditandoNome] =
+    useState<number | null>(null);
+  const [novoNomeProduto, setNovoNomeProduto] =
+    useState("");
+  const [salvandoNomeProduto, setSalvandoNomeProduto] =
+    useState(false);
+
   const [loading, setLoading] =
     useState(true);
 
@@ -739,6 +755,81 @@ export default function EstoquePage() {
   }
 
   // =====================================================
+  // ALTERAR NOME DO PRODUTO
+  // =====================================================
+
+  async function salvarNomeProduto() {
+    if (!isAdmin) {
+      setErro("Apenas o administrador pode alterar o nome do produto.");
+      return;
+    }
+
+    if (produtoEditandoNome === null) {
+      return;
+    }
+
+    const nomeLimpo = novoNomeProduto.trim();
+
+    if (!nomeLimpo) {
+      setErro("Informe o novo nome do aparelho.");
+      return;
+    }
+
+    setSalvandoNomeProduto(true);
+    setMensagem("");
+    setErro("");
+
+    try {
+      const response = await fetch("/api/estoque", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "atualizarNome",
+          produtoId: produtoEditandoNome,
+          nome: nomeLimpo,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error || "Erro ao atualizar nome do produto."
+        );
+      }
+
+      setMensagem(
+        data?.message ||
+          "Nome do aparelho atualizado com sucesso!"
+      );
+
+      setProdutoEditandoNome(null);
+      setNovoNomeProduto("");
+
+      await carregarEstoque();
+    } catch (error: any) {
+      setErro(
+        error?.message ||
+          "Erro ao atualizar nome do produto."
+      );
+    } finally {
+      setSalvandoNomeProduto(false);
+    }
+  }
+
+  function abrirEdicaoNome(produto: Produto) {
+    if (!isAdmin) {
+      return;
+    }
+
+    limparMensagens();
+    setProdutoEditandoNome(produto.id);
+    setNovoNomeProduto(produto.nome);
+  }
+
+  // =====================================================
   // LIMPAR
   // =====================================================
 
@@ -752,16 +843,21 @@ export default function EstoquePage() {
   // =====================================================
 
   const produtosDisponiveis =
-    produtos.filter(
-      (produto) =>
-        (
-          produto.aparelhos ||
-          []
-        ).some(
-          (aparelho) =>
-            !aparelho.vendido
-        )
-    );
+    produtos.filter((produto) => {
+      const temEstoque = (
+        produto.aparelhos || []
+      ).some(
+        (aparelho) => !aparelho.vendido
+      );
+
+      const correspondeBusca = produto.nome
+        .toLowerCase()
+        .includes(
+          buscaProduto.toLowerCase().trim()
+        );
+
+      return temEstoque && correspondeBusca;
+    });
 
   // =====================================================
   // TOTAL ESTOQUE
@@ -1323,8 +1419,7 @@ export default function EstoquePage() {
             background: "#fff",
             padding: "25px",
             borderRadius: "15px",
-            boxShadow:
-              "0 2px 10px rgba(0,0,0,0.06)",
+            boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
           }}
         >
           <h2
@@ -1338,494 +1433,491 @@ export default function EstoquePage() {
               : "Aparelhos disponíveis"}
           </h2>
 
-          {loading ? (
-            <p>
-              Carregando estoque...
-            </p>
-          ) : produtosDisponiveis.length ===
-            0 ? (
-            <p
+          {/* BUSCAR APARELHO */}
+          <div style={{ marginBottom: "20px" }}>
+            <input
+              type="text"
+              value={buscaProduto}
+              onChange={(e) =>
+                setBuscaProduto(e.target.value)
+              }
+              placeholder="🔍 Buscar aparelho..."
               style={{
-                color: "#666",
+                width: "100%",
+                padding: "14px 16px",
+                border: "1px solid #d1d5db",
+                borderRadius: "12px",
+                fontSize: "16px",
+                outline: "none",
+                boxSizing: "border-box",
+                background: "#f9fafb",
               }}
-            >
+            />
+          </div>
+
+          {loading ? (
+            <p>Carregando estoque...</p>
+          ) : produtosDisponiveis.length === 0 ? (
+            <p style={{ color: "#666" }}>
               Nenhum produto cadastrado.
             </p>
           ) : (
             <div
               style={{
                 display: "grid",
-                gap: "15px",
+                gap: "12px",
               }}
             >
-              {produtosDisponiveis.map(
-                (produto) => {
-                  const aparelhosDisponiveis =
-                    (
-                      produto.aparelhos ||
-                      []
-                    ).filter(
-                      (aparelho) =>
-                        !aparelho.vendido
-                    );
+              {produtosDisponiveis.map((produto) => {
+                const aparelhosDisponiveis = (
+                  produto.aparelhos || []
+                ).filter((aparelho) => !aparelho.vendido);
 
-                  const lotes =
-                    produto.lotes || [];
+                const lotes = produto.lotes || [];
+                const aberto = produtoAberto === produto.id;
+                const editandoNome =
+                  produtoEditandoNome === produto.id;
 
-                  return (
-                    <div
-                      key={
-                        produto.id
-                      }
+                return (
+                  <div
+                    key={produto.id}
+                    style={{
+                      border: "1px solid #e5e7eb",
+                      borderRadius: "14px",
+                      background: "#ffffff",
+                      overflow: "hidden",
+                    }}
+                  >
+                    {/*
+                      PARTE DE FORA:
+                      SOMENTE NOME + QUANTIDADE
+                    */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProdutoAberto(
+                          aberto ? null : produto.id
+                        );
+                        if (produtoEditandoNome !== null) {
+                          setProdutoEditandoNome(null);
+                          setNovoNomeProduto("");
+                        }
+                      }}
                       style={{
-                        border:
-                          "1px solid #e5e7eb",
-                        borderRadius:
-                          "14px",
-                        padding:
-                          "20px",
-                        background:
-                          "#ffffff",
+                        width: "100%",
+                        border: "none",
+                        background: "#fff",
+                        cursor: "pointer",
+                        padding: "20px",
+                        textAlign: "left",
                       }}
                     >
-                      {/* PRODUTO */}
-
                       <div
                         style={{
                           display: "flex",
-                          justifyContent:
-                            "space-between",
-                          alignItems:
-                            "center",
+                          alignItems: "center",
+                          justifyContent: "space-between",
                           gap: "15px",
-                          flexWrap:
-                            "wrap",
                         }}
                       >
-                        <div>
-                          <h3
-                            style={{
-                              margin:
-                                "0 0 8px",
-                              fontSize:
-                                "22px",
-                              fontWeight:
-                                800,
-                            }}
-                          >
-                            📱{" "}
-                            {
-                              produto.nome
-                            }
-                          </h3>
-
+                        <div
+                          style={{
+                            minWidth: 0,
+                          }}
+                        >
                           <div
                             style={{
-                              color:
-                                "#555",
+                              fontSize: "22px",
+                              fontWeight: 800,
+                              color: "#111827",
+                              wordBreak: "break-word",
                             }}
                           >
-                            Quantidade disponível:{" "}
-                            <strong>
-                              {
-                                aparelhosDisponiveis.length
-                              }
-                            </strong>
+                            📱 {produto.nome}
                           </div>
 
                           <div
                             style={{
-                              marginTop:
-                                "5px",
-                              color:
-                                "#777",
-                              fontSize:
-                                "13px",
+                              marginTop: "7px",
+                              color: "#555",
+                              fontSize: "15px",
                             }}
                           >
-                            {lotes.length}{" "}
-                            {lotes.length ===
-                            1
-                              ? "compra"
-                              : "compras"}{" "}
-                            registrada(s)
+                            <strong>
+                              {aparelhosDisponiveis.length}
+                            </strong>{" "}
+                            aparelho(s) disponível(is)
                           </div>
                         </div>
 
+                        <div
+                          style={{
+                            fontSize: "25px",
+                            color: "#64748b",
+                            flexShrink: 0,
+                          }}
+                        >
+                          {aberto ? "⌃" : "⌄"}
+                        </div>
+                      </div>
+                    </button>
+
+                    {/*
+                      DETALHES:
+                      SÓ APARECEM QUANDO CLICAR NO TELEFONE
+                    */}
+                    {aberto && (
+                      <div
+                        style={{
+                          borderTop: "1px solid #e5e7eb",
+                          padding: "20px",
+                          background: "#fafafa",
+                        }}
+                      >
+                        {/* ALTERAR NOME */}
+                        {isAdmin && (
+                          <div
+                            style={{
+                              background: "#fff",
+                              border: "1px solid #e5e7eb",
+                              borderRadius: "10px",
+                              padding: "15px",
+                              marginBottom: "18px",
+                            }}
+                          >
+                            {!editandoNome ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  abrirEdicaoNome(produto)
+                                }
+                                style={{
+                                  ...secondaryButton,
+                                  padding: "10px 15px",
+                                }}
+                              >
+                                ✏️ Alterar nome do aparelho
+                              </button>
+                            ) : (
+                              <div>
+                                <label
+                                  style={{
+                                    fontWeight: 700,
+                                    display: "block",
+                                  }}
+                                >
+                                  Novo nome do aparelho
+                                </label>
+
+                                <input
+                                  type="text"
+                                  value={novoNomeProduto}
+                                  onChange={(e) =>
+                                    setNovoNomeProduto(
+                                      e.target.value
+                                    )
+                                  }
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      salvarNomeProduto();
+                                    }
+                                  }}
+                                  autoFocus
+                                  style={{
+                                    ...inputStyle,
+                                    marginTop: "8px",
+                                  }}
+                                />
+
+                                <p
+                                  style={{
+                                    margin: "8px 0 0",
+                                    color: "#666",
+                                    fontSize: "13px",
+                                  }}
+                                >
+                                  Se já existir outro aparelho com este
+                                  nome, os dois serão unidos.
+                                </p>
+
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    gap: "8px",
+                                    marginTop: "10px",
+                                    flexWrap: "wrap",
+                                  }}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={salvarNomeProduto}
+                                    disabled={salvandoNomeProduto}
+                                    style={{
+                                      ...primaryButton,
+                                      opacity: salvandoNomeProduto
+                                        ? 0.6
+                                        : 1,
+                                    }}
+                                  >
+                                    {salvandoNomeProduto
+                                      ? "Salvando..."
+                                      : "💾 Salvar nome"}
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setProdutoEditandoNome(null);
+                                      setNovoNomeProduto("");
+                                    }}
+                                    style={cancelButton}
+                                  >
+                                    Cancelar
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* EXCLUIR PRODUTO */}
                         {isAdmin && (
                           <button
                             type="button"
                             onClick={() => {
                               limparMensagens();
-
-                              setProdutoParaExcluir(
-                                produto
-                              );
-
+                              setProdutoParaExcluir(produto);
                               setSenha("");
                             }}
-                            style={
-                              deleteButton
-                            }
+                            style={{
+                              ...deleteButton,
+                              marginBottom: "18px",
+                            }}
                           >
                             🗑️ Excluir produto
                           </button>
                         )}
-                      </div>
 
-                      {/* TODOS OS IMEIS DISPONÍVEIS */}
-
-                      <div
-                        style={{
-                          marginTop:
-                            "20px",
-                          padding:
-                            "15px",
-                          background:
-                            "#f8fafc",
-                          borderRadius:
-                            "10px",
-                          border:
-                            "1px solid #e5e7eb",
-                        }}
-                      >
+                        {/* IMEIS DISPONÍVEIS - NUNCA MOSTRAR VENDIDOS */}
                         <div
                           style={{
-                            fontWeight:
-                              800,
-                            marginBottom:
-                              "10px",
+                            padding: "15px",
+                            background: "#f8fafc",
+                            borderRadius: "10px",
+                            border: "1px solid #e5e7eb",
                           }}
                         >
-                          📱 IMEIs disponíveis
-                        </div>
-
-                        <div
-                          style={{
-                            display:
-                              "flex",
-                            flexWrap:
-                              "wrap",
-                            gap: "8px",
-                          }}
-                        >
-                          {aparelhosDisponiveis.map(
-                            (aparelho) => (
-                              <span
-                                key={
-                                  aparelho.id
-                                }
-                                style={{
-                                  background:
-                                    "#e2e8f0",
-                                  padding:
-                                    "8px 11px",
-                                  borderRadius:
-                                    "7px",
-                                  fontSize:
-                                    "13px",
-                                  fontWeight:
-                                    600,
-                                  wordBreak:
-                                    "break-all",
-                                }}
-                              >
-                                {
-                                  aparelho.imei
-                                }
-                              </span>
-                            )
-                          )}
-                        </div>
-                      </div>
-
-                      {/* COMPRAS / LOTES */}
-
-                      {lotes.length >
-                        0 && (
-                        <div
-                          style={{
-                            marginTop:
-                              "20px",
-                          }}
-                        >
-                          <h4
-                            style={{
-                              margin:
-                                "0 0 12px",
-                              fontSize:
-                                "17px",
-                            }}
-                          >
-                            📦 Compras por fornecedor
-                          </h4>
-
                           <div
                             style={{
-                              display:
-                                "grid",
-                              gap:
-                                "12px",
+                              fontWeight: 800,
+                              marginBottom: "10px",
                             }}
                           >
-                            {lotes.map(
-                              (
-                                lote,
-                                index
-                              ) => {
+                            📱 IMEIs disponíveis ({
+                              aparelhosDisponiveis.length
+                            })
+                          </div>
+
+                          {aparelhosDisponiveis.length === 0 ? (
+                            <span
+                              style={{
+                                color: "#777",
+                                fontSize: "13px",
+                              }}
+                            >
+                              Nenhum IMEI disponível.
+                            </span>
+                          ) : (
+                            <div
+                              style={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                gap: "8px",
+                              }}
+                            >
+                              {aparelhosDisponiveis.map((aparelho) => (
+                                <span
+                                  key={aparelho.id}
+                                  style={{
+                                    background: "#dcfce7",
+                                    color: "#166534",
+                                    padding: "8px 11px",
+                                    borderRadius: "7px",
+                                    fontSize: "13px",
+                                    fontWeight: 600,
+                                    wordBreak: "break-all",
+                                  }}
+                                >
+                                  {aparelho.imei}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* COMPRAS / LOTES */}
+                        {lotes.length > 0 && (
+                          <div style={{ marginTop: "20px" }}>
+                            <h4
+                              style={{
+                                margin: "0 0 12px",
+                                fontSize: "17px",
+                              }}
+                            >
+                              📦 Compras por fornecedor
+                            </h4>
+
+                            <div
+                              style={{
+                                display: "grid",
+                                gap: "12px",
+                              }}
+                            >
+                              {lotes.map((lote, index) => {
                                 const aparelhosDoLote =
-                                  lote.aparelhos ||
-                                  [];
+                                  lote.aparelhos || [];
 
                                 const aparelhosDisponiveisDoLote =
                                   aparelhosDoLote.filter(
-                                    (
-                                      aparelho
-                                    ) =>
-                                      !aparelho.vendido
+                                    (aparelho) => !aparelho.vendido
                                   );
 
                                 return (
                                   <div
-                                    key={
-                                      lote.id
-                                    }
+                                    key={lote.id}
                                     style={{
-                                      background:
-                                        "#f8fafc",
-                                      padding:
-                                        "17px",
-                                      borderRadius:
-                                        "10px",
-                                      border:
-                                        "1px solid #e2e8f0",
+                                      background: "#f8fafc",
+                                      padding: "17px",
+                                      borderRadius: "10px",
+                                      border: "1px solid #e2e8f0",
                                     }}
                                   >
-                                    {/* CABEÇALHO DO LOTE */}
-
                                     <div
                                       style={{
-                                        display:
-                                          "flex",
-                                        justifyContent:
-                                          "space-between",
-                                        alignItems:
-                                          "center",
-                                        gap:
-                                          "10px",
-                                        flexWrap:
-                                          "wrap",
+                                        display: "flex",
+                                        justifyContent: "space-between",
+                                        alignItems: "center",
+                                        gap: "10px",
+                                        flexWrap: "wrap",
                                       }}
                                     >
-                                      <strong
-                                        style={{
-                                          fontSize:
-                                            "16px",
-                                        }}
-                                      >
-                                        📦 Compra #
-                                        {lotes.length -
-                                          index}
+                                      <strong style={{ fontSize: "16px" }}>
+                                        📦 Compra #{lotes.length - index}
                                       </strong>
 
                                       <span
                                         style={{
-                                          background:
-                                            "#dbeafe",
-                                          color:
-                                            "#1e40af",
-                                          padding:
-                                            "5px 9px",
-                                          borderRadius:
-                                            "20px",
-                                          fontSize:
-                                            "12px",
-                                          fontWeight:
-                                            700,
+                                          background: "#dbeafe",
+                                          color: "#1e40af",
+                                          padding: "5px 9px",
+                                          borderRadius: "20px",
+                                          fontSize: "12px",
+                                          fontWeight: 700,
                                         }}
                                       >
-                                        {
-                                          aparelhosDisponiveisDoLote.length
-                                        }{" "}
+                                        {aparelhosDisponiveisDoLote.length}
+                                        {" "}
                                         disponível(is)
                                       </span>
                                     </div>
 
-                                    {/* FORNECEDOR */}
-
-                                    <div
-                                      style={{
-                                        marginTop:
-                                          "12px",
-                                      }}
-                                    >
-                                      <strong>
-                                        Fornecedor:
-                                      </strong>{" "}
-                                      {
-                                        lote.fornecedor ||
-                                        "-"
-                                      }
+                                    <div style={{ marginTop: "12px" }}>
+                                      <strong>Fornecedor:</strong>{" "}
+                                      {lote.fornecedor || "-"}
                                     </div>
 
-                                    {/* PREÇO */}
-
-                                    <div
-                                      style={{
-                                        marginTop:
-                                          "7px",
-                                      }}
-                                    >
-                                      <strong>
-                                        Preço de compra:
-                                      </strong>{" "}
-                                      {lote.precoCompraUsd !==
-                                      null
-                                        ? `$ ${Number(
-                                            lote.precoCompraUsd
-                                          ).toFixed(
-                                            2
-                                          )}`
-                                        : (
-                                          <span
-                                            style={{
-                                              color:
-                                                "#dc2626",
-                                              fontWeight:
-                                                700,
-                                            }}
-                                          >
-                                            Não informado
-                                          </span>
-                                        )}
+                                    <div style={{ marginTop: "7px" }}>
+                                      <strong>Preço de compra:</strong>{" "}
+                                      {lote.precoCompraUsd !== null ? (
+                                        `$ ${Number(
+                                          lote.precoCompraUsd
+                                        ).toFixed(2)}`
+                                      ) : (
+                                        <span
+                                          style={{
+                                            color: "#dc2626",
+                                            fontWeight: 700,
+                                          }}
+                                        >
+                                          Não informado
+                                        </span>
+                                      )}
                                     </div>
 
-                                    {/* QUANTIDADE ORIGINAL */}
-
-                                    <div
-                                      style={{
-                                        marginTop:
-                                          "7px",
-                                      }}
-                                    >
-                                      <strong>
-                                        Quantidade comprada:
-                                      </strong>{" "}
-                                      {
-                                        lote.quantidade
-                                      }
+                                    <div style={{ marginTop: "7px" }}>
+                                      <strong>Quantidade comprada:</strong>{" "}
+                                      {lote.quantidade}
                                     </div>
 
-                                    {/* DATA */}
-
                                     <div
                                       style={{
-                                        marginTop:
-                                          "7px",
-                                        color:
-                                          "#777",
-                                        fontSize:
-                                          "13px",
+                                        marginTop: "7px",
+                                        color: "#777",
+                                        fontSize: "13px",
                                       }}
                                     >
                                       Data da compra:{" "}
                                       {new Date(
                                         lote.createdAt
-                                      ).toLocaleDateString(
-                                        "pt-BR"
-                                      )}
+                                      ).toLocaleDateString("pt-BR")}
                                     </div>
 
-                                    {/* IMEIS DESTE LOTE */}
-
+                                    {/*
+                                      AQUI TAMBÉM SÓ MOSTRAMOS IMEIs
+                                      QUE AINDA NÃO FORAM VENDIDOS.
+                                    */}
                                     <div
                                       style={{
-                                        marginTop:
-                                          "15px",
-                                        padding:
-                                          "12px",
-                                        background:
-                                          "#fff",
-                                        borderRadius:
-                                          "8px",
-                                        border:
-                                          "1px solid #e5e7eb",
+                                        marginTop: "15px",
+                                        padding: "12px",
+                                        background: "#fff",
+                                        borderRadius: "8px",
+                                        border: "1px solid #e5e7eb",
                                       }}
                                     >
                                       <div
                                         style={{
-                                          fontWeight:
-                                            700,
-                                          marginBottom:
-                                            "9px",
+                                          fontWeight: 700,
+                                          marginBottom: "9px",
                                         }}
                                       >
-                                        IMEIs desta compra:
+                                        IMEIs disponíveis desta compra:
                                       </div>
 
-                                      {aparelhosDoLote.length ===
+                                      {aparelhosDisponiveisDoLote.length ===
                                       0 ? (
                                         <span
                                           style={{
-                                            color:
-                                              "#777",
-                                            fontSize:
-                                              "13px",
+                                            color: "#777",
+                                            fontSize: "13px",
                                           }}
                                         >
-                                          Nenhum IMEI
-                                          encontrado.
+                                          Nenhum IMEI disponível.
                                         </span>
                                       ) : (
                                         <div
                                           style={{
-                                            display:
-                                              "flex",
-                                            flexWrap:
-                                              "wrap",
-                                            gap:
-                                              "7px",
+                                            display: "flex",
+                                            flexWrap: "wrap",
+                                            gap: "7px",
                                           }}
                                         >
-                                          {aparelhosDoLote.map(
-                                            (
-                                              aparelho
-                                            ) => (
+                                          {aparelhosDisponiveisDoLote.map(
+                                            (aparelho) => (
                                               <span
-                                                key={
-                                                  aparelho.id
-                                                }
+                                                key={aparelho.id}
                                                 style={{
-                                                  background:
-                                                    aparelho.vendido
-                                                      ? "#fee2e2"
-                                                      : "#dcfce7",
-                                                  color:
-                                                    aparelho.vendido
-                                                      ? "#991b1b"
-                                                      : "#166534",
-                                                  padding:
-                                                    "7px 9px",
-                                                  borderRadius:
-                                                    "7px",
-                                                  fontSize:
-                                                    "12px",
-                                                  fontWeight:
-                                                    600,
-                                                  textDecoration:
-                                                    aparelho.vendido
-                                                      ? "line-through"
-                                                      : "none",
-                                                  wordBreak:
-                                                    "break-all",
+                                                  background: "#dcfce7",
+                                                  color: "#166534",
+                                                  padding: "7px 9px",
+                                                  borderRadius: "7px",
+                                                  fontSize: "12px",
+                                                  fontWeight: 600,
+                                                  wordBreak: "break-all",
                                                 }}
                                               >
-                                                {
-                                                  aparelho.imei
-                                                }
-
-                                                {aparelho.vendido &&
-                                                  " — VENDIDO"}
+                                                {aparelho.imei}
                                               </span>
                                             )
                                           )}
@@ -1833,53 +1925,39 @@ export default function EstoquePage() {
                                       )}
                                     </div>
 
-                                    {/* PREÇO */}
-
+                                    {/* PREÇO USD */}
                                     {isAdmin && (
                                       <>
-                                        {lotePrecoAberto !==
-                                        lote.id ? (
+                                        {lotePrecoAberto !== lote.id ? (
                                           <button
                                             type="button"
                                             onClick={() =>
-                                              abrirPrecoLote(
-                                                lote
-                                              )
+                                              abrirPrecoLote(lote)
                                             }
                                             style={{
                                               ...secondaryButton,
-                                              marginTop:
-                                                "12px",
-                                              padding:
-                                                "9px 14px",
-                                              fontSize:
-                                                "14px",
+                                              marginTop: "12px",
+                                              padding: "9px 14px",
+                                              fontSize: "14px",
                                             }}
                                           >
-                                            {lote.precoCompraUsd !==
-                                            null
+                                            {lote.precoCompraUsd !== null
                                               ? "✏️ Alterar preço USD"
                                               : "💵 Adicionar preço USD"}
                                           </button>
                                         ) : (
                                           <div
                                             style={{
-                                              marginTop:
-                                                "12px",
-                                              background:
-                                                "#fff",
-                                              border:
-                                                "1px solid #d1d5db",
-                                              padding:
-                                                "12px",
-                                              borderRadius:
-                                                "8px",
+                                              marginTop: "12px",
+                                              background: "#fff",
+                                              border: "1px solid #d1d5db",
+                                              padding: "12px",
+                                              borderRadius: "8px",
                                             }}
                                           >
                                             <label
                                               style={{
-                                                fontWeight:
-                                                  700,
+                                                fontWeight: 700,
                                               }}
                                             >
                                               Preço de compra USD
@@ -1889,63 +1967,40 @@ export default function EstoquePage() {
                                               type="text"
                                               inputMode="decimal"
                                               autoFocus
-                                              value={
-                                                precoLote
+                                              value={precoLote}
+                                              onChange={(e) =>
+                                                setPrecoLote(e.target.value)
                                               }
-                                              onChange={(
-                                                e
-                                              ) =>
-                                                setPrecoLote(
-                                                  e.target
-                                                    .value
-                                                )
-                                              }
-                                              onKeyDown={(
-                                                e
-                                              ) => {
-                                                if (
-                                                  e.key ===
-                                                  "Enter"
-                                                ) {
+                                              onKeyDown={(e) => {
+                                                if (e.key === "Enter") {
                                                   e.preventDefault();
-
                                                   salvarPrecoLote();
                                                 }
                                               }}
                                               placeholder="Ex: 250"
                                               style={{
                                                 ...inputStyle,
-                                                marginTop:
-                                                  "7px",
+                                                marginTop: "7px",
                                               }}
                                             />
 
                                             <div
                                               style={{
-                                                display:
-                                                  "flex",
-                                                gap:
-                                                  "8px",
-                                                marginTop:
-                                                  "10px",
-                                                flexWrap:
-                                                  "wrap",
+                                                display: "flex",
+                                                gap: "8px",
+                                                marginTop: "10px",
+                                                flexWrap: "wrap",
                                               }}
                                             >
                                               <button
                                                 type="button"
-                                                onClick={
-                                                  salvarPrecoLote
-                                                }
-                                                disabled={
-                                                  salvandoPreco
-                                                }
+                                                onClick={salvarPrecoLote}
+                                                disabled={salvandoPreco}
                                                 style={{
                                                   ...primaryButton,
-                                                  opacity:
-                                                    salvandoPreco
-                                                      ? 0.6
-                                                      : 1,
+                                                  opacity: salvandoPreco
+                                                    ? 0.6
+                                                    : 1,
                                                 }}
                                               >
                                                 {salvandoPreco
@@ -1956,17 +2011,10 @@ export default function EstoquePage() {
                                               <button
                                                 type="button"
                                                 onClick={() => {
-                                                  setLotePrecoAberto(
-                                                    null
-                                                  );
-
-                                                  setPrecoLote(
-                                                    ""
-                                                  );
+                                                  setLotePrecoAberto(null);
+                                                  setPrecoLote("");
                                                 }}
-                                                style={
-                                                  cancelButton
-                                                }
+                                                style={cancelButton}
                                               >
                                                 Cancelar
                                               </button>
@@ -1977,15 +2025,15 @@ export default function EstoquePage() {
                                     )}
                                   </div>
                                 );
-                              }
-                            )}
+                              })}
+                            </div>
                           </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                }
-              )}
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </section>

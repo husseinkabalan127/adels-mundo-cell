@@ -171,8 +171,23 @@ export default function VendasPage() {
   const [devolvendoAparelhoId, setDevolvendoAparelhoId] =
     useState<number | null>(null);
 
-  const imeiInputRef =
-    useRef<HTMLInputElement>(null);
+  // Dias ficam fechados por padrão.
+  const [diasAbertos, setDiasAbertos] =
+    useState<Record<string, boolean>>({});
+
+  // Cada venda também fica fechada por padrão.
+  // Ao clicar no nome do cliente, mostramos todos os detalhes da venda.
+  const [vendasAbertas, setVendasAbertas] =
+    useState<Record<number, boolean>>({});
+
+  // Referência separada para cada campo de IMEI.
+  // Assim, ao escanear um IMEI no Produto 2, por exemplo,
+  // o foco continua no Produto 2 e a página não volta para o Produto 1.
+  const imeiInputRefs =
+    useRef<Record<number, HTMLInputElement | null>>({});
+
+  const [imeiInputAtivo, setImeiInputAtivo] =
+    useState(0);
 
   // =====================================================
   // CARREGAR ESTOQUE
@@ -544,7 +559,24 @@ export default function VendasPage() {
   // ADICIONAR IMEI ENCONTRADO
   // =====================================================
 
-  function adicionarImeiEncontrado() {
+  function focarCampoImei(index: number) {
+    setTimeout(() => {
+      const input =
+        imeiInputRefs.current[index];
+
+      if (input) {
+        // Evita que o navegador faça o scroll automático
+        // para outro campo ao devolver o foco.
+        input.focus({
+          preventScroll: true,
+        });
+      }
+    }, 50);
+  }
+
+  function adicionarImeiEncontrado(
+    itemIndexPreferido?: number
+  ) {
     setErro("");
     setMensagem("");
 
@@ -567,13 +599,35 @@ export default function VendasPage() {
       return;
     }
 
+    // Primeiro tentamos usar o Produto onde o usuário
+    // está digitando/scaneando o IMEI.
     let index =
-      itens.findIndex(
-        (item) =>
-          item.produtoId ===
-          aparelhoEncontrado.produtoId
-      );
+      typeof itemIndexPreferido === "number"
+        ? itemIndexPreferido
+        : imeiInputAtivo;
 
+    const itemPreferido =
+      itens[index];
+
+    // Se o campo ativo já tem um modelo diferente,
+    // procuramos o item do mesmo modelo do IMEI.
+    if (
+      !itemPreferido ||
+      (
+        itemPreferido.produtoId !== "" &&
+        itemPreferido.produtoId !==
+          aparelhoEncontrado.produtoId
+      )
+    ) {
+      index =
+        itens.findIndex(
+          (item) =>
+            item.produtoId ===
+            aparelhoEncontrado.produtoId
+        );
+    }
+
+    // Se ainda não encontrou, usa o primeiro item vazio.
     if (index === -1) {
       index =
         itens.findIndex(
@@ -582,7 +636,12 @@ export default function VendasPage() {
         );
     }
 
+    // Se não existe nenhum item disponível,
+    // cria um novo Produto no final.
     if (index === -1) {
+      const novoIndex =
+        itens.length;
+
       setItens((atual) => [
         ...atual,
 
@@ -599,31 +658,48 @@ export default function VendasPage() {
           ],
         },
       ]);
-    } else {
-      adicionarImeiAoItem(
-        index,
-        aparelhoEncontrado.imei
-      );
 
-      if (
-        itens[index]
-          .produtoId === ""
-      ) {
-        atualizarItem(
-          index,
-          {
-            produtoId:
-              aparelhoEncontrado.produtoId,
-          }
-        );
-      }
+      setImeiInputAtivo(novoIndex);
+      setImeiBusca("");
+
+      // Espera o novo Produto aparecer na tela
+      // antes de colocar o foco nele.
+      setTimeout(() => {
+        const input =
+          imeiInputRefs.current[novoIndex];
+
+        input?.focus({
+          preventScroll: true,
+        });
+      }, 100);
+
+      return;
     }
 
+    adicionarImeiAoItem(
+      index,
+      aparelhoEncontrado.imei
+    );
+
+    if (
+      itens[index]
+        .produtoId === ""
+    ) {
+      atualizarItem(
+        index,
+        {
+          produtoId:
+            aparelhoEncontrado.produtoId,
+        }
+      );
+    }
+
+    setImeiInputAtivo(index);
     setImeiBusca("");
 
-    setTimeout(() => {
-      imeiInputRef.current?.focus();
-    }, 50);
+    // Mantém o foco exatamente no Produto
+    // onde o IMEI foi escaneado.
+    focarCampoImei(index);
   }
 
   // =====================================================
@@ -638,7 +714,9 @@ export default function VendasPage() {
     ) {
       e.preventDefault();
 
-      adicionarImeiEncontrado();
+      adicionarImeiEncontrado(
+        imeiInputAtivo
+      );
     }
   }
 
@@ -1075,8 +1153,12 @@ export default function VendasPage() {
 
       await carregarVendas();
 
+      setImeiInputAtivo(0);
+
       setTimeout(() => {
-        imeiInputRef.current?.focus();
+        imeiInputRefs.current[0]?.focus({
+          preventScroll: true,
+        });
       }, 100);
     } catch (e: any) {
       setErro(
@@ -1838,6 +1920,24 @@ export default function VendasPage() {
     );
 
   // =====================================================
+  // ABRIR / FECHAR DIA
+  // =====================================================
+
+  function alternarDia(dia: string) {
+    setDiasAbertos((atual) => ({
+      ...atual,
+      [dia]: !atual[dia],
+    }));
+  }
+
+  function alternarVenda(vendaId: number) {
+    setVendasAbertas((atual) => ({
+      ...atual,
+      [vendaId]: !atual[vendaId],
+    }));
+  }
+
+  // =====================================================
   // TOTAL DO DIA
   // =====================================================
 
@@ -1853,22 +1953,7 @@ export default function VendasPage() {
       0
     );
   }
-
-  // =====================================================
-  // TOTAL GERAL
-  // =====================================================
-
-  const totalVendas =
-    vendas.reduce(
-      (soma, venda) =>
-        soma +
-        totalDaVenda(
-          venda
-        ),
-      0
-    );
-
-  // =====================================================
+// =====================================================
   // TELA
   // =====================================================
 
@@ -2426,10 +2511,12 @@ export default function VendasPage() {
                     </b>
 
                     <input
-                      ref={
-                        index === 0
-                          ? imeiInputRef
-                          : undefined
+                      ref={(element) => {
+                        imeiInputRefs.current[index] =
+                          element;
+                      }}
+                      onFocus={() =>
+                        setImeiInputAtivo(index)
                       }
                       value={
                         imeiBusca
@@ -2599,19 +2686,13 @@ export default function VendasPage() {
                                                 a.produtoId
                                             );
 
+                                          let destino =
+                                            idx;
+
                                           if (
-                                            idx >=
-                                            0
+                                            destino < 0
                                           ) {
-
-                                            adicionarImeiAoItem(
-                                              idx,
-                                              a.imei
-                                            );
-
-                                          } else {
-
-                                            const vazio =
+                                            destino =
                                               itens.findIndex(
                                                 (
                                                   x
@@ -2619,14 +2700,20 @@ export default function VendasPage() {
                                                   x.produtoId ===
                                                   ""
                                               );
+                                          }
+
+                                          if (
+                                            destino >=
+                                            0
+                                          ) {
 
                                             if (
-                                              vazio >=
-                                              0
+                                              itens[destino]
+                                                .produtoId ===
+                                              ""
                                             ) {
-
                                               atualizarItem(
-                                                vazio,
+                                                destino,
                                                 {
                                                   produtoId:
                                                     a.produtoId,
@@ -2638,14 +2725,25 @@ export default function VendasPage() {
                                                   ],
                                                 }
                                               );
-
+                                            } else {
+                                              adicionarImeiAoItem(
+                                                destino,
+                                                a.imei
+                                              );
                                             }
 
-                                          }
+                                            setImeiInputAtivo(
+                                              destino
+                                            );
 
-                                          setImeiBusca(
-                                            ""
-                                          );
+                                            setImeiBusca(
+                                              ""
+                                            );
+
+                                            focarCampoImei(
+                                              destino
+                                            );
+                                          }
 
                                         }}
                                         style={
@@ -2683,8 +2781,10 @@ export default function VendasPage() {
 
                       <button
                         type="button"
-                        onClick={
-                          adicionarImeiEncontrado
+                        onClick={() =>
+                          adicionarImeiEncontrado(
+                            index
+                          )
                         }
                         style={{
                           ...blueButton,
@@ -2942,24 +3042,7 @@ export default function VendasPage() {
 
           </div>
 
-          <div
-            style={{
-              padding:
-                "12px 16px",
-              borderRadius: 10,
-              background:
-                "#eef1f4",
-            }}
-          >
 
-            <strong>
-              Total geral:{" "}
-              {dinheiro(
-                totalVendas
-              )}
-            </strong>
-
-          </div>
 
         </div>
 
@@ -3019,6 +3102,23 @@ export default function VendasPage() {
                   totalDoDia(
                     vendasDoDia
                   );
+
+                const quantidadeAparelhosDia =
+                  vendasDoDia.reduce(
+                    (soma, venda) =>
+                      soma +
+                      (Array.isArray(venda.itens)
+                        ? venda.itens.reduce(
+                            (totalItens: number, item: any) =>
+                              totalItens + (Number(item?.quantidade) || 0),
+                            0
+                          )
+                        : 0),
+                    0
+                  );
+
+                const diaAberto =
+                  !!diasAbertos[dia];
 
                 // =====================================
                 // MODELOS DO DIA
@@ -3154,24 +3254,29 @@ export default function VendasPage() {
                     }}
                   >
 
-                    {/* CABEÇALHO DO DIA */}
+                    {/* CABEÇALHO DO DIA — FECHADO POR PADRÃO */}
 
-                    <div
+                    <button
+                      type="button"
+                      onClick={() =>
+                        alternarDia(dia)
+                      }
+                      aria-expanded={diaAberto}
                       style={{
+                        width: "100%",
+                        border: 0,
+                        borderBottom: diaAberto
+                          ? "1px solid #ddd"
+                          : "0",
+                        background: "#f5f7fa",
                         padding: 18,
-                        background:
-                          "#f5f7fa",
-                        borderBottom:
-                          "1px solid #ddd",
-                        display:
-                          "flex",
-                        justifyContent:
-                          "space-between",
-                        alignItems:
-                          "center",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
                         gap: 15,
-                        flexWrap:
-                          "wrap",
+                        flexWrap: "wrap",
+                        cursor: "pointer",
+                        textAlign: "left",
                       }}
                     >
 
@@ -3179,605 +3284,733 @@ export default function VendasPage() {
 
                         <div
                           style={{
-                            fontSize:
-                              20,
-                            fontWeight:
-                              700,
+                            fontSize: 20,
+                            fontWeight: 700,
+                            color: "#111827",
                           }}
                         >
-                          📅{" "}
-                          {
-                            formatarDataGrupo(
-                              dia
-                            )
-                          }
+                          📅 {formatarDataGrupo(dia)}
                         </div>
 
                         <div
                           style={{
-                            marginTop:
-                              5,
-                            color:
-                              "#666",
-                            fontSize:
-                              14,
+                            marginTop: 6,
+                            color: "#666",
+                            fontSize: 14,
                           }}
                         >
-                          {
-                            vendasDoDia.length
-                          }{" "}
-                          venda
-                          {vendasDoDia.length !==
-                          1
-                            ? "s"
-                            : ""}
+                          {vendasDoDia.length} venda{
+                            vendasDoDia.length !== 1
+                              ? "s"
+                              : ""
+                          }
                         </div>
 
                       </div>
 
                       <div
                         style={{
-                          fontSize:
-                            20,
-                          fontWeight:
-                            700,
-                          color:
-                            "#16823b",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 18,
+                          marginLeft: "auto",
                         }}
                       >
-                        {dinheiro(
-                          totalDia
-                        )}
+
+                        <div
+                          style={{
+                            fontSize: 20,
+                            fontWeight: 700,
+                            color: "#16823b",
+                          }}
+                        >
+                          {dinheiro(totalDia)}
+                        </div>
+
+                        <span
+                          style={{
+                            fontSize: 24,
+                            color: "#555",
+                            lineHeight: 1,
+                            transform: diaAberto
+                              ? "rotate(180deg)"
+                              : "rotate(0deg)",
+                            transition: "transform 0.15s ease",
+                          }}
+                        >
+                          ▼
+                        </span>
+
                       </div>
 
-                    </div>
+                    </button>
 
-                    {/* MODELOS VENDIDOS */}
-
-                    <div
-                      style={{
-                        padding:
-                          18,
-                      }}
-                    >
-
-                      <h3
+                    {diaAberto && (
+                      <div
                         style={{
-                          marginTop:
-                            0,
-                          marginBottom:
-                            14,
-                          fontSize:
-                            17,
+                          padding: 14,
+                          background: "#fff",
                         }}
                       >
-                        📱 Aparelhos vendidos neste dia
-                      </h3>
 
-                      {
-                        Object.values(
-                          modelosDoDia
-                        ).length ===
-                        0 ? (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 10,
+                          }}
+                        >
 
-                          <p
-                            style={{
-                              color:
-                                "#777",
-                            }}
-                          >
-                            Nenhum aparelho encontrado.
-                          </p>
+                          {vendasDoDia.map((venda) => {
+                            const vendaAberta =
+                              !!vendasAbertas[venda.id];
 
-                        ) : (
+                            const itensVenda =
+                              Array.isArray(venda.itens)
+                                ? venda.itens
+                                : [];
 
-                          <div
-                            style={{
-                              display:
-                                "flex",
-                              flexDirection:
-                                "column",
-                              gap:
-                                10,
-                            }}
-                          >
+                            return (
+                              <div
+                                key={venda.id}
+                                style={{
+                                  border: "1px solid #e5e7eb",
+                                  borderRadius: 12,
+                                  overflow: "hidden",
+                                  background: "#fff",
+                                }}
+                              >
 
-                            {Object.values(
-                              modelosDoDia
-                            ).map(
-                              (
-                                modelo
-                              ) => (
-
-                                <div
-                                  key={
-                                    modelo.nome
+                                {/* RESUMO DA VENDA — CLIENTE + VALOR */}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    alternarVenda(venda.id)
                                   }
+                                  aria-expanded={vendaAberta}
                                   style={{
-                                    border:
-                                      "1px solid #eee",
-                                    borderRadius:
-                                      10,
-                                    padding:
-                                      14,
-                                    background:
-                                      "#fafafa",
+                                    width: "100%",
+                                    border: 0,
+                                    background: "#f8fafc",
+                                    padding: "15px 16px",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    gap: 12,
+                                    cursor: "pointer",
+                                    textAlign: "left",
                                   }}
                                 >
 
                                   <div
                                     style={{
-                                      display:
-                                        "flex",
-                                      justifyContent:
-                                        "space-between",
-                                      alignItems:
-                                        "center",
-                                      gap:
-                                        15,
-                                      flexWrap:
-                                        "wrap",
+                                      minWidth: 0,
+                                      flex: 1,
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        fontSize: 16,
+                                        fontWeight: 700,
+                                        color: "#111827",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap",
+                                      }}
+                                    >
+                                      👤 {venda.cliente || "Cliente não informado"}
+                                    </div>
+                                  </div>
+
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 12,
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    <strong
+                                      style={{
+                                        color: "#16823b",
+                                        fontSize: 17,
+                                      }}
+                                    >
+                                      {dinheiro(
+                                        totalDaVenda(venda)
+                                      )}
+                                    </strong>
+
+                                    <span
+                                      style={{
+                                        fontSize: 20,
+                                        color: "#555",
+                                        lineHeight: 1,
+                                        transform: vendaAberta
+                                          ? "rotate(180deg)"
+                                          : "rotate(0deg)",
+                                        transition:
+                                          "transform 0.15s ease",
+                                      }}
+                                    >
+                                      ▼
+                                    </span>
+                                  </div>
+
+                                </button>
+
+                                {/* DETALHES DA VENDA */}
+                                {vendaAberta && (
+                                  <div
+                                    style={{
+                                      padding: 16,
+                                      borderTop:
+                                        "1px solid #e5e7eb",
                                     }}
                                   >
 
-                                    <div>
-
-                                      <strong
-                                        style={{
-                                          fontSize:
-                                            16,
-                                        }}
-                                      >
-                                        📱{" "}
-                                        {
-                                          modelo.nome
-                                        }
-                                      </strong>
+                                    <div
+                                      style={{
+                                        display: "grid",
+                                        gridTemplateColumns:
+                                          "repeat(auto-fit, minmax(180px, 1fr))",
+                                        gap: 10,
+                                        marginBottom: 16,
+                                      }}
+                                    >
 
                                       <div
                                         style={{
-                                          marginTop:
-                                            5,
-                                          color:
-                                            "#555",
+                                          padding: 12,
+                                          borderRadius: 10,
+                                          background: "#f5f7fa",
                                         }}
                                       >
-                                        Quantidade:{" "}
+                                        <div
+                                          style={{
+                                            color: "#666",
+                                            fontSize: 13,
+                                          }}
+                                        >
+                                          Fatura
+                                        </div>
                                         <strong>
-                                          {
-                                            modelo.quantidade
-                                          }
+                                          #
+                                          {String(
+                                            venda.id
+                                          ).padStart(
+                                            6,
+                                            "0"
+                                          )}
+                                        </strong>
+                                      </div>
+
+                                      <div
+                                        style={{
+                                          padding: 12,
+                                          borderRadius: 10,
+                                          background: "#f5f7fa",
+                                        }}
+                                      >
+                                        <div
+                                          style={{
+                                            color: "#666",
+                                            fontSize: 13,
+                                          }}
+                                        >
+                                          Pagamento
+                                        </div>
+                                        <strong>
+                                          {venda.formaPagamento ||
+                                            "-"}
+                                        </strong>
+                                      </div>
+
+                                      <div
+                                        style={{
+                                          padding: 12,
+                                          borderRadius: 10,
+                                          background: "#f5f7fa",
+                                        }}
+                                      >
+                                        <div
+                                          style={{
+                                            color: "#666",
+                                            fontSize: 13,
+                                          }}
+                                        >
+                                          Estado da fatura
+                                        </div>
+                                        <strong>
+                                          {venda.estadoFatura ||
+                                            "-"}
+                                        </strong>
+                                      </div>
+
+                                      <div
+                                        style={{
+                                          padding: 12,
+                                          borderRadius: 10,
+                                          background: "#eefaf1",
+                                        }}
+                                      >
+                                        <div
+                                          style={{
+                                            color: "#666",
+                                            fontSize: 13,
+                                          }}
+                                        >
+                                          Total
+                                        </div>
+                                        <strong
+                                          style={{
+                                            color: "#16823b",
+                                            fontSize: 18,
+                                          }}
+                                        >
+                                          {dinheiro(
+                                            totalDaVenda(
+                                              venda
+                                            )
+                                          )}
                                         </strong>
                                       </div>
 
                                     </div>
 
-                                    <strong>
-                                      {dinheiro(
-                                        modelo.total
-                                      )}
-                                    </strong>
-
-                                  </div>
-
-                                  {modelo.imeis.length >
-                                    0 && (
+                                    <h3
+                                      style={{
+                                        margin:
+                                          "0 0 12px",
+                                        fontSize: 17,
+                                      }}
+                                    >
+                                      📱 Produtos da venda
+                                    </h3>
 
                                     <div
                                       style={{
-                                        marginTop:
-                                          10,
-                                        paddingTop:
-                                          10,
-                                        borderTop:
-                                          "1px solid #eee",
-                                        fontSize:
-                                          12,
-                                        color:
-                                          "#555",
-                                        wordBreak:
-                                          "break-all",
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        gap: 10,
                                       }}
                                     >
 
-                                      <strong>
-                                        IMEI:
-                                      </strong>{" "}
+                                      {itensVenda.length ===
+                                      0 ? (
+                                        <p
+                                          style={{
+                                            color: "#777",
+                                            margin: 0,
+                                          }}
+                                        >
+                                          Nenhum produto encontrado.
+                                        </p>
+                                      ) : (
+                                        itensVenda.map(
+                                          (
+                                            item: any,
+                                            index: number
+                                          ) => {
+                                            const aparelhos =
+                                              Array.isArray(
+                                                item.aparelhos
+                                              )
+                                                ? item.aparelhos
+                                                : [];
 
-                                      {
-                                        modelo.imeis.join(
-                                          ", "
+                                            const subtotal =
+                                              typeof item.total ===
+                                              "number"
+                                                ? item.total
+                                                : (
+                                                    Number(
+                                                      item.quantidade
+                                                    ) || 0
+                                                  ) *
+                                                  (
+                                                    Number(
+                                                      item.valorUnitario ??
+                                                        item.preco ??
+                                                        item.valor ??
+                                                        0
+                                                    ) || 0
+                                                  );
+
+                                            return (
+                                              <div
+                                                key={index}
+                                                style={{
+                                                  border:
+                                                    "1px solid #eee",
+                                                  borderRadius: 10,
+                                                  padding: 14,
+                                                  background:
+                                                    "#fafafa",
+                                                }}
+                                              >
+
+                                                <div
+                                                  style={{
+                                                    display: "flex",
+                                                    justifyContent:
+                                                      "space-between",
+                                                    alignItems:
+                                                      "flex-start",
+                                                    gap: 12,
+                                                    flexWrap:
+                                                      "wrap",
+                                                  }}
+                                                >
+
+                                                  <div>
+                                                    <strong
+                                                      style={{
+                                                        fontSize:
+                                                          16,
+                                                      }}
+                                                    >
+                                                      📱{" "}
+                                                      {nomeProdutoDoItem(
+                                                        item
+                                                      )}
+                                                    </strong>
+
+                                                    <div
+                                                      style={{
+                                                        marginTop:
+                                                          5,
+                                                        color:
+                                                          "#555",
+                                                      }}
+                                                    >
+                                                      Quantidade:{" "}
+                                                      <strong>
+                                                        {
+                                                          item.quantidade
+                                                        }
+                                                      </strong>
+                                                    </div>
+
+                                                    <div
+                                                      style={{
+                                                        marginTop:
+                                                          4,
+                                                        color:
+                                                          "#555",
+                                                      }}
+                                                    >
+                                                      Valor unitário:{" "}
+                                                      <strong>
+                                                        {dinheiro(
+                                                          Number(
+                                                            item.valorUnitario ??
+                                                              item.preco ??
+                                                              item.valor ??
+                                                              0
+                                                          )
+                                                        )}
+                                                      </strong>
+                                                    </div>
+                                                  </div>
+
+                                                  <strong
+                                                    style={{
+                                                      fontSize:
+                                                        17,
+                                                    }}
+                                                  >
+                                                    {dinheiro(
+                                                      subtotal
+                                                    )}
+                                                  </strong>
+
+                                                </div>
+
+                                                {aparelhos.length >
+                                                  0 && (
+                                                  <div
+                                                    style={{
+                                                      marginTop:
+                                                        12,
+                                                      paddingTop:
+                                                        10,
+                                                      borderTop:
+                                                        "1px solid #eee",
+                                                    }}
+                                                  >
+                                                    <strong
+                                                      style={{
+                                                        fontSize:
+                                                          13,
+                                                      }}
+                                                    >
+                                                      IMEI:
+                                                    </strong>
+
+                                                    <div
+                                                      style={{
+                                                        marginTop:
+                                                          5,
+                                                        fontSize:
+                                                          13,
+                                                        color:
+                                                          "#555",
+                                                        wordBreak:
+                                                          "break-all",
+                                                      }}
+                                                    >
+                                                      {aparelhos
+                                                        .map(
+                                                          (
+                                                            aparelho: any
+                                                          ) =>
+                                                            aparelho?.imei
+                                                        )
+                                                        .filter(
+                                                          Boolean
+                                                        )
+                                                        .join(
+                                                          ", "
+                                                        )}
+                                                    </div>
+                                                  </div>
+                                                )}
+
+                                              </div>
+                                            );
+                                          }
                                         )
-                                      }
+                                      )}
 
                                     </div>
 
-                                  )}
-
-                                </div>
-
-                              )
-                            )}
-
-                          </div>
-
-                        )}
-
-                      {/* =====================================
-                          VENDAS INDIVIDUAIS
-                      ===================================== */}
-
-                      <h3
-                        style={{
-                          marginTop:
-                            25,
-                          marginBottom:
-                            14,
-                          fontSize:
-                            17,
-                        }}
-                      >
-                        🧾 Vendas registradas
-                      </h3>
-
-                      <div
-                        style={{
-                          overflowX:
-                            "auto",
-                        }}
-                      >
-
-                        <table
-                          style={{
-                            width:
-                              "100%",
-                            borderCollapse:
-                              "collapse",
-                            minWidth:
-                              900,
-                          }}
-                        >
-
-                          <thead>
-
-                            <tr>
-
-                              <th
-                                style={
-                                  th
-                                }
-                              >
-                                Fatura
-                              </th>
-
-                              <th
-                                style={
-                                  th
-                                }
-                              >
-                                Cliente
-                              </th>
-
-                              <th
-                                style={
-                                  th
-                                }
-                              >
-                                Produtos
-                              </th>
-
-                              <th
-                                style={
-                                  th
-                                }
-                              >
-                                Total
-                              </th>
-
-                              <th
-                                style={
-                                  th
-                                }
-                              >
-                                Pagamento
-                              </th>
-
-                              <th
-                                style={
-                                  th
-                                }
-                              >
-                                Ações
-                              </th>
-
-                            </tr>
-
-                          </thead>
-
-                          <tbody>
-
-                            {vendasDoDia.map(
-                              (
-                                venda
-                              ) => {
-
-                                const itensVenda =
-                                  Array.isArray(
-                                    venda.itens
-                                  )
-                                    ? venda.itens
-                                    : [];
-
-                                return (
-                                  <tr
-                                    key={
-                                      venda.id
-                                    }
-                                  >
-
-                                    <td
-                                      style={
-                                        td
-                                      }
-                                    >
-                                      #
-                                      {String(
-                                        venda.id
-                                      ).padStart(
-                                        6,
-                                        "0"
-                                      )}
-                                    </td>
-
-                                    <td
-                                      style={
-                                        td
-                                      }
-                                    >
-                                      {
-                                        venda.cliente ||
-                                        "-"
-                                      }
-                                    </td>
-
-                                    <td
-                                      style={
-                                        td
-                                      }
-                                    >
-
-                                      {itensVenda.map(
-                                        (
-                                          item: any,
-                                          index: number
-                                        ) => (
-
-                                          <div
-                                            key={
-                                              index
-                                            }
-                                            style={{
-                                              marginBottom:
-                                                5,
-                                            }}
-                                          >
-
-                                            <strong>
-                                              {
-                                                nomeProdutoDoItem(
-                                                  item
-                                                )
-                                              }
-                                            </strong>
-
-                                            {" × "}
-
-                                            {
-                                              item.quantidade
-                                            }
-
-                                          </div>
-
-                                        )
-                                      )}
-
-                                    </td>
-
-                                    <td
+                                    {/* AÇÕES DA VENDA */}
+                                    <div
                                       style={{
-                                        ...td,
-                                        fontWeight:
-                                          700,
+                                        display: "flex",
+                                        gap: 8,
+                                        flexWrap: "wrap",
+                                        marginTop: 18,
                                       }}
                                     >
-                                      {dinheiro(
-                                        totalDaVenda(
-                                          venda
-                                        )
-                                      )}
-                                    </td>
 
-                                    <td
-                                      style={
-                                        td
-                                      }
-                                    >
-                                      {
-                                        venda.formaPagamento ||
-                                        "-"
-                                      }
-                                    </td>
-
-                                    <td
-                                      style={
-                                        td
-                                      }
-                                    >
-
-                                      <div
-                                        style={{
-                                          display:
-                                            "flex",
-                                          gap:
-                                            6,
-                                          flexWrap:
-                                            "wrap",
-                                        }}
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          abrirFatura(
+                                            venda
+                                          )
+                                        }
+                                        style={
+                                          invoiceButton
+                                        }
                                       >
+                                        🧾 Fatura
+                                      </button>
 
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          enviarWhatsApp(
+                                            venda
+                                          )
+                                        }
+                                        style={
+                                          whatsappButton
+                                        }
+                                      >
+                                        📲 WhatsApp
+                                      </button>
+
+                                      {itensVenda.some(
+                                        (item: any) =>
+                                          Array.isArray(
+                                            item.aparelhos
+                                          ) &&
+                                          item.aparelhos.some(
+                                            (a: any) =>
+                                              a?.vendido ===
+                                              true
+                                          )
+                                      ) && (
                                         <button
                                           type="button"
-                                          onClick={() =>
-                                            abrirFatura(
-                                              venda
-                                            )
-                                          }
-                                          style={
-                                            invoiceButton
-                                          }
-                                        >
-                                          🧾 Fatura
-                                        </button>
-
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            enviarWhatsApp(
-                                              venda
-                                            )
-                                          }
-                                          style={
-                                            whatsappButton
-                                          }
-                                        >
-                                          📲 WhatsApp
-                                        </button>
-
-                                        {itensVenda.some((item: any) =>
-                                          Array.isArray(item.aparelhos) &&
-                                          item.aparelhos.some((a: any) => a?.vendido === true)
-                                        ) && (
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              const aparelhosVendidos = itensVenda.flatMap((item: any) =>
-                                                Array.isArray(item.aparelhos)
-                                                  ? item.aparelhos
-                                                      .filter((a: any) => a?.vendido === true)
-                                                      .map((a: any) => ({ ...a, modelo: nomeProdutoDoItem(item) }))
-                                                  : []
+                                          onClick={() => {
+                                            const aparelhosVendidos =
+                                              itensVenda.flatMap(
+                                                (
+                                                  item: any
+                                                ) =>
+                                                  Array.isArray(
+                                                    item.aparelhos
+                                                  )
+                                                    ? item.aparelhos
+                                                        .filter(
+                                                          (
+                                                            a: any
+                                                          ) =>
+                                                            a?.vendido ===
+                                                            true
+                                                        )
+                                                        .map(
+                                                          (
+                                                            a: any
+                                                          ) => ({
+                                                            ...a,
+                                                            modelo:
+                                                              nomeProdutoDoItem(
+                                                                item
+                                                              ),
+                                                          })
+                                                        )
+                                                    : []
                                               );
-                                              const lista = aparelhosVendidos.map((a: any, i: number) =>
-                                                `${i + 1}. ${a.modelo} — IMEI ${a.imei}`
-                                              ).join("\n");
-                                              const escolha = window.prompt(
+
+                                            const lista =
+                                              aparelhosVendidos
+                                                .map(
+                                                  (
+                                                    a: any,
+                                                    i: number
+                                                  ) =>
+                                                    `${i + 1}. ${a.modelo} — IMEI ${a.imei}`
+                                                )
+                                                .join(
+                                                  "\n"
+                                                );
+
+                                            const escolha =
+                                              window.prompt(
                                                 `Qual aparelho deseja devolver?\n\n${lista}\n\nDigite o número do aparelho:`
                                               );
-                                              if (escolha === null) return;
-                                              const indice = Number(escolha) - 1;
-                                              if (!Number.isInteger(indice) || indice < 0 || indice >= aparelhosVendidos.length) {
-                                                alert("Número inválido.");
-                                                return;
-                                              }
-                                              const aparelho = aparelhosVendidos[indice];
-                                              devolverAparelho(venda.id, aparelho.id, aparelho.imei);
-                                            }}
-                                            disabled={devolvendoAparelhoId !== null}
-                                            style={returnButton}
-                                          >
-                                            {devolvendoAparelhoId !== null ? "Devolvendo..." : "↩️ Devolver aparelho"}
-                                          </button>
-                                        )}
 
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            excluirVenda(
-                                              venda.id
+                                            if (
+                                              escolha ===
+                                              null
                                             )
-                                          }
+                                              return;
+
+                                            const indice =
+                                              Number(
+                                                escolha
+                                              ) - 1;
+
+                                            if (
+                                              !Number.isInteger(
+                                                indice
+                                              ) ||
+                                              indice <
+                                                0 ||
+                                              indice >=
+                                                aparelhosVendidos.length
+                                            ) {
+                                              alert(
+                                                "Número inválido."
+                                              );
+                                              return;
+                                            }
+
+                                            const aparelho =
+                                              aparelhosVendidos[
+                                                indice
+                                              ];
+
+                                            devolverAparelho(
+                                              venda.id,
+                                              aparelho.id,
+                                              aparelho.imei
+                                            );
+                                          }}
                                           disabled={
-                                            excluindoVendaId ===
-                                            venda.id
+                                            devolvendoAparelhoId !==
+                                            null
                                           }
                                           style={
-                                            deleteButton
+                                            returnButton
                                           }
                                         >
-                                          {excluindoVendaId ===
-                                          venda.id
-                                            ? "Excluindo..."
-                                            : "Excluir venda"}
+                                          {devolvendoAparelhoId !==
+                                          null
+                                            ? "Devolvendo..."
+                                            : "↩️ Devolver aparelho"}
                                         </button>
+                                      )}
 
-                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          excluirVenda(
+                                            venda.id
+                                          )
+                                        }
+                                        disabled={
+                                          excluindoVendaId ===
+                                          venda.id
+                                        }
+                                        style={
+                                          deleteButton
+                                        }
+                                      >
+                                        {excluindoVendaId ===
+                                        venda.id
+                                          ? "Excluindo..."
+                                          : "Excluir venda"}
+                                      </button>
 
-                                    </td>
+                                    </div>
 
-                                  </tr>
-                                );
-                              }
-                            )}
+                                  </div>
+                                )}
 
-                          </tbody>
+                              </div>
+                            );
+                          })}
 
-                        </table>
+                        </div>
 
                       </div>
+                    )}
 
-                    </div>
-
-                    {/* TOTAL DO DIA */}
-
-                    <div
-                      style={{
-                        padding:
-                          18,
-                        borderTop:
-                          "1px solid #ddd",
-                        background:
-                          "#fafafa",
-                        display:
-                          "flex",
-                        justifyContent:
-                          "flex-end",
-                      }}
-                    >
-
+                    {diaAberto && (
                       <div
                         style={{
-                          fontSize:
-                            18,
+                          padding: 18,
+                          borderTop: "1px solid #ddd",
+                          background: "#fafafa",
+                          display: "flex",
+                          justifyContent: "flex-end",
                         }}
                       >
 
-                        <span
+                        <div
                           style={{
-                            color:
-                              "#555",
-                            marginRight:
-                              10,
+                            fontSize: 18,
                           }}
                         >
-                          Total do dia:
-                        </span>
 
-                        <strong
-                          style={{
-                            color:
-                              "#16823b",
-                            fontSize:
-                              22,
-                          }}
-                        >
-                          {dinheiro(
-                            totalDia
-                          )}
-                        </strong>
+                          <span
+                            style={{
+                              color: "#555",
+                              marginRight: 10,
+                            }}
+                          >
+                            Total do dia:
+                          </span>
+
+                          <strong
+                            style={{
+                              color: "#16823b",
+                              fontSize: 22,
+                            }}
+                          >
+                            {dinheiro(totalDia)}
+                          </strong>
+
+                        </div>
 
                       </div>
-
-                    </div>
+                    )}
 
                   </div>
                 );

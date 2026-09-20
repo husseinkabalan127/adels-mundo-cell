@@ -95,7 +95,7 @@ model VendaItem {
   produtoId      Int
   aparelhos      Aparelho[]
   produto        Produto    @relation(fields: [produtoId], references: [id])
-  venda          Venda      @relation(fields: [vendaId], references: [id])
+  venda           Venda      @relation(fields: [vendaId], references: [id])
 }
 
 model Pagamento {
@@ -106,7 +106,7 @@ model Pagamento {
   observacao String?
   createdAt  DateTime @default(now())
   vendaId    Int
-  venda      Venda    @relation(fields: [vendaId], references: [id])
+  venda      Venda   @relation(fields: [vendaId], references: [id])
 }
 
 model Garantia {
@@ -142,4 +142,12 @@ model Assistencia {
 enum Role {
   ADMIN
   FUNCIONARIO
+}
+
+model DiaVenda {
+  id        Int      @id @default(autoincrement())
+  data      DateTime @unique
+  fechado   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

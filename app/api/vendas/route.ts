@@ -15,7 +15,59 @@ type ItemPreparado = {
 };
 
 // =====================================================
-// GET — JUNTAR TODAS AS VENDAS
+// HELPERS — DIA DE VENDAS
+// =====================================================
+
+function validarChaveData(valor: unknown): string {
+  const texto = String(valor ?? "").trim();
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(texto)) {
+    throw new Error("Data inválida. Use o formato AAAA-MM-DD.");
+  }
+
+  const [ano, mes, dia] = texto.split("-").map(Number);
+  const data = new Date(
+    Date.UTC(ano, mes - 1, dia, 12, 0, 0, 0)
+  );
+
+  if (
+    data.getUTCFullYear() !== ano ||
+    data.getUTCMonth() !== mes - 1 ||
+    data.getUTCDate() !== dia
+  ) {
+    throw new Error("Data inválida.");
+  }
+
+  return texto;
+}
+
+function dataDoDia(chave: string): Date {
+  const [ano, mes, dia] = chave.split("-").map(Number);
+
+  return new Date(
+    Date.UTC(ano, mes - 1, dia, 12, 0, 0, 0)
+  );
+}
+
+function chaveDaData(data: Date): string {
+  return data.toISOString().slice(0, 10);
+}
+
+async function verificarDiaFechado(
+  tx: Prisma.TransactionClient,
+  chave: string
+) {
+  const dia = await tx.diaVenda.findUnique({
+    where: {
+      data: dataDoDia(chave),
+    },
+  });
+
+  return dia;
+}
+
+// =====================================================
+// GET — VENDAS + STATUS DOS DIAS
 // =====================================================
 
 export async function GET() {
@@ -24,78 +76,63 @@ export async function GET() {
 
     if (!usuario) {
       return NextResponse.json(
-        {
-          error: "Não autorizado.",
-        },
-        {
-          status: 401,
-        }
+        { error: "Não autorizado." },
+        { status: 401 }
       );
     }
 
-    const vendas = await prisma.venda.findMany({
-      orderBy: {
-        dataVenda: "desc",
-      },
+    const [vendas, dias] = await Promise.all([
+      prisma.venda.findMany({
+        orderBy: {
+          dataVenda: "desc",
+        },
 
-      include: {
-        itens: {
-          include: {
-            produto: true,
-            aparelhos: {
-              include: {
-                lote: true,
+        include: {
+          itens: {
+            include: {
+              produto: true,
+              aparelhos: {
+                include: {
+                  lote: true,
+                },
               },
             },
           },
-        },
 
-        pagamentos: {
-          orderBy: {
-            createdAt: "asc",
+          pagamentos: {
+            orderBy: {
+              createdAt: "asc",
+            },
           },
         },
-      },
-    });
+      }),
+
+      prisma.diaVenda.findMany({
+        orderBy: {
+          data: "desc",
+        },
+      }),
+    ]);
 
     const vendasPreparadas = vendas.map(
       (venda: (typeof vendas)[number]) => {
-        // =================================================
-        // VALOR TOTAL DA VENDA
-        // =================================================
-
         const valorVenda = venda.itens.reduce(
-          (total, item) => {
-            return total + Number(item.total || 0);
-          },
+          (total, item) =>
+            total + Number(item.total || 0),
           0
         );
-
-        // =================================================
-        // QUANTIDADE
-        // =================================================
 
         const quantidade = venda.itens.reduce(
-          (total, item) => {
-            return total + Number(item.quantidade || 0);
-          },
+          (total, item) =>
+            total + Number(item.quantidade || 0),
           0
         );
-
-        // =================================================
-        // CUSTO TOTAL USD
-        // =================================================
 
         const custoTotalUsd = venda.itens.reduce(
-          (total, item) => {
-            return total + Number(item.custoTotal || 0);
-          },
+          (total, item) =>
+            total + Number(item.custoTotal || 0),
           0
         );
-
-        // =================================================
-        // TAXA
-        // =================================================
 
         const taxa =
           venda.taxa !== null &&
@@ -103,18 +140,10 @@ export async function GET() {
             ? Number(venda.taxa)
             : null;
 
-        // =================================================
-        // CUSTO EM REAIS
-        // =================================================
-
         const custoTotalReais =
           taxa !== null && Number.isFinite(taxa)
             ? custoTotalUsd * taxa
             : 0;
-
-        // =================================================
-        // LUCRO
-        // =================================================
 
         const lucro =
           taxa !== null && Number.isFinite(taxa)
@@ -123,7 +152,6 @@ export async function GET() {
 
         return {
           ...venda,
-
           valorVenda,
           quantidade,
           custoTotalUsd,
@@ -133,7 +161,16 @@ export async function GET() {
       }
     );
 
-    return NextResponse.json(vendasPreparadas);
+    return NextResponse.json({
+      vendas: vendasPreparadas,
+      dias: dias.map((dia) => ({
+        id: dia.id,
+        data: chaveDaData(dia.data),
+        fechado: dia.fechado,
+        createdAt: dia.createdAt,
+        updatedAt: dia.updatedAt,
+      })),
+    });
   } catch (error) {
     console.error("ERRO AO BUSCAR VENDAS:", error);
 
@@ -144,9 +181,7 @@ export async function GET() {
             ? error.message
             : "Erro ao buscar vendas.",
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }
@@ -161,26 +196,14 @@ export async function POST(req: Request) {
 
     if (!usuario) {
       return NextResponse.json(
-        {
-          error: "Não autorizado.",
-        },
-        {
-          status: 401,
-        }
+        { error: "Não autorizado." },
+        { status: 401 }
       );
     }
 
     const body = await req.json();
 
-    // =================================================
-    // CLIENTE
-    // =================================================
-
     const cliente = String(body.cliente || "").trim();
-
-    // =================================================
-    // DATA DA VENDA
-    // =================================================
 
     let dataVenda = new Date();
 
@@ -189,16 +212,13 @@ export async function POST(req: Request) {
 
       if (!/^\d{4}-\d{2}-\d{2}$/.test(dataTexto)) {
         return NextResponse.json(
-          {
-            error: "Data da venda inválida.",
-          },
-          {
-            status: 400,
-          }
+          { error: "Data da venda inválida." },
+          { status: 400 }
         );
       }
 
-      const [ano, mes, dia] = dataTexto.split("-").map(Number);
+      const [ano, mes, dia] =
+        dataTexto.split("-").map(Number);
 
       dataVenda = new Date(
         ano,
@@ -216,19 +236,16 @@ export async function POST(req: Request) {
         dataVenda.getDate() !== dia
       ) {
         return NextResponse.json(
-          {
-            error: "Data da venda inválida.",
-          },
-          {
-            status: 400,
-          }
+          { error: "Data da venda inválida." },
+          { status: 400 }
         );
       }
     }
 
-    // =================================================
-    // TAXA
-    // =================================================
+    const chaveDia = validarChaveData(
+      body.dataVenda ||
+        chaveDaData(dataVenda)
+    );
 
     const taxa =
       body.taxa === null ||
@@ -239,19 +256,11 @@ export async function POST(req: Request) {
             String(body.taxa).replace(",", ".")
           );
 
-    // =================================================
-    // ESTADO DA FATURA
-    // =================================================
-
     const estadoFatura = String(
       body.estadoFatura ??
         body.estadoDaFatura ??
         "Em aberto"
     ).trim();
-
-    // =================================================
-    // FORMA DE PAGAMENTO
-    // =================================================
 
     const formaPagamento = String(
       body.formaPagamento ??
@@ -259,29 +268,17 @@ export async function POST(req: Request) {
         "Não informado"
     ).trim();
 
-    // =================================================
-    // ITENS
-    // =================================================
-
     const itens = Array.isArray(body.itens)
       ? body.itens
       : [];
-
-    // =================================================
-    // VALIDAÇÕES
-    // =================================================
 
     if (
       taxa !== null &&
       (!Number.isFinite(taxa) || taxa < 0)
     ) {
       return NextResponse.json(
-        {
-          error: "Taxa inválida.",
-        },
-        {
-          status: 400,
-        }
+        { error: "Taxa inválida." },
+        { status: 400 }
       );
     }
 
@@ -291,15 +288,9 @@ export async function POST(req: Request) {
           error:
             "Adicione pelo menos um produto à venda.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
-
-    // =================================================
-    // PREPARAR ITENS
-    // =================================================
 
     let itensPreparados: ItemPreparado[];
 
@@ -330,16 +321,11 @@ export async function POST(req: Request) {
             itemObj.imeis
           )
             ? itemObj.imeis
-                .map(
-                  (imei: unknown) =>
-                    String(imei).trim()
+                .map((imei: unknown) =>
+                  String(imei).trim()
                 )
                 .filter(Boolean)
             : [];
-
-          // =================================================
-          // VALIDAR PRODUTO
-          // =================================================
 
           if (
             !Number.isInteger(produtoId) ||
@@ -350,10 +336,6 @@ export async function POST(req: Request) {
             );
           }
 
-          // =================================================
-          // VALIDAR QUANTIDADE
-          // =================================================
-
           if (
             !Number.isInteger(quantidade) ||
             quantidade <= 0
@@ -363,10 +345,6 @@ export async function POST(req: Request) {
             );
           }
 
-          // =================================================
-          // VALIDAR PREÇO
-          // =================================================
-
           if (
             !Number.isFinite(valorUnitario) ||
             valorUnitario < 0
@@ -375,10 +353,6 @@ export async function POST(req: Request) {
               `Preço de venda inválido no item ${index + 1}.`
             );
           }
-
-          // =================================================
-          // VALIDAR IMEIS
-          // =================================================
 
           if (imeis.length !== quantidade) {
             throw new Error(
@@ -412,15 +386,9 @@ export async function POST(req: Request) {
               ? error.message
               : "Dados da venda inválidos.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
-
-    // =================================================
-    // NÃO PERMITIR MESMO IMEI EM DOIS ITENS
-    // =================================================
 
     const todosImeis =
       itensPreparados.flatMap(
@@ -437,49 +405,55 @@ export async function POST(req: Request) {
           error:
             "O mesmo IMEI não pode aparecer duas vezes na mesma venda.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
-
-    // =================================================
-    // TRANSACTION
-    // =================================================
 
     const resultado =
       await prisma.$transaction(
         async (
           tx: Prisma.TransactionClient
         ) => {
-          // =================================================
+          // ===============================================
+          // GARANTIR QUE O DIA EXISTE E ESTÁ ABERTO
+          // ===============================================
+
+          const diaVenda =
+            await tx.diaVenda.upsert({
+              where: {
+                data: dataDoDia(chaveDia),
+              },
+              update: {},
+              create: {
+                data: dataDoDia(chaveDia),
+                fechado: false,
+              },
+            });
+
+          if (diaVenda.fechado) {
+            throw new Error(
+              `O dia ${chaveDia} está fechado. Reabra o dia antes de registrar uma nova venda.`
+            );
+          }
+
+          // ===============================================
           // CRIAR VENDA
-          // =================================================
+          // ===============================================
 
           const venda =
             await tx.venda.create({
               data: {
                 cliente,
-
                 taxa,
-
                 taxaFechada: false,
-
                 dataVenda,
-
                 formaPagamento,
-
                 estadoFatura,
-
                 desconto: 0,
               },
             });
 
           let totalVenda = 0;
-
-          // =================================================
-          // PROCESSAR ITENS
-          // =================================================
 
           for (
             const item of itensPreparados
@@ -503,19 +477,11 @@ export async function POST(req: Request) {
                 },
               });
 
-            // =================================================
-            // PRODUTO NÃO ENCONTRADO
-            // =================================================
-
             if (!produto) {
               throw new Error(
                 "Produto não encontrado."
               );
             }
-
-            // =================================================
-            // ESTOQUE
-            // =================================================
 
             if (
               produto.quantidade <
@@ -525,10 +491,6 @@ export async function POST(req: Request) {
                 `Estoque insuficiente para ${produto.nome}. Disponível: ${produto.quantidade}.`
               );
             }
-
-            // =================================================
-            // BUSCAR APARELHOS PELOS IMEIS
-            // =================================================
 
             const aparelhos =
               await tx.aparelho.findMany({
@@ -557,10 +519,6 @@ export async function POST(req: Request) {
               );
             }
 
-            // =================================================
-            // CALCULAR CUSTO
-            // =================================================
-
             let custoTotal = 0;
 
             for (
@@ -575,15 +533,10 @@ export async function POST(req: Request) {
                   undefined
               ) {
                 custoTotal += Number(
-                  aparelho.lote
-                    .precoCompraUsd
+                  aparelho.lote.precoCompraUsd
                 );
               }
             }
-
-            // =================================================
-            // TOTAL DO ITEM
-            // =================================================
 
             const total =
               item.quantidade *
@@ -591,65 +544,43 @@ export async function POST(req: Request) {
 
             totalVenda += total;
 
-            // =================================================
-            // CRIAR VENDA ITEM
-            // =================================================
-
             const vendaItem =
               await tx.vendaItem.create({
                 data: {
                   quantidade:
                     item.quantidade,
-
                   valorUnitario:
                     item.valorUnitario,
-
                   total,
-
                   precoCompraUsd:
                     item.quantidade > 0
                       ? custoTotal /
                         item.quantidade
                       : null,
-
                   custoTotal,
-
                   vendaId:
                     venda.id,
-
                   produtoId:
                     item.produtoId,
                 },
               });
 
-            // =================================================
-            // MARCAR APARELHOS COMO VENDIDOS
-            // =================================================
-
             await tx.aparelho.updateMany({
               where: {
                 id: {
                   in: aparelhos.map(
-                    (
-                      aparelho: {
-                        id: number;
-                      }
-                    ) => aparelho.id
+                    (aparelho) =>
+                      aparelho.id
                   ),
                 },
               },
 
               data: {
                 vendido: true,
-
                 vendaItemId:
                   vendaItem.id,
               },
             });
-
-            // =================================================
-            // DIMINUIR ESTOQUE
-            // =================================================
 
             await tx.produto.update({
               where: {
@@ -664,10 +595,6 @@ export async function POST(req: Request) {
               },
             });
           }
-
-          // =================================================
-          // PAGAMENTO AUTOMÁTICO
-          // =================================================
 
           const estadoNormalizado =
             estadoFatura
@@ -685,14 +612,10 @@ export async function POST(req: Request) {
             await tx.pagamento.create({
               data: {
                 valor: totalVenda,
-
                 desconto: 0,
-
                 forma: formaPagamento,
-
                 observacao:
                   "Pagamento registrado automaticamente na venda.",
-
                 vendaId: venda.id,
               },
             });
@@ -704,16 +627,11 @@ export async function POST(req: Request) {
 
               data: {
                 estadoFatura: "Quitado",
-
                 formaPagamento:
                   formaPagamento,
               },
             });
           }
-
-          // =================================================
-          // VENDA COMPLETA
-          // =================================================
 
           const vendaCompleta =
             await tx.venda.findUnique({
@@ -739,28 +657,19 @@ export async function POST(req: Request) {
 
           return {
             venda: vendaCompleta,
-
             totalVenda,
           };
         }
       );
 
-    // =================================================
-    // RESPOSTA
-    // =================================================
-
     return NextResponse.json(
       {
         success: true,
-
         message:
           "Venda registrada com sucesso!",
-
         ...resultado,
       },
-      {
-        status: 201,
-      }
+      { status: 201 }
     );
   } catch (error) {
     console.error(
@@ -775,36 +684,102 @@ export async function POST(req: Request) {
             ? error.message
             : "Erro ao registrar venda.",
       },
-      {
-        status: 400,
-      }
+      { status: 400 }
     );
   }
 }
 
 // =====================================================
-// PATCH — DEVOLVER UM APARELHO
-// SOMENTE ADMIN
+// PATCH — FECHAR/REABRIR DIA OU DEVOLVER APARELHO
+// SOMENTE ADMIN PARA FECHAR/REABRIR E DEVOLVER
 // =====================================================
 
 export async function PATCH(req: Request) {
   try {
     const usuario = await obterSessao();
 
-    // =================================================
-    // AUTORIZAÇÃO
-    // =================================================
-
     if (!usuario) {
       return NextResponse.json(
-        {
-          error: "Não autorizado.",
-        },
-        {
-          status: 401,
-        }
+        { error: "Não autorizado." },
+        { status: 401 }
       );
     }
+
+    const body = await req.json();
+    const action = String(body.action || "").trim();
+
+    // =================================================
+    // FECHAR / REABRIR DIA
+    // =================================================
+
+    if (
+      action === "fecharDia" ||
+      action === "reabrirDia"
+    ) {
+      if (usuario.role !== "ADMIN") {
+        return NextResponse.json(
+          {
+            error:
+              "Somente o administrador pode fechar ou reabrir um dia.",
+          },
+          { status: 403 }
+        );
+      }
+
+      let chaveDia: string;
+
+      try {
+        chaveDia =
+          validarChaveData(body.data);
+      } catch (error) {
+        return NextResponse.json(
+          {
+            error:
+              error instanceof Error
+                ? error.message
+                : "Data inválida.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const fechado =
+        action === "fecharDia";
+
+      const dia =
+        await prisma.diaVenda.upsert({
+          where: {
+            data: dataDoDia(chaveDia),
+          },
+
+          update: {
+            fechado,
+          },
+
+          create: {
+            data: dataDoDia(chaveDia),
+            fechado,
+          },
+        });
+
+      return NextResponse.json({
+        success: true,
+        message: fechado
+          ? `Dia ${chaveDia} fechado com sucesso.`
+          : `Dia ${chaveDia} reaberto com sucesso.`,
+        dia: {
+          id: dia.id,
+          data: chaveDaData(dia.data),
+          fechado: dia.fechado,
+          createdAt: dia.createdAt,
+          updatedAt: dia.updatedAt,
+        },
+      });
+    }
+
+    // =================================================
+    // DEVOLVER APARELHO
+    // =================================================
 
     if (usuario.role !== "ADMIN") {
       return NextResponse.json(
@@ -812,17 +787,9 @@ export async function PATCH(req: Request) {
           error:
             "Somente o administrador pode devolver aparelhos.",
         },
-        {
-          status: 403,
-        }
+        { status: 403 }
       );
     }
-
-    const body = await req.json();
-
-    // =================================================
-    // IDS
-    // =================================================
 
     const vendaId = Number(
       body.vendaId ?? body.id
@@ -841,28 +808,15 @@ export async function PATCH(req: Request) {
         ? String(body.imei).trim()
         : "";
 
-    // =================================================
-    // VALIDAR VENDA
-    // =================================================
-
     if (
       !Number.isInteger(vendaId) ||
       vendaId <= 0
     ) {
       return NextResponse.json(
-        {
-          error:
-            "ID da venda inválido.",
-        },
-        {
-          status: 400,
-        }
+        { error: "ID da venda inválido." },
+        { status: 400 }
       );
     }
-
-    // =================================================
-    // VALIDAR APARELHO
-    // =================================================
 
     if (
       aparelhoId !== null &&
@@ -870,13 +824,8 @@ export async function PATCH(req: Request) {
         aparelhoId <= 0)
     ) {
       return NextResponse.json(
-        {
-          error:
-            "ID do aparelho inválido.",
-        },
-        {
-          status: 400,
-        }
+        { error: "ID do aparelho inválido." },
+        { status: 400 }
       );
     }
 
@@ -886,25 +835,15 @@ export async function PATCH(req: Request) {
           error:
             "Informe o aparelho ou o IMEI que será devolvido.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
-
-    // =================================================
-    // TRANSACTION
-    // =================================================
 
     const resultado =
       await prisma.$transaction(
         async (
           tx: Prisma.TransactionClient
         ) => {
-          // =================================================
-          // BUSCAR VENDA
-          // =================================================
-
           const venda =
             await tx.venda.findUnique({
               where: {
@@ -938,9 +877,20 @@ export async function PATCH(req: Request) {
             );
           }
 
-          // =================================================
-          // ENCONTRAR APARELHO
-          // =================================================
+          const chaveDia =
+            chaveDaData(venda.dataVenda);
+
+          const diaVenda =
+            await verificarDiaFechado(
+              tx,
+              chaveDia
+            );
+
+          if (diaVenda?.fechado) {
+            throw new Error(
+              `O dia ${chaveDia} está fechado. Reabra o dia antes de alterar esta venda.`
+            );
+          }
 
           let aparelhoEncontrado:
             | (typeof venda.itens[number]["aparelhos"][number])
@@ -973,17 +923,11 @@ export async function PATCH(req: Request) {
             if (aparelho) {
               aparelhoEncontrado =
                 aparelho;
-
               itemEncontrado =
                 item;
-
               break;
             }
           }
-
-          // =================================================
-          // APARELHO NÃO ENCONTRADO
-          // =================================================
 
           if (
             !aparelhoEncontrado ||
@@ -994,10 +938,6 @@ export async function PATCH(req: Request) {
             );
           }
 
-          // =================================================
-          // CONFIRMAR QUE ESTÁ VENDIDO
-          // =================================================
-
           if (
             aparelhoEncontrado.vendido !==
             true
@@ -1006,10 +946,6 @@ export async function PATCH(req: Request) {
               "Este aparelho já foi devolvido."
             );
           }
-
-          // =================================================
-          // CUSTO DO APARELHO
-          // =================================================
 
           let custoAparelho = 0;
 
@@ -1023,25 +959,16 @@ export async function PATCH(req: Request) {
           ) {
             custoAparelho =
               Number(
-                aparelhoEncontrado
-                  .lote
+                aparelhoEncontrado.lote
                   .precoCompraUsd
               );
           }
-
-          // =================================================
-          // VALOR UNITÁRIO
-          // =================================================
 
           const valorUnitario =
             Number(
               itemEncontrado
                 .valorUnitario || 0
             );
-
-          // =================================================
-          // DEVOLVER APARELHO
-          // =================================================
 
           await tx.aparelho.update({
             where: {
@@ -1051,14 +978,9 @@ export async function PATCH(req: Request) {
 
             data: {
               vendido: false,
-
               vendaItemId: null,
             },
           });
-
-          // =================================================
-          // DEVOLVER PARA ESTOQUE
-          // =================================================
 
           await tx.produto.update({
             where: {
@@ -1072,10 +994,6 @@ export async function PATCH(req: Request) {
               },
             },
           });
-
-          // =================================================
-          // ATUALIZAR ITEM DA VENDA
-          // =================================================
 
           const novaQuantidade =
             Number(
@@ -1125,21 +1043,14 @@ export async function PATCH(req: Request) {
               data: {
                 quantidade:
                   novaQuantidade,
-
                 total: novoTotal,
-
                 custoTotal:
                   novoCustoTotal,
-
                 precoCompraUsd:
                   novoPrecoCompra,
               },
             });
           }
-
-          // =================================================
-          // NOVO TOTAL DA VENDA
-          // =================================================
 
           const itensAtualizados =
             await tx.vendaItem.findMany({
@@ -1150,37 +1061,13 @@ export async function PATCH(req: Request) {
 
           const novoTotalVenda =
             itensAtualizados.reduce(
-              (total, item) => {
-                return (
-                  total +
-                  Number(
-                    item.total || 0
-                  )
-                );
-              },
+              (total, item) =>
+                total +
+                Number(
+                  item.total || 0
+                ),
               0
             );
-
-          // =================================================
-          // NOVO CUSTO TOTAL USD
-          // =================================================
-
-          const novoCustoTotalUsd =
-            itensAtualizados.reduce(
-              (total, item) => {
-                return (
-                  total +
-                  Number(
-                    item.custoTotal || 0
-                  )
-                );
-              },
-              0
-            );
-
-          // =================================================
-          // PAGAMENTO AUTOMÁTICO
-          // =================================================
 
           const pagamentoAutomatico =
             venda.pagamentos.find(
@@ -1217,10 +1104,6 @@ export async function PATCH(req: Request) {
             }
           }
 
-          // =================================================
-          // NOVO ESTADO DA FATURA
-          // =================================================
-
           let novoEstadoFatura =
             venda.estadoFatura;
 
@@ -1236,10 +1119,6 @@ export async function PATCH(req: Request) {
             novoEstadoFatura =
               "Quitado";
           }
-
-          // =================================================
-          // ATUALIZAR VENDA
-          // =================================================
 
           const vendaAtualizada =
             await tx.venda.update({
@@ -1268,10 +1147,6 @@ export async function PATCH(req: Request) {
               },
             });
 
-          // =================================================
-          // RESULTADO
-          // =================================================
-
           return {
             venda:
               vendaAtualizada,
@@ -1289,18 +1164,14 @@ export async function PATCH(req: Request) {
             },
 
             novoTotalVenda,
-
-            novoCustoTotalUsd,
           };
         }
       );
 
     return NextResponse.json({
       success: true,
-
       message:
         "Aparelho devolvido com sucesso e retornado ao estoque.",
-
       ...resultado,
     });
   } catch (error) {
@@ -1316,9 +1187,7 @@ export async function PATCH(req: Request) {
             ? error.message
             : "Erro ao devolver aparelho.",
       },
-      {
-        status: 400,
-      }
+      { status: 400 }
     );
   }
 }
@@ -1328,41 +1197,27 @@ export async function PATCH(req: Request) {
 // SOMENTE ADMIN
 // =====================================================
 
-export async function DELETE(
-  req: Request
-) {
+export async function DELETE(req: Request) {
   try {
     const usuario =
       await obterSessao();
 
-    // =================================================
-    // AUTORIZAÇÃO
-    // =================================================
-
     if (!usuario) {
       return NextResponse.json(
-        {
-          error:
-            "Não autorizado.",
-        },
-        {
-          status: 401,
-        }
+        { error: "Não autorizado." },
+        { status: 401 }
       );
     }
 
     if (
-      usuario.role !==
-      "ADMIN"
+      usuario.role !== "ADMIN"
     ) {
       return NextResponse.json(
         {
           error:
             "Somente o administrador pode cancelar uma venda.",
         },
-        {
-          status: 403,
-        }
+        { status: 403 }
       );
     }
 
@@ -1375,10 +1230,6 @@ export async function DELETE(
           body.id
       );
 
-    // =================================================
-    // VALIDAR VENDA
-    // =================================================
-
     if (
       !Number.isInteger(
         vendaId
@@ -1390,24 +1241,14 @@ export async function DELETE(
           error:
             "ID da venda inválido.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
-
-    // =================================================
-    // TRANSACTION
-    // =================================================
 
     await prisma.$transaction(
       async (
         tx: Prisma.TransactionClient
       ) => {
-        // =================================================
-        // BUSCAR VENDA
-        // =================================================
-
         const venda =
           await tx.venda.findUnique({
             where: {
@@ -1430,9 +1271,20 @@ export async function DELETE(
           );
         }
 
-        // =================================================
-        // DEVOLVER TODOS OS APARELHOS
-        // =================================================
+        const chaveDia =
+          chaveDaData(venda.dataVenda);
+
+        const diaVenda =
+          await verificarDiaFechado(
+            tx,
+            chaveDia
+          );
+
+        if (diaVenda?.fechado) {
+          throw new Error(
+            `O dia ${chaveDia} está fechado. Reabra o dia antes de alterar esta venda.`
+          );
+        }
 
         for (
           const item of venda.itens
@@ -1448,25 +1300,17 @@ export async function DELETE(
               where: {
                 id: {
                   in: aparelhos.map(
-                    (
-                      aparelho: {
-                        id: number;
-                      }
-                    ) => aparelho.id
+                    (aparelho) =>
+                      aparelho.id
                   ),
                 },
               },
 
               data: {
                 vendido: false,
-
                 vendaItemId: null,
               },
             });
-
-            // =================================================
-            // DEVOLVER QUANTIDADE AO ESTOQUE
-            // =================================================
 
             await tx.produto.update({
               where: {
@@ -1484,29 +1328,17 @@ export async function DELETE(
           }
         }
 
-        // =================================================
-        // DELETAR PAGAMENTOS
-        // =================================================
-
         await tx.pagamento.deleteMany({
           where: {
             vendaId,
           },
         });
 
-        // =================================================
-        // DELETAR ITENS
-        // =================================================
-
         await tx.vendaItem.deleteMany({
           where: {
             vendaId,
           },
         });
-
-        // =================================================
-        // DELETAR VENDA
-        // =================================================
 
         await tx.venda.delete({
           where: {
@@ -1517,13 +1349,8 @@ export async function DELETE(
       }
     );
 
-    // =================================================
-    // RESPOSTA
-    // =================================================
-
     return NextResponse.json({
       success: true,
-
       message:
         "Venda excluída e todos os aparelhos foram devolvidos ao estoque.",
     });
@@ -1540,9 +1367,7 @@ export async function DELETE(
             ? error.message
             : "Erro ao excluir venda.",
       },
-      {
-        status: 400,
-      }
+      { status: 400 }
     );
   }
 }
