@@ -26,6 +26,7 @@ function validarChaveData(valor: unknown): string {
   }
 
   const [ano, mes, dia] = texto.split("-").map(Number);
+
   const data = new Date(
     Date.UTC(ano, mes - 1, dia, 12, 0, 0, 0)
   );
@@ -117,19 +118,19 @@ export async function GET() {
     const vendasPreparadas = vendas.map(
       (venda: (typeof vendas)[number]) => {
         const valorVenda = venda.itens.reduce(
-          (total, item) =>
+          (total: number, item: any) =>
             total + Number(item.total || 0),
           0
         );
 
         const quantidade = venda.itens.reduce(
-          (total, item) =>
+          (total: number, item: any) =>
             total + Number(item.quantidade || 0),
           0
         );
 
         const custoTotalUsd = venda.itens.reduce(
-          (total, item) =>
+          (total: number, item: any) =>
             total + Number(item.custoTotal || 0),
           0
         );
@@ -423,7 +424,9 @@ export async function POST(req: Request) {
               where: {
                 data: dataDoDia(chaveDia),
               },
+
               update: {},
+
               create: {
                 data: dataDoDia(chaveDia),
                 fechado: false,
@@ -549,17 +552,23 @@ export async function POST(req: Request) {
                 data: {
                   quantidade:
                     item.quantidade,
+
                   valorUnitario:
                     item.valorUnitario,
+
                   total,
+
                   precoCompraUsd:
                     item.quantidade > 0
                       ? custoTotal /
                         item.quantidade
                       : null,
+
                   custoTotal,
+
                   vendaId:
                     venda.id,
+
                   produtoId:
                     item.produtoId,
                 },
@@ -923,8 +932,10 @@ export async function PATCH(req: Request) {
             if (aparelho) {
               aparelhoEncontrado =
                 aparelho;
+
               itemEncontrado =
                 item;
+
               break;
             }
           }
@@ -1061,7 +1072,7 @@ export async function PATCH(req: Request) {
 
           const novoTotalVenda =
             itensAtualizados.reduce(
-              (total, item) =>
+              (total: number, item: any) =>
                 total +
                 Number(
                   item.total || 0
