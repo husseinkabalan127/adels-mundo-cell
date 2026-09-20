@@ -15,60 +15,7 @@ type ItemPreparado = {
 };
 
 // =====================================================
-// HELPERS — DIA DE VENDAS
-// =====================================================
-
-function validarChaveData(valor: unknown): string {
-  const texto = String(valor ?? "").trim();
-
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(texto)) {
-    throw new Error("Data inválida. Use o formato AAAA-MM-DD.");
-  }
-
-  const [ano, mes, dia] = texto.split("-").map(Number);
-
-  const data = new Date(
-    Date.UTC(ano, mes - 1, dia, 12, 0, 0, 0)
-  );
-
-  if (
-    data.getUTCFullYear() !== ano ||
-    data.getUTCMonth() !== mes - 1 ||
-    data.getUTCDate() !== dia
-  ) {
-    throw new Error("Data inválida.");
-  }
-
-  return texto;
-}
-
-function dataDoDia(chave: string): Date {
-  const [ano, mes, dia] = chave.split("-").map(Number);
-
-  return new Date(
-    Date.UTC(ano, mes - 1, dia, 12, 0, 0, 0)
-  );
-}
-
-function chaveDaData(data: Date): string {
-  return data.toISOString().slice(0, 10);
-}
-
-async function verificarDiaFechado(
-  tx: Prisma.TransactionClient,
-  chave: string
-) {
-  const dia = await tx.diaVenda.findUnique({
-    where: {
-      data: dataDoDia(chave),
-    },
-  });
-
-  return dia;
-}
-
-// =====================================================
-// GET — VENDAS + STATUS DOS DIAS
+// GET — VENDAS
 // =====================================================
 
 export async function GET() {
@@ -82,38 +29,30 @@ export async function GET() {
       );
     }
 
-    const [vendas, dias] = await Promise.all([
-      prisma.venda.findMany({
-        orderBy: {
-          dataVenda: "desc",
-        },
+    const vendas = await prisma.venda.findMany({
+      orderBy: {
+        dataVenda: "desc",
+      },
 
-        include: {
-          itens: {
-            include: {
-              produto: true,
-              aparelhos: {
-                include: {
-                  lote: true,
-                },
+      include: {
+        itens: {
+          include: {
+            produto: true,
+            aparelhos: {
+              include: {
+                lote: true,
               },
             },
           },
+        },
 
-          pagamentos: {
-            orderBy: {
-              createdAt: "asc",
-            },
+        pagamentos: {
+          orderBy: {
+            createdAt: "asc",
           },
         },
-      }),
-
-      prisma.diaVenda.findMany({
-        orderBy: {
-          data: "desc",
-        },
-      }),
-    ]);
+      },
+    });
 
     const vendasPreparadas = vendas.map(
       (venda: (typeof vendas)[number]) => {
@@ -164,13 +103,6 @@ export async function GET() {
 
     return NextResponse.json({
       vendas: vendasPreparadas,
-      dias: dias.map((dia) => ({
-        id: dia.id,
-        data: chaveDaData(dia.data),
-        fechado: dia.fechado,
-        createdAt: dia.createdAt,
-        updatedAt: dia.updatedAt,
-      })),
     });
   } catch (error) {
     console.error("ERRO AO BUSCAR VENDAS:", error);
@@ -242,11 +174,6 @@ export async function POST(req: Request) {
         );
       }
     }
-
-    const chaveDia = validarChaveData(
-      body.dataVenda ||
-        chaveDaData(dataVenda)
-    );
 
     const taxa =
       body.taxa === null ||
@@ -415,30 +342,6 @@ export async function POST(req: Request) {
         async (
           tx: Prisma.TransactionClient
         ) => {
-          // ===============================================
-          // GARANTIR QUE O DIA EXISTE E ESTÁ ABERTO
-          // ===============================================
-
-          const diaVenda =
-            await tx.diaVenda.upsert({
-              where: {
-                data: dataDoDia(chaveDia),
-              },
-
-              update: {},
-
-              create: {
-                data: dataDoDia(chaveDia),
-                fechado: false,
-              },
-            });
-
-          if (diaVenda.fechado) {
-            throw new Error(
-              `O dia ${chaveDia} está fechado. Reabra o dia antes de registrar uma nova venda.`
-            );
-          }
-
           // ===============================================
           // CRIAR VENDA
           // ===============================================
@@ -699,8 +602,8 @@ export async function POST(req: Request) {
 }
 
 // =====================================================
-// PATCH — FECHAR/REABRIR DIA OU DEVOLVER APARELHO
-// SOMENTE ADMIN PARA FECHAR/REABRIR E DEVOLVER
+// PATCH — DEVOLVER APARELHO
+// SOMENTE ADMIN
 // =====================================================
 
 export async function PATCH(req: Request) {
@@ -715,76 +618,6 @@ export async function PATCH(req: Request) {
     }
 
     const body = await req.json();
-    const action = String(body.action || "").trim();
-
-    // =================================================
-    // FECHAR / REABRIR DIA
-    // =================================================
-
-    if (
-      action === "fecharDia" ||
-      action === "reabrirDia"
-    ) {
-      if (usuario.role !== "ADMIN") {
-        return NextResponse.json(
-          {
-            error:
-              "Somente o administrador pode fechar ou reabrir um dia.",
-          },
-          { status: 403 }
-        );
-      }
-
-      let chaveDia: string;
-
-      try {
-        chaveDia =
-          validarChaveData(body.data);
-      } catch (error) {
-        return NextResponse.json(
-          {
-            error:
-              error instanceof Error
-                ? error.message
-                : "Data inválida.",
-          },
-          { status: 400 }
-        );
-      }
-
-      const fechado =
-        action === "fecharDia";
-
-      const dia =
-        await prisma.diaVenda.upsert({
-          where: {
-            data: dataDoDia(chaveDia),
-          },
-
-          update: {
-            fechado,
-          },
-
-          create: {
-            data: dataDoDia(chaveDia),
-            fechado,
-          },
-        });
-
-      return NextResponse.json({
-        success: true,
-        message: fechado
-          ? `Dia ${chaveDia} fechado com sucesso.`
-          : `Dia ${chaveDia} reaberto com sucesso.`,
-        dia: {
-          id: dia.id,
-          data: chaveDaData(dia.data),
-          fechado: dia.fechado,
-          createdAt: dia.createdAt,
-          updatedAt: dia.updatedAt,
-        },
-      });
-    }
 
     // =================================================
     // DEVOLVER APARELHO
@@ -883,21 +716,6 @@ export async function PATCH(req: Request) {
           if (!venda) {
             throw new Error(
               "Venda não encontrada."
-            );
-          }
-
-          const chaveDia =
-            chaveDaData(venda.dataVenda);
-
-          const diaVenda =
-            await verificarDiaFechado(
-              tx,
-              chaveDia
-            );
-
-          if (diaVenda?.fechado) {
-            throw new Error(
-              `O dia ${chaveDia} está fechado. Reabra o dia antes de alterar esta venda.`
             );
           }
 
@@ -1054,9 +872,12 @@ export async function PATCH(req: Request) {
               data: {
                 quantidade:
                   novaQuantidade,
+
                 total: novoTotal,
+
                 custoTotal:
                   novoCustoTotal,
+
                 precoCompraUsd:
                   novoPrecoCompra,
               },
@@ -1279,21 +1100,6 @@ export async function DELETE(req: Request) {
         if (!venda) {
           throw new Error(
             "Venda não encontrada."
-          );
-        }
-
-        const chaveDia =
-          chaveDaData(venda.dataVenda);
-
-        const diaVenda =
-          await verificarDiaFechado(
-            tx,
-            chaveDia
-          );
-
-        if (diaVenda?.fechado) {
-          throw new Error(
-            `O dia ${chaveDia} está fechado. Reabra o dia antes de alterar esta venda.`
           );
         }
 
