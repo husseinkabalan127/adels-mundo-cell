@@ -41,6 +41,8 @@ type VendaItemForm = {
   imeis: string[];
 };
 
+type PagamentoForm = { forma: string; valor: string; desconto: string; observacao: string };
+
 type Venda = {
   id: number;
 
@@ -63,6 +65,12 @@ type Venda = {
   valorTotal?: number | null;
 
   itens?: any[];
+  pagamentos?: { id?: number; forma?: string | null; valor?: number; desconto?: number; observacao?: string | null }[];
+  descontoVenda?: number;
+  descontosPagamentos?: number;
+  valorFinal?: number;
+  totalPago?: number;
+  saldo?: number;
 };
 
 export default function VendasPage() {
@@ -83,6 +91,11 @@ export default function VendasPage() {
 
   const [formaPagamento, setFormaPagamento] =
     useState("Não informado");
+
+  const [descontoVenda, setDescontoVenda] = useState("");
+  const [pagamentos, setPagamentos] = useState<PagamentoForm[]>([
+    { forma: "Dinheiro", valor: "", desconto: "", observacao: "" },
+  ]);
 
   const [estadoFatura, setEstadoFatura] =
     useState("Não informado");
@@ -967,6 +980,18 @@ export default function VendasPage() {
   // REGISTRAR VENDA
   // =====================================================
 
+  function adicionarPagamento() {
+    setPagamentos((atuais) => [...atuais, { forma: "Pix", valor: "", desconto: "", observacao: "" }]);
+  }
+
+  function atualizarPagamento(index: number, campo: keyof PagamentoForm, valor: string) {
+    setPagamentos((atuais) => atuais.map((p, i) => i === index ? { ...p, [campo]: valor } : p));
+  }
+
+  function removerPagamento(index: number) {
+    setPagamentos((atuais) => atuais.filter((_, i) => i !== index));
+  }
+
   async function registrarVenda() {
     setErro("");
     setMensagem("");
@@ -1098,9 +1123,14 @@ export default function VendasPage() {
                   })
                 ),
 
-              formaPagamento,
-
+              formaPagamento: pagamentos.length === 1 ? pagamentos[0].forma : "Múltiplos pagamentos",
               estadoFatura,
+              descontoVenda: Number(String(descontoVenda || 0).replace(",", ".")) || 0,
+              pagamentos: pagamentos.filter((p) => p.valor !== "" || p.desconto !== "").map((p) => ({
+                ...p,
+                valor: Number(String(p.valor || 0).replace(",", ".")) || 0,
+                desconto: Number(String(p.desconto || 0).replace(",", ".")) || 0,
+              })),
             }),
           }
         );
@@ -1124,9 +1154,9 @@ export default function VendasPage() {
 
       setTaxa("");
 
-      setFormaPagamento(
-        "Não informado"
-      );
+      setFormaPagamento("Não informado");
+      setDescontoVenda("");
+      setPagamentos([{ forma: "Dinheiro", valor: "", desconto: "", observacao: "" }]);
 
       setEstadoFatura(
         "Não informado"
@@ -2152,49 +2182,34 @@ export default function VendasPage() {
 
           </label>
 
-          {/* PAGAMENTO */}
-
-          <label>
-
-            Forma de pagamento
-
-            <select
-              value={
-                formaPagamento
-              }
-              onChange={(e) =>
-                setFormaPagamento(
-                  e.target.value
-                )
-              }
-              style={
-                inputStyle
-              }
-            >
-
-              <option>
-                Não informado
-              </option>
-
-              <option>
-                Dinheiro
-              </option>
-
-              <option>
-                Pix
-              </option>
-
-              <option>
-                Cartão
-              </option>
-
-              <option>
-                Transferência
-              </option>
-
-            </select>
-
-          </label>
+          {/* PAGAMENTOS MÚLTIPLOS E DESCONTOS */}
+          <div style={{ gridColumn: "1 / -1", border: "1px solid #ddd", borderRadius: 12, padding: 16, display: "grid", gap: 12 }}>
+            <h3 style={{ margin: 0 }}>Pagamentos da venda</h3>
+            <label style={{ display: "grid", gap: 6 }}>
+              Desconto na venda inteira (R$)
+              <input type="number" min="0" step="0.01" value={descontoVenda} onChange={(e) => setDescontoVenda(e.target.value)} placeholder="0,00" style={inputStyle} />
+            </label>
+            {pagamentos.map((pagamento, index) => (
+              <div key={index} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, alignItems: "end", padding: 12, background: "#f8f8f8", borderRadius: 8 }}>
+                <label style={{ display: "grid", gap: 6 }}>Forma de pagamento
+                  <select value={pagamento.forma} onChange={(e) => atualizarPagamento(index, "forma", e.target.value)} style={inputStyle}>
+                    <option>Dinheiro</option><option>Pix</option><option>Cartão de crédito</option><option>Cartão de débito</option><option>Transferência</option><option>Outro</option>
+                  </select>
+                </label>
+                <label style={{ display: "grid", gap: 6 }}>Valor pago (R$)
+                  <input type="number" min="0" step="0.01" value={pagamento.valor} onChange={(e) => atualizarPagamento(index, "valor", e.target.value)} placeholder="0,00" style={inputStyle} />
+                </label>
+                <label style={{ display: "grid", gap: 6 }}>Desconto nesta parcela (R$)
+                  <input type="number" min="0" step="0.01" value={pagamento.desconto} onChange={(e) => atualizarPagamento(index, "desconto", e.target.value)} placeholder="0,00" style={inputStyle} />
+                </label>
+                <label style={{ display: "grid", gap: 6 }}>Observação (opcional)
+                  <input value={pagamento.observacao} onChange={(e) => atualizarPagamento(index, "observacao", e.target.value)} placeholder="Ex.: 2x no cartão" style={inputStyle} />
+                </label>
+                {pagamentos.length > 1 && <button type="button" onClick={() => removerPagamento(index)} style={{ padding: 10, borderRadius: 8, border: "1px solid #d33", color: "#b00", background: "white", cursor: "pointer" }}>Remover</button>}
+              </div>
+            ))}
+            <button type="button" onClick={adicionarPagamento} style={{ padding: 10, borderRadius: 8, border: "1px solid #888", background: "white", cursor: "pointer" }}>+ Adicionar outra forma de pagamento</button>
+          </div>
 
           {/* ESTADO */}
 
@@ -3521,9 +3536,20 @@ export default function VendasPage() {
                                           Pagamento
                                         </div>
                                         <strong>
-                                          {venda.formaPagamento ||
-                                            "-"}
+                                          {venda.formaPagamento || "-"}
                                         </strong>
+                                        {Array.isArray(venda.pagamentos) && venda.pagamentos.length > 0 && (
+                                          <div style={{ marginTop: 8, fontSize: 13, display: "grid", gap: 4 }}>
+                                            {venda.pagamentos.map((p, i) => (
+                                              <div key={p.id ?? i}>
+                                                {p.forma || "Pagamento"}: R$ {Number(p.valor || 0).toFixed(2).replace(".", ",")}
+                                                {Number(p.desconto || 0) > 0 ? ` (desconto R$ ${Number(p.desconto).toFixed(2).replace(".", ",")})` : ""}
+                                              </div>
+                                            ))}
+                                            <strong>Final: R$ {Number(venda.valorFinal ?? totalDaVenda(venda)).toFixed(2).replace(".", ",")}</strong>
+                                            <span>Pago: R$ {Number(venda.totalPago || 0).toFixed(2).replace(".", ",")} · Em aberto: R$ {Number(venda.saldo || 0).toFixed(2).replace(".", ",")}</span>
+                                          </div>
+                                        )}
                                       </div>
 
                                       <div
