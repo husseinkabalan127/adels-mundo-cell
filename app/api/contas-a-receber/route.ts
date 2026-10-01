@@ -60,9 +60,7 @@ function calcularDescontos(venda: any) {
           ) => {
             return (
               total +
-              (Number(
-                pagamento.desconto
-              ) || 0)
+              (Number(pagamento.desconto) || 0)
             );
           },
           0
@@ -76,24 +74,17 @@ function calcularDescontos(venda: any) {
 }
 
 // =====================================================
-// CALCULAR RESUMO
+// CALCULAR RESUMO DA CONTA
 // =====================================================
 
 function calcularResumo(venda: any) {
-  const total =
-    calcularTotalVenda(venda);
-
-  const pago =
-    calcularPagamentos(venda);
-
-  const desconto =
-    calcularDescontos(venda);
+  const total = calcularTotalVenda(venda);
+  const pago = calcularPagamentos(venda);
+  const desconto = calcularDescontos(venda);
 
   const restante = Math.max(
     0,
-    total -
-      pago -
-      desconto
+    total - pago - desconto
   );
 
   let estado = "Em aberto";
@@ -114,81 +105,194 @@ function calcularResumo(venda: any) {
 }
 
 // =====================================================
-// GET
-// BUSCAR TODAS AS CONTAS
-// PENDENTES + QUITADAS
+// CONVERTER DATA/HORA DE SÃO PAULO
+// PARA DATE
 // =====================================================
 
-export async function GET() {
+function converterDataHora(
+  data: string,
+  hora: string,
+  finalDoDia = false
+) {
+  const horaFinal = finalDoDia
+    ? "23:59:59"
+    : hora;
+
+  // Horário de São Paulo: UTC-03:00
+  const dataHora = new Date(
+    `${data}T${horaFinal}-03:00`
+  );
+
+  if (Number.isNaN(dataHora.getTime())) {
+    return null;
+  }
+
+  return dataHora;
+}
+
+// =====================================================
+// GET
+// BUSCAR CONTAS COM FILTRO OPCIONAL DE DATA/HORA
+// =====================================================
+
+export async function GET(req: Request) {
   try {
-    const vendas =
-      await prisma.venda.findMany({
-        orderBy: {
-          dataVenda: "desc",
+    const { searchParams } = new URL(req.url);
+
+    const dataInicio =
+      searchParams.get("dataInicio");
+
+    const dataFim =
+      searchParams.get("dataFim");
+
+    const horaInicio =
+      searchParams.get("horaInicio") || "00:00";
+
+    const horaFim =
+      searchParams.get("horaFim") || "23:59";
+
+    // -----------------------------------------------
+    // FILTRO OPCIONAL
+    // Sem datas, retorna todas as contas.
+    // -----------------------------------------------
+
+    let filtroData: Prisma.VendaWhereInput = {};
+
+    if (dataInicio || dataFim) {
+      if (!dataInicio || !dataFim) {
+        return NextResponse.json(
+          {
+            error:
+              "Informe a data inicial e a data final.",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      if (dataInicio > dataFim) {
+        return NextResponse.json(
+          {
+            error:
+              "A data inicial não pode ser maior que a data final.",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      if (
+        dataInicio === dataFim &&
+        horaInicio > horaFim
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "A hora inicial não pode ser maior que a hora final.",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      const inicio = converterDataHora(
+        dataInicio,
+        horaInicio
+      );
+
+      const fim = converterDataHora(
+        dataFim,
+        horaFim
+      );
+
+      if (!inicio || !fim) {
+        return NextResponse.json(
+          {
+            error:
+              "Data ou horário inválido.",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      filtroData = {
+        createdAt: {
+          gte: inicio,
+          lte: fim,
+        },
+      };
+    }
+
+    // -----------------------------------------------
+    // BUSCAR VENDAS
+    // -----------------------------------------------
+
+    const vendas = await prisma.venda.findMany({
+      where: filtroData,
+
+      orderBy: {
+        createdAt: "desc",
+      },
+
+      include: {
+        itens: {
+          include: {
+            produto: true,
+            aparelhos: true,
+          },
         },
 
-        include: {
-          itens: {
-            include: {
-              produto: true,
-              aparelhos: true,
-            },
-          },
-
-          pagamentos: {
-            orderBy: {
-              createdAt: "asc",
-            },
+        pagamentos: {
+          orderBy: {
+            createdAt: "asc",
           },
         },
-      });
+      },
+    });
+
+    // -----------------------------------------------
+    // MONTAR CONTAS
+    // -----------------------------------------------
 
     const contas = vendas.map(
       (venda: (typeof vendas)[number]) => {
-        const resumo =
-          calcularResumo(venda);
+        const resumo = calcularResumo(venda);
 
         return {
           id: venda.id,
 
           cliente: venda.cliente,
 
-          dataVenda:
-            venda.dataVenda,
+          dataVenda: venda.dataVenda,
 
-          createdAt:
-            venda.createdAt,
+          createdAt: venda.createdAt,
 
           formaPagamento:
             venda.formaPagamento,
 
-          estadoFatura:
-            resumo.estado,
+          estadoFatura: resumo.estado,
 
-          total:
-            resumo.total,
+          total: resumo.total,
 
-          pago:
-            resumo.pago,
+          pago: resumo.pago,
 
-          desconto:
-            resumo.desconto,
+          desconto: resumo.desconto,
 
-          restante:
-            resumo.restante,
+          restante: resumo.restante,
 
-          pagamentos:
-            venda.pagamentos,
+          pagamentos: venda.pagamentos,
 
-          itens:
-            venda.itens,
+          itens: venda.itens,
         };
       }
     );
 
-    return NextResponse.json(
-      contas
-    );
+    return NextResponse.json(contas);
   } catch (error) {
     console.error(
       "ERRO AO BUSCAR CONTAS:",
@@ -212,64 +316,44 @@ export async function GET() {
 // REGISTRAR PAGAMENTO
 // =====================================================
 
-export async function POST(
-  req: Request
-) {
+export async function POST(req: Request) {
   try {
-    const body =
-      await req.json();
+    const body = await req.json();
 
-    const vendaId =
-      Number(body.vendaId);
+    const vendaId = Number(body.vendaId);
 
-    const valor =
-      Number(
-        String(
-          body.valor ?? ""
-        ).replace(",", ".")
-      );
+    const valor = Number(
+      String(body.valor ?? "").replace(",", ".")
+    );
 
     const desconto =
-      body.desconto ===
-        undefined ||
-      body.desconto ===
-        null ||
+      body.desconto === undefined ||
+      body.desconto === null ||
       body.desconto === ""
         ? 0
         : Number(
-            String(
-              body.desconto
-            ).replace(",", ".")
+            String(body.desconto).replace(",", ".")
           );
 
-    const forma =
-      body.forma
-        ? String(
-            body.forma
-          ).trim()
-        : null;
+    const forma = body.forma
+      ? String(body.forma).trim()
+      : null;
 
-    const observacao =
-      body.observacao
-        ? String(
-            body.observacao
-          ).trim()
-        : null;
+    const observacao = body.observacao
+      ? String(body.observacao).trim()
+      : null;
 
-    // =================================================
+    // -----------------------------------------------
     // VALIDAÇÕES
-    // =================================================
+    // -----------------------------------------------
 
     if (
-      !Number.isInteger(
-        vendaId
-      ) ||
+      !Number.isInteger(vendaId) ||
       vendaId <= 0
     ) {
       return NextResponse.json(
         {
-          error:
-            "ID da venda inválido.",
+          error: "ID da venda inválido.",
         },
         {
           status: 400,
@@ -277,16 +361,10 @@ export async function POST(
       );
     }
 
-    if (
-      !Number.isFinite(
-        valor
-      ) ||
-      valor < 0
-    ) {
+    if (!Number.isFinite(valor) || valor < 0) {
       return NextResponse.json(
         {
-          error:
-            "Valor do pagamento inválido.",
+          error: "Valor do pagamento inválido.",
         },
         {
           status: 400,
@@ -295,15 +373,12 @@ export async function POST(
     }
 
     if (
-      !Number.isFinite(
-        desconto
-      ) ||
+      !Number.isFinite(desconto) ||
       desconto < 0
     ) {
       return NextResponse.json(
         {
-          error:
-            "Valor do desconto inválido.",
+          error: "Valor do desconto inválido.",
         },
         {
           status: 400,
@@ -311,262 +386,203 @@ export async function POST(
       );
     }
 
-    if (
-      valor === 0 &&
-      desconto === 0
-    ) {
+    if (valor === 0 && desconto === 0) {
       return NextResponse.json(
         {
           error:
             "Informe o valor pago ou o desconto.",
         },
         {
-          status: 400
+          status: 400,
         }
       );
     }
 
-    // =================================================
+    // -----------------------------------------------
     // TRANSACTION
-    // =================================================
+    // -----------------------------------------------
 
-    const resultado =
-      await prisma.$transaction(
-        async (
-          tx: Prisma.TransactionClient
-        ) => {
-          // -------------------------------------------
-          // BUSCAR VENDA
-          // -------------------------------------------
+    const resultado = await prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        // -------------------------------------------
+        // BUSCAR VENDA
+        // -------------------------------------------
 
-          const venda =
-            await tx.venda.findUnique({
-              where: {
-                id: vendaId,
+        const venda = await tx.venda.findUnique({
+          where: {
+            id: vendaId,
+          },
+
+          include: {
+            itens: true,
+
+            pagamentos: {
+              orderBy: {
+                createdAt: "asc",
               },
-
-              include: {
-                itens: true,
-
-                pagamentos: {
-                  orderBy: {
-                    createdAt:
-                      "asc",
-                  },
-                },
-              },
-            });
-
-          if (!venda) {
-            throw new Error(
-              "Venda não encontrada."
-            );
-          }
-
-          // -------------------------------------------
-          // TOTAL DA VENDA
-          // -------------------------------------------
-
-          const total =
-            venda.itens.reduce(
-              (
-                soma: number,
-                item: any
-              ) => {
-                return (
-                  soma +
-                  (Number(
-                    item.quantidade
-                  ) || 0) *
-                    (Number(
-                      item.valorUnitario
-                    ) || 0)
-                );
-              },
-              0
-            );
-
-          // -------------------------------------------
-          // TOTAL PAGO ANTERIOR
-          // -------------------------------------------
-
-          const pagoAnterior =
-            venda.pagamentos.reduce(
-              (
-                soma: number,
-                pagamento: any
-              ) => {
-                return (
-                  soma +
-                  (Number(
-                    pagamento.valor
-                  ) || 0)
-                );
-              },
-              0
-            );
-
-          // -------------------------------------------
-          // DESCONTOS ANTERIORES
-          // -------------------------------------------
-
-          const descontoAnterior =
-            (Number(
-              venda.desconto
-            ) || 0) +
-            venda.pagamentos.reduce(
-              (
-                soma: number,
-                pagamento: any
-              ) => {
-                return (
-                  soma +
-                  (Number(
-                    pagamento.desconto
-                  ) || 0)
-                );
-              },
-              0
-            );
-
-          // -------------------------------------------
-          // RESTANTE ATUAL
-          // -------------------------------------------
-
-          const restanteAntes =
-            Math.max(
-              0,
-              total -
-                pagoAnterior -
-                descontoAnterior
-            );
-
-          // -------------------------------------------
-          // NÃO PERMITIR PAGAR MAIS
-          // -------------------------------------------
-
-          if (
-            valor +
-              desconto >
-            restanteAntes +
-              0.009
-          ) {
-            throw new Error(
-              `O valor informado é maior que o restante da dívida. Restante: R$ ${restanteAntes
-                .toFixed(2)
-                .replace(
-                  ".",
-                  ","
-                )}`
-            );
-          }
-
-          // -------------------------------------------
-          // CRIAR PAGAMENTO
-          // -------------------------------------------
-
-          await tx.pagamento.create({
-            data: {
-              valor,
-
-              desconto,
-
-              forma,
-
-              observacao,
-
-              vendaId,
             },
-          });
+          },
+        });
 
-          // -------------------------------------------
-          // NOVOS VALORES
-          // -------------------------------------------
-
-          const novoPago =
-            pagoAnterior +
-            valor;
-
-          const novoDesconto =
-            descontoAnterior +
-            desconto;
-
-          const novoRestante =
-            Math.max(
-              0,
-              total -
-                novoPago -
-                novoDesconto
-            );
-
-          // -------------------------------------------
-          // STATUS
-          // -------------------------------------------
-
-          let novoEstado =
-            "Em aberto";
-
-          if (
-            novoRestante <=
-            0.009
-          ) {
-            novoEstado =
-              "Quitado";
-          } else if (
-            novoPago > 0
-          ) {
-            novoEstado =
-              "Parcial";
-          }
-
-          // -------------------------------------------
-          // ATUALIZAR VENDA
-          // -------------------------------------------
-
-          await tx.venda.update({
-            where: {
-              id: vendaId,
-            },
-
-            data: {
-              formaPagamento:
-                forma ||
-                venda.formaPagamento ||
-                "Não informado",
-
-              estadoFatura:
-                novoEstado,
-            },
-          });
-
-          return {
-            total,
-
-            pago:
-              novoPago,
-
-            desconto:
-              novoDesconto,
-
-            restante:
-              novoRestante,
-
-            estadoFatura:
-              novoEstado,
-          };
+        if (!venda) {
+          throw new Error(
+            "Venda não encontrada."
+          );
         }
-      );
 
-    // =================================================
+        // -------------------------------------------
+        // TOTAL DA VENDA
+        // -------------------------------------------
+
+        const total = venda.itens.reduce(
+          (soma: number, item: any) => {
+            return (
+              soma +
+              (Number(item.quantidade) || 0) *
+                (Number(item.valorUnitario) || 0)
+            );
+          },
+          0
+        );
+
+        // -------------------------------------------
+        // TOTAL PAGO ANTERIOR
+        // -------------------------------------------
+
+        const pagoAnterior =
+          venda.pagamentos.reduce(
+            (soma: number, pagamento: any) => {
+              return (
+                soma +
+                (Number(pagamento.valor) || 0)
+              );
+            },
+            0
+          );
+
+        // -------------------------------------------
+        // DESCONTOS ANTERIORES
+        // -------------------------------------------
+
+        const descontoAnterior =
+          (Number(venda.desconto) || 0) +
+          venda.pagamentos.reduce(
+            (soma: number, pagamento: any) => {
+              return (
+                soma +
+                (Number(pagamento.desconto) || 0)
+              );
+            },
+            0
+          );
+
+        // -------------------------------------------
+        // RESTANTE ATUAL
+        // -------------------------------------------
+
+        const restanteAntes = Math.max(
+          0,
+          total - pagoAnterior - descontoAnterior
+        );
+
+        // -------------------------------------------
+        // NÃO PERMITIR PAGAR MAIS QUE O RESTANTE
+        // -------------------------------------------
+
+        if (
+          valor + desconto >
+          restanteAntes + 0.009
+        ) {
+          throw new Error(
+            `O valor informado é maior que o restante da dívida. Restante: R$ ${restanteAntes
+              .toFixed(2)
+              .replace(".", ",")}`
+          );
+        }
+
+        // -------------------------------------------
+        // CRIAR PAGAMENTO
+        // -------------------------------------------
+
+        await tx.pagamento.create({
+          data: {
+            valor,
+            desconto,
+            forma,
+            observacao,
+            vendaId,
+          },
+        });
+
+        // -------------------------------------------
+        // NOVOS VALORES
+        // -------------------------------------------
+
+        const novoPago =
+          pagoAnterior + valor;
+
+        const novoDesconto =
+          descontoAnterior + desconto;
+
+        const novoRestante = Math.max(
+          0,
+          total - novoPago - novoDesconto
+        );
+
+        // -------------------------------------------
+        // STATUS
+        // -------------------------------------------
+
+        let novoEstado = "Em aberto";
+
+        if (novoRestante <= 0.009) {
+          novoEstado = "Quitado";
+        } else if (novoPago > 0) {
+          novoEstado = "Parcial";
+        }
+
+        // -------------------------------------------
+        // ATUALIZAR VENDA
+        // -------------------------------------------
+
+        await tx.venda.update({
+          where: {
+            id: vendaId,
+          },
+
+          data: {
+            formaPagamento:
+              forma ||
+              venda.formaPagamento ||
+              "Não informado",
+
+            estadoFatura: novoEstado,
+          },
+        });
+
+        return {
+          total,
+
+          pago: novoPago,
+
+          desconto: novoDesconto,
+
+          restante: novoRestante,
+
+          estadoFatura: novoEstado,
+        };
+      }
+    );
+
+    // -----------------------------------------------
     // RESPOSTA
-    // =================================================
+    // -----------------------------------------------
 
     return NextResponse.json({
       success: true,
 
       message:
-        resultado.estadoFatura ===
-        "Quitado"
+        resultado.estadoFatura === "Quitado"
           ? "Conta quitada com sucesso!"
           : "Pagamento registrado com sucesso!",
 

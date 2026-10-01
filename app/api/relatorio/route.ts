@@ -36,7 +36,7 @@ type VendaRelatorio = {
 };
 
 // =====================================================
-// DATA BRASIL — INÍCIO
+// DATA BRASIL — INÍCIO DO DIA
 // =====================================================
 
 function inicioDoDia(data: string): Date {
@@ -44,11 +44,33 @@ function inicioDoDia(data: string): Date {
 }
 
 // =====================================================
-// DATA BRASIL — FIM
+// DATA BRASIL — FIM DO DIA
 // =====================================================
 
 function fimDoDia(data: string): Date {
   return new Date(`${data}T23:59:59.999-03:00`);
+}
+
+// =====================================================
+// DATA E HORA BRASIL
+// =====================================================
+
+function dataHoraBrasil(
+  data: string,
+  hora: string,
+  fim = false
+): Date {
+  const horaValida = /^\d{2}:\d{2}$/.test(hora)
+    ? hora
+    : fim
+      ? "23:59"
+      : "00:00";
+
+  const segundos = fim ? "59.999" : "00.000";
+
+  return new Date(
+    `${data}T${horaValida}:${segundos}-03:00`
+  );
 }
 
 // =====================================================
@@ -65,8 +87,14 @@ export async function GET(req: Request) {
     const dataFim =
       searchParams.get("dataFim");
 
+    const horaInicio =
+      searchParams.get("horaInicio");
+
+    const horaFim =
+      searchParams.get("horaFim");
+
     // =================================================
-    // FILTRO DE DATA
+    // FILTRO DE DATA E HORA
     // =================================================
 
     const whereVenda: {
@@ -81,12 +109,16 @@ export async function GET(req: Request) {
 
       if (dataInicio) {
         whereVenda.createdAt.gte =
-          inicioDoDia(dataInicio);
+          horaInicio
+            ? dataHoraBrasil(dataInicio, horaInicio)
+            : inicioDoDia(dataInicio);
       }
 
       if (dataFim) {
         whereVenda.createdAt.lte =
-          fimDoDia(dataFim);
+          horaFim
+            ? dataHoraBrasil(dataFim, horaFim, true)
+            : fimDoDia(dataFim);
       }
     }
 
@@ -98,7 +130,8 @@ export async function GET(req: Request) {
       await prisma.produto.count();
 
     // =================================================
-    // ESTOQUE
+    // ESTOQUE ATUAL
+    // NÃO É AFETADO PELO FILTRO
     // =================================================
 
     const estoque =
@@ -109,7 +142,7 @@ export async function GET(req: Request) {
       });
 
     // =================================================
-    // VENDAS
+    // VENDAS DO PERÍODO
     // =================================================
 
     const vendasRaw =
@@ -132,11 +165,6 @@ export async function GET(req: Request) {
               aparelhos: {
                 select: {
                   imei: true,
-
-                  // =====================================
-                  // IMPORTANTE
-                  // CUSTO VEM DO LOTE
-                  // =====================================
 
                   lote: {
                     select: {
@@ -175,9 +203,7 @@ export async function GET(req: Request) {
               ) => {
                 return (
                   total +
-                  Number(
-                    item.quantidade ?? 0
-                  )
+                  Number(item.quantidade ?? 0)
                 );
               },
               0
@@ -185,15 +211,6 @@ export async function GET(req: Request) {
 
           // ===========================================
           // TOTAL DA VENDA
-          // ===========================================
-          //
-          // IMPORTANTE:
-          // O Relatório mantém o preço real da venda.
-          //
-          // Não usamos Telefones sem preço aqui.
-          //
-          // O preço cadastrado em Telefones sem preço
-          // é CUSTO, não preço de venda.
           // ===========================================
 
           const valorVenda =
@@ -204,9 +221,7 @@ export async function GET(req: Request) {
               ) => {
                 return (
                   total +
-                  Number(
-                    item.total ?? 0
-                  )
+                  Number(item.total ?? 0)
                 );
               },
               0
@@ -233,19 +248,16 @@ export async function GET(req: Request) {
           let quantidadeBrl = 0;
 
           // ===========================================
-          // LER CUSTO DIRETAMENTE DO LOTE DE CADA IMEI
+          // CUSTO PELO LOTE DE CADA IMEI
           // ===========================================
 
           venda.itens.forEach(
-            (
-              item: ItemRelatorio
-            ) => {
+            (item: ItemRelatorio) => {
 
               item.aparelhos.forEach(
                 (aparelho) => {
 
-                  const lote =
-                    aparelho.lote;
+                  const lote = aparelho.lote;
 
                   if (!lote) {
                     return;
@@ -299,9 +311,7 @@ export async function GET(req: Request) {
               ) => {
                 return (
                   total +
-                  Number(
-                    item.custoTotal ?? 0
-                  )
+                  Number(item.custoTotal ?? 0)
                 );
               },
               0
@@ -330,17 +340,12 @@ export async function GET(req: Request) {
           // BRL DIRETO
           // -------------------------------------------
 
-          if (
-            quantidadeBrl > 0
-          ) {
-            custoCalculado +=
-              custoBrl;
+          if (quantidadeBrl > 0) {
+            custoCalculado += custoBrl;
           }
 
           // ===========================================
           // FALLBACK
-          // ===========================================
-          //
           // Só usa o custo antigo se o lote não tiver
           // custo cadastrado.
           // ===========================================
@@ -349,7 +354,6 @@ export async function GET(req: Request) {
             custoCalculado === 0 &&
             custoTotalSalvo > 0
           ) {
-
             if (
               taxa !== null &&
               Number.isFinite(taxa)
@@ -369,22 +373,16 @@ export async function GET(req: Request) {
           let precoCompraUsd:
             number | null = null;
 
-          if (
-            quantidadeUsd > 0
-          ) {
+          if (quantidadeUsd > 0) {
             precoCompraUsd =
-              custoUsd /
-              quantidadeUsd;
+              custoUsd / quantidadeUsd;
           }
 
           // ===========================================
           // FALLBACK PREÇO USD
           // ===========================================
 
-          if (
-            precoCompraUsd === null
-          ) {
-
+          if (precoCompraUsd === null) {
             const somaUsd =
               venda.itens.reduce(
                 (
@@ -394,59 +392,49 @@ export async function GET(req: Request) {
 
                   const preco =
                     Number(
-                      item.precoCompraUsd ??
-                        0
+                      item.precoCompraUsd ?? 0
                     );
 
                   const qtd =
                     Number(
-                      item.quantidade ??
-                        0
+                      item.quantidade ?? 0
                     );
 
-                  return (
-                    total +
-                    preco * qtd
-                  );
+                  return total + preco * qtd;
                 },
                 0
               );
 
-            if (
-              somaUsd > 0
-            ) {
+            if (somaUsd > 0) {
               precoCompraUsd =
                 quantidade > 0
-                  ? somaUsd /
-                    quantidade
+                  ? somaUsd / quantidade
                   : null;
             }
           }
 
           // ===========================================
-          // LUCRO
+          // LUCRO CONFIRMADO
+          // SÓ CONTA SE A TAXA ESTIVER FECHADA
           // ===========================================
 
           const lucro =
-            valorVenda -
-            custoCalculado;
+            venda.taxaFechada === true
+              ? valorVenda - custoCalculado
+              : 0;
 
           // ===========================================
-          // IMEIs
+          // IMEIS
           // ===========================================
 
           const imeis =
             venda.itens
               .flatMap(
-                (
-                  item: ItemRelatorio
-                ) =>
+                (item: ItemRelatorio) =>
                   item.aparelhos
               )
               .map(
-                (
-                  aparelho
-                ) =>
+                (aparelho) =>
                   aparelho.imei
               )
               .filter(Boolean);
@@ -458,15 +446,11 @@ export async function GET(req: Request) {
           const produtosVenda =
             venda.itens
               .map(
-                (
-                  item: ItemRelatorio
-                ) =>
+                (item: ItemRelatorio) =>
                   item.produto?.nome
               )
               .filter(
-                (
-                  nome
-                ): nome is string =>
+                (nome): nome is string =>
                   Boolean(nome)
               );
 
@@ -502,8 +486,7 @@ export async function GET(req: Request) {
             taxa,
 
             taxaFechada:
-              venda.taxaFechada ??
-              false,
+              venda.taxaFechada ?? false,
 
             precoCompraUsd,
 
@@ -518,64 +501,69 @@ export async function GET(req: Request) {
       );
 
     // =================================================
-    // TOTAL VENDAS
+    // TOTAL DE VENDAS
     // =================================================
 
     const valorVendas =
       listaVendas.reduce(
-        (
-          total: number,
-          venda
-        ) => {
+        (total: number, venda) => {
           return (
             total +
-            Number(
-              venda.valorVenda
-            )
+            Number(venda.valorVenda)
           );
         },
         0
       );
 
     // =================================================
-    // TOTAL CUSTO
+    // CUSTO TOTAL
     // =================================================
 
     const custoTotal =
       listaVendas.reduce(
-        (
-          total: number,
-          venda
-        ) => {
+        (total: number, venda) => {
           return (
             total +
-            Number(
-              venda.custo
-            )
+            Number(venda.custo)
           );
         },
         0
       );
 
     // =================================================
-    // TOTAL LUCRO
+    // LUCRO TOTAL CONFIRMADO
     // =================================================
 
     const lucroTotal =
       listaVendas.reduce(
-        (
-          total: number,
-          venda
-        ) => {
+        (total: number, venda) => {
           return (
             total +
-            Number(
-              venda.lucro
-            )
+            Number(venda.lucro)
           );
         },
         0
       );
+
+    // =================================================
+    // QUANTIDADE DE APARELHOS VENDIDOS
+    // =================================================
+
+    const quantidadeAparelhos =
+      listaVendas.reduce(
+        (total, venda) =>
+          total + Number(venda.quantidade || 0),
+        0
+      );
+
+    // =================================================
+    // VENDAS COM TAXA PENDENTE
+    // =================================================
+
+    const vendasTaxaPendente =
+      listaVendas.filter(
+        (venda) => venda.taxaFechada !== true
+      ).length;
 
     // =================================================
     // RESPOSTA
@@ -585,11 +573,14 @@ export async function GET(req: Request) {
       produtos,
 
       quantidadeEstoque:
-        estoque._sum.quantidade ??
-        0,
+        estoque._sum.quantidade ?? 0,
 
       vendas:
         listaVendas.length,
+
+      quantidadeAparelhos,
+
+      vendasTaxaPendente,
 
       valorVendas,
 
@@ -656,7 +647,6 @@ export async function PATCH(req: Request) {
       !dataInicio ||
       !dataFim
     ) {
-
       return NextResponse.json(
         {
           error:
@@ -668,11 +658,7 @@ export async function PATCH(req: Request) {
       );
     }
 
-    if (
-      dataInicio >
-      dataFim
-    ) {
-
+    if (dataInicio > dataFim) {
       return NextResponse.json(
         {
           error:
@@ -695,7 +681,6 @@ export async function PATCH(req: Request) {
       !Number.isFinite(taxa) ||
       taxa < 0
     ) {
-
       return NextResponse.json(
         {
           error:
@@ -718,7 +703,7 @@ export async function PATCH(req: Request) {
       fimDoDia(dataFim);
 
     // =================================================
-    // BUSCAR VENDAS
+    // BUSCAR VENDAS DO PERÍODO
     // =================================================
 
     const vendas =
@@ -739,10 +724,7 @@ export async function PATCH(req: Request) {
     // NENHUMA VENDA
     // =================================================
 
-    if (
-      vendas.length === 0
-    ) {
-
+    if (vendas.length === 0) {
       return NextResponse.json(
         {
           success: false,
@@ -764,11 +746,7 @@ export async function PATCH(req: Request) {
 
     const vendaIds =
       vendas.map(
-        (
-          venda: {
-            id: number;
-          }
-        ) =>
+        (venda: { id: number }) =>
           venda.id
       );
 
@@ -787,8 +765,7 @@ export async function PATCH(req: Request) {
         data: {
           taxa,
 
-          taxaFechada:
-            true,
+          taxaFechada: true,
         },
       });
 
@@ -800,11 +777,7 @@ export async function PATCH(req: Request) {
       success: true,
 
       message:
-        `Taxa ${taxa.toFixed(
-          2
-        )} salva em ${
-          resultado.count
-        } venda(s).`,
+        `Taxa ${taxa.toFixed(2)} salva em ${resultado.count} venda(s).`,
 
       quantidade:
         resultado.count,

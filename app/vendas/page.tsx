@@ -41,7 +41,7 @@ type VendaItemForm = {
   imeis: string[];
 };
 
-type PagamentoForm = { forma: string; valor: string; desconto: string; observacao: string };
+type PagamentoForm = { forma: string; valor: string; observacao: string };
 
 type Venda = {
   id: number;
@@ -94,7 +94,7 @@ export default function VendasPage() {
 
   const [descontoVenda, setDescontoVenda] = useState("");
   const [pagamentos, setPagamentos] = useState<PagamentoForm[]>([
-    { forma: "Dinheiro", valor: "", desconto: "", observacao: "" },
+    { forma: "Dinheiro", valor: "", observacao: "" },
   ]);
 
   const [estadoFatura, setEstadoFatura] =
@@ -147,6 +147,9 @@ export default function VendasPage() {
 
   const [buscaModelo, setBuscaModelo] =
     useState<Record<number, string>>({});
+  const [buscaProdutoTabela, setBuscaProdutoTabela] = useState("");
+  const [telaPagamento, setTelaPagamento] = useState(false);
+  const [editarDesconto, setEditarDesconto] = useState(false);
 
   // =====================================================
   // IMEI
@@ -394,6 +397,15 @@ export default function VendasPage() {
       0
     );
 
+  const descontoVendaNumero = Number(String(descontoVenda || 0).replace(",", ".")) || 0;
+  const totalDescontos = descontoVendaNumero;
+  const totalLiquido = Math.max(0, total - totalDescontos);
+  const totalPagamentos = pagamentos.reduce(
+    (soma, p) => soma + (Number(String(p.valor || 0).replace(",", ".")) || 0),
+    0
+  );
+  const saldoPendente = Math.max(0, totalLiquido - totalPagamentos);
+
   // =====================================================
   // ATUALIZAR ITEM
   // =====================================================
@@ -440,12 +452,17 @@ export default function VendasPage() {
     index: number,
     produto: Produto
   ) {
+    const precoExistente = itens.find(
+      (item, i) => i !== index && item.produtoId === produto.id && item.valorUnitario !== ""
+    )?.valorUnitario || "";
+
     atualizarItem(
       index,
       {
         produtoId: produto.id,
         imeis: [],
         quantidade: 1,
+        valorUnitario: precoExistente,
       }
     );
 
@@ -454,6 +471,26 @@ export default function VendasPage() {
       ...atual,
       [index]: "",
     }));
+  }
+
+  function selecionarProdutoTabela(produto: Produto) {
+    const precoExistente = itens.find(
+      (item) => item.produtoId === produto.id && item.valorUnitario !== ""
+    )?.valorUnitario || "";
+    const itemVazio = itens.findIndex((item) => item.produtoId === "");
+    const novoItem: VendaItemForm = {
+      produtoId: produto.id,
+      quantidade: 1,
+      valorUnitario: precoExistente,
+      imeis: [],
+    };
+    if (itemVazio >= 0) {
+      atualizarItem(itemVazio, novoItem);
+    } else {
+      setItens((atuais) => [...atuais, novoItem]);
+    }
+    setBuscaProdutoTabela("");
+    setErro("");
   }
 
   // =====================================================
@@ -664,7 +701,7 @@ export default function VendasPage() {
 
           quantidade: 1,
 
-          valorUnitario: "",
+          valorUnitario: itens.find((item) => item.produtoId === aparelhoEncontrado.produtoId && item.valorUnitario !== "")?.valorUnitario || "",
 
           imeis: [
             aparelhoEncontrado.imei,
@@ -981,7 +1018,7 @@ export default function VendasPage() {
   // =====================================================
 
   function adicionarPagamento() {
-    setPagamentos((atuais) => [...atuais, { forma: "Pix", valor: "", desconto: "", observacao: "" }]);
+    setPagamentos((atuais) => [...atuais, { forma: "Pix", valor: "", observacao: "" }]);
   }
 
   function atualizarPagamento(index: number, campo: keyof PagamentoForm, valor: string) {
@@ -1124,12 +1161,12 @@ export default function VendasPage() {
                 ),
 
               formaPagamento: pagamentos.length === 1 ? pagamentos[0].forma : "Múltiplos pagamentos",
-              estadoFatura,
+              estadoFatura: totalPagamentos <= 0 ? "Não pago" : totalPagamentos + 0.005 >= totalLiquido ? "Pago" : "Parcial",
               descontoVenda: Number(String(descontoVenda || 0).replace(",", ".")) || 0,
-              pagamentos: pagamentos.filter((p) => p.valor !== "" || p.desconto !== "").map((p) => ({
+              pagamentos: pagamentos.filter((p) => p.valor !== "" || p.observacao !== "").map((p) => ({
                 ...p,
                 valor: Number(String(p.valor || 0).replace(",", ".")) || 0,
-                desconto: Number(String(p.desconto || 0).replace(",", ".")) || 0,
+                desconto: 0,
               })),
             }),
           }
@@ -1149,6 +1186,7 @@ export default function VendasPage() {
         data.message ||
           "Venda registrada com sucesso!"
       );
+      setTelaPagamento(false);
 
       setCliente("");
 
@@ -1156,7 +1194,7 @@ export default function VendasPage() {
 
       setFormaPagamento("Não informado");
       setDescontoVenda("");
-      setPagamentos([{ forma: "Dinheiro", valor: "", desconto: "", observacao: "" }]);
+      setPagamentos([{ forma: "Dinheiro", valor: "", observacao: "" }]);
 
       setEstadoFatura(
         "Não informado"
@@ -1991,7 +2029,7 @@ export default function VendasPage() {
     <main
       style={{
         padding: 24,
-        maxWidth: 1100,
+        maxWidth: 1450,
         margin: "0 auto",
         fontFamily:
           "Arial, sans-serif",
@@ -2079,13 +2117,14 @@ export default function VendasPage() {
 
       <section
         style={{
-          border:
-            "1px solid #e5e5e5",
+          border: "1px solid #e5e5e5",
           borderRadius: 12,
           padding: 20,
+          background: "#fff",
         }}
       >
-
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.7fr) minmax(280px, .8fr)", gap: 22, alignItems: "start" }}>
+          <div style={{ minWidth: 0 }}>
         <div
           style={{
             display: "flex",
@@ -2122,7 +2161,7 @@ export default function VendasPage() {
           style={{
             display: "grid",
             gridTemplateColumns:
-              "repeat(4, minmax(0, 1fr))",
+              "repeat(auto-fit, minmax(220px, 1fr))",
             gap: 14,
           }}
         >
@@ -2182,740 +2221,88 @@ export default function VendasPage() {
 
           </label>
 
-          {/* PAGAMENTOS MÚLTIPLOS E DESCONTOS */}
-          <div style={{ gridColumn: "1 / -1", border: "1px solid #ddd", borderRadius: 12, padding: 16, display: "grid", gap: 12 }}>
-            <h3 style={{ margin: 0 }}>Pagamentos da venda</h3>
-            <label style={{ display: "grid", gap: 6 }}>
-              Desconto na venda inteira (R$)
-              <input type="number" min="0" step="0.01" value={descontoVenda} onChange={(e) => setDescontoVenda(e.target.value)} placeholder="0,00" style={inputStyle} />
-            </label>
-            {pagamentos.map((pagamento, index) => (
-              <div key={index} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, alignItems: "end", padding: 12, background: "#f8f8f8", borderRadius: 8 }}>
-                <label style={{ display: "grid", gap: 6 }}>Forma de pagamento
-                  <select value={pagamento.forma} onChange={(e) => atualizarPagamento(index, "forma", e.target.value)} style={inputStyle}>
-                    <option>Dinheiro</option><option>Pix</option><option>Cartão de crédito</option><option>Cartão de débito</option><option>Transferência</option><option>Outro</option>
-                  </select>
-                </label>
-                <label style={{ display: "grid", gap: 6 }}>Valor pago (R$)
-                  <input type="number" min="0" step="0.01" value={pagamento.valor} onChange={(e) => atualizarPagamento(index, "valor", e.target.value)} placeholder="0,00" style={inputStyle} />
-                </label>
-                <label style={{ display: "grid", gap: 6 }}>Desconto nesta parcela (R$)
-                  <input type="number" min="0" step="0.01" value={pagamento.desconto} onChange={(e) => atualizarPagamento(index, "desconto", e.target.value)} placeholder="0,00" style={inputStyle} />
-                </label>
-                <label style={{ display: "grid", gap: 6 }}>Observação (opcional)
-                  <input value={pagamento.observacao} onChange={(e) => atualizarPagamento(index, "observacao", e.target.value)} placeholder="Ex.: 2x no cartão" style={inputStyle} />
-                </label>
-                {pagamentos.length > 1 && <button type="button" onClick={() => removerPagamento(index)} style={{ padding: 10, borderRadius: 8, border: "1px solid #d33", color: "#b00", background: "white", cursor: "pointer" }}>Remover</button>}
-              </div>
-            ))}
-            <button type="button" onClick={adicionarPagamento} style={{ padding: 10, borderRadius: 8, border: "1px solid #888", background: "white", cursor: "pointer" }}>+ Adicionar outra forma de pagamento</button>
-          </div>
-
-          {/* ESTADO */}
-
-          <label>
-
-            Estado da fatura
-
-            <select
-              value={
-                estadoFatura
-              }
-              onChange={(e) =>
-                setEstadoFatura(
-                  e.target.value
-                )
-              }
-              style={
-                inputStyle
-              }
-            >
-
-              <option>
-                Não informado
-              </option>
-
-              <option>
-                Pago
-              </option>
-
-              <option>
-                Pendente
-              </option>
-
-            </select>
-
-          </label>
+          {/* O estado do pagamento é calculado automaticamente pelo valor pago. */}
 
         </div>
 
         {/* ================================================= */}
-        {/* PRODUTOS */}
-        {/* ================================================= */}
+        {/* BUSCA DE PRODUTO E ITENS DA VENDA */}
+        <div style={{ marginTop: 18, position: "relative" }}>
+          <label style={{ display: "grid", gap: 7, fontWeight: 500 }}>
+            Buscar produto por nome ou código
+            <input
+              value={buscaProdutoTabela}
+              onChange={(e) => setBuscaProdutoTabela(e.target.value)}
+              placeholder="Digite o modelo para buscar um produto"
+              autoComplete="off"
+              style={inputStyle}
+            />
+          </label>
+          {buscaProdutoTabela.trim() && (
+            <div style={{ position: "absolute", zIndex: 30, left: 0, right: 0, top: "100%", background: "#fff", border: "1px solid #d8d8d8", borderRadius: 8, boxShadow: "0 6px 18px rgba(0,0,0,.12)", maxHeight: 260, overflowY: "auto" }}>
+              {produtos.filter((p) => p.quantidade > 0 && p.nome.toLowerCase().includes(buscaProdutoTabela.trim().toLowerCase())).slice(0, 20).map((p) => (
+                <button key={p.id} type="button" onClick={() => selecionarProdutoTabela(p)} style={{ display: "block", width: "100%", textAlign: "left", border: 0, borderBottom: "1px solid #eee", background: "white", padding: "12px 14px", cursor: "pointer" }}>
+                  <strong>{p.nome}</strong><span style={{ color: "#666", marginLeft: 12, fontSize: 12 }}>Estoque: {p.quantidade}</span>
+                </button>
+              ))}
+              {!produtos.some((p) => p.quantidade > 0 && p.nome.toLowerCase().includes(buscaProdutoTabela.trim().toLowerCase())) && <div style={{ padding: 12, color: "#777" }}>Nenhum produto encontrado.</div>}
+            </div>
+          )}
+        </div>
 
-        {itens.map(
-          (
-            item,
-            index
-          ) => {
-
-            const produto =
-              produtos.find(
-                (p) =>
-                  p.id ===
-                  item.produtoId
-              );
-
-            const disponiveis =
-              (
-                produto?.aparelhos ||
-                []
-              ).filter(
-                (a) =>
-                  !a.vendido
-              );
-
-            return (
-              <div
-                key={index}
-                style={{
-                  marginTop: 22,
-                  borderTop:
-                    "1px solid #eee",
-                  paddingTop: 18,
-                }}
-              >
-
-                <h3
-                  style={{
-                    fontSize: 16,
-                  }}
-                >
-                  Produto{" "}
-                  {index + 1}
-                </h3>
-
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns:
-                      "2fr .8fr 1fr 1fr",
-                    gap: 14,
-                  }}
-                >
-
-                  {/* MODELO */}
-
-                  <label style={{ position: "relative" }}>
-
-                    Modelo
-
-                    <input
-                      value={
-                        buscaModelo[index] ||
-                        (item.produtoId
-                          ? produtos.find(
-                              (p) =>
-                                p.id === item.produtoId
-                            )?.nome || ""
-                          : "")
-                      }
-                      onChange={(e) => {
-                        const valor = e.target.value;
-
-                        setBuscaModelo((atual) => ({
-                          ...atual,
-                          [index]: valor,
-                        }));
-
-                        if (item.produtoId) {
-                          atualizarItem(index, {
-                            produtoId: "",
-                            imeis: [],
-                            quantidade: 1,
-                          });
-                        }
-                      }}
-                      placeholder="Digite o modelo..."
-                      autoComplete="off"
-                      style={inputStyle}
-                    />
-
-                    {buscaModelo[index] && (
-                      <div
-                        style={{
-                          position: "absolute",
-                          zIndex: 50,
-                          left: 0,
-                          right: 0,
-                          top: "100%",
-                          marginTop: 4,
-                          background: "#fff",
-                          border: "1px solid #d8d8d8",
-                          borderRadius: 8,
-                          boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
-                          maxHeight: 260,
-                          overflowY: "auto",
-                        }}
-                      >
-                        {resultadosModelo(index).length > 0 ? (
-                          resultadosModelo(index).map((p) => (
-                            <button
-                              key={p.id}
-                              type="button"
-                              onClick={() =>
-                                selecionarModelo(index, p)
-                              }
-                              style={{
-                                display: "block",
-                                width: "100%",
-                                textAlign: "left",
-                                border: 0,
-                                borderBottom: "1px solid #eee",
-                                background: "#fff",
-                                padding: "11px 12px",
-                                cursor: "pointer",
-                              }}
-                            >
-                              <strong>{p.nome}</strong>
-                              <div
-                                style={{
-                                  marginTop: 3,
-                                  color: "#666",
-                                  fontSize: 12,
-                                }}
-                              >
-                                Estoque: {p.quantidade}
-                              </div>
-                            </button>
-                          ))
-                        ) : (
-                          <div
-                            style={{
-                              padding: 12,
-                              color: "#777",
-                            }}
-                          >
-                            Nenhum modelo encontrado.
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                  </label>
-
-                  {/* QUANTIDADE */}
-
-                  <label>
-
-                    Quantidade
-
-                    <input
-                      type="number"
-                      min={1}
-                      max={
-                        disponiveis.length ||
-                        1
-                      }
-                      value={
-                        item.quantidade
-                      }
-                      onChange={(
-                        e
-                      ) =>
-                        atualizarItem(
-                          index,
-                          {
-                            quantidade:
-                              Number(
-                                e
-                                  .target
-                                  .value
-                              ) || 1,
-                          }
-                        )
-                      }
-                      style={
-                        inputStyle
-                      }
-                    />
-
-                  </label>
-
-                  {/* PREÇO */}
-
-                  <label>
-
-                    Preço por aparelho
-
-                    <input
-                      value={
-                        item.valorUnitario
-                      }
-                      onChange={(
-                        e
-                      ) =>
-                        atualizarItem(
-                          index,
-                          {
-                            valorUnitario:
-                              e
-                                .target
-                                .value,
-                          }
-                        )
-                      }
-                      placeholder="R$ 0,00"
-                      inputMode="decimal"
-                      style={
-                        inputStyle
-                      }
-                    />
-
-                  </label>
-
-                  {/* TOTAL */}
-
-                  <div>
-
-                    <span>
-                      Total
-                    </span>
-
-                    <div
-                      style={{
-                        ...inputStyle,
-                        background:
-                          "#eef1f4",
-                        fontWeight: 700,
-                      }}
-                    >
-                      {dinheiro(
-                        (Number(
-                          item.quantidade
-                        ) || 0) *
-                          (Number(
-                            String(
-                              item.valorUnitario
-                            ).replace(
-                              ",",
-                              "."
-                            )
-                          ) || 0)
-                      )}
-                    </div>
-
-                  </div>
-
+        <div style={{ marginTop: 14 }}>
+          <label style={{ display: "grid", gap: 7, fontWeight: 600 }}>
+            Pesquisar IMEI
+            <input
+              ref={(element) => { imeiInputRefs.current[imeiInputAtivo] = element; }}
+              onFocus={() => setImeiInputAtivo(Math.max(0, imeiInputAtivo))}
+              value={imeiBusca}
+              onChange={(e) => setImeiBusca(e.target.value.replace(/\s/g, ""))}
+              onKeyDown={onImeiKeyDown}
+              placeholder="Digite ou faça Scan do IMEI"
+              inputMode="numeric"
+              autoComplete="off"
+              style={inputStyle}
+            />
+          </label>
+          {imeiBusca && (
+            <div style={{ marginTop: 8, border: "1px solid #b9d8ff", borderRadius: 8, padding: 12 }}>
+              {resultadosBusca.length > 0 ? resultadosBusca.map((a) => (
+                <div key={a.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: 8, borderBottom: "1px solid #eee" }}>
+                  <span>{a.produto?.nome || produtos.find((p) => p.id === a.produtoId)?.nome || "Produto"} — IMEI {a.imei}</span>
+                  <button type="button" onClick={() => adicionarImeiEncontrado()} style={smallBlueButton}>Adicionar</button>
                 </div>
-
-                {/* ================================================= */}
-                {/* IMEI */}
-                {/* ================================================= */}
-
-                <div
-                  style={{
-                    marginTop: 14,
-                  }}
-                >
-
-                  <label>
-
-                    <b>
-                      Pesquisar IMEI
-                    </b>
-
-                    <input
-                      ref={(element) => {
-                        imeiInputRefs.current[index] =
-                          element;
-                      }}
-                      onFocus={() =>
-                        setImeiInputAtivo(index)
-                      }
-                      value={
-                        imeiBusca
-                      }
-                      onChange={(
-                        e
-                      ) =>
-                        setImeiBusca(
-                          e.target.value.replace(
-                            /\s/g,
-                            ""
-                          )
-                        )
-                      }
-                      onKeyDown={
-                        onImeiKeyDown
-                      }
-                      placeholder="Digite ou faça Scan do IMEI"
-                      inputMode="numeric"
-                      autoComplete="off"
-                      style={
-                        inputStyle
-                      }
-                    />
-
-                  </label>
-
-                  {imeiBusca && (
-                    <div
-                      style={{
-                        marginTop: 10,
-                        border:
-                          "1px solid #b9d8ff",
-                        borderRadius: 10,
-                        padding: 14,
-                      }}
-                    >
-
-                      {resultadosBusca.length >
-                      0 ? (
-
-                        <div
-                          style={{
-                            overflowX:
-                              "auto",
-                          }}
-                        >
-
-                          <table
-                            style={{
-                              width:
-                                "100%",
-                              borderCollapse:
-                                "collapse",
-                            }}
-                          >
-
-                            <thead>
-
-                              <tr>
-
-                                <th
-                                  style={
-                                    th
-                                  }
-                                >
-                                  IMEI
-                                </th>
-
-                                <th
-                                  style={
-                                    th
-                                  }
-                                >
-                                  Modelo
-                                </th>
-
-                                <th
-                                  style={
-                                    th
-                                  }
-                                >
-                                  Status
-                                </th>
-
-                                <th
-                                  style={
-                                    th
-                                  }
-                                >
-                                  Ação
-                                </th>
-
-                              </tr>
-
-                            </thead>
-
-                            <tbody>
-
-                              {resultadosBusca.map(
-                                (
-                                  a
-                                ) => (
-                                  <tr
-                                    key={
-                                      a.id
-                                    }
-                                  >
-
-                                    <td
-                                      style={
-                                        td
-                                      }
-                                    >
-                                      {
-                                        a.imei
-                                      }
-                                    </td>
-
-                                    <td
-                                      style={
-                                        td
-                                      }
-                                    >
-                                      {
-                                        a
-                                          .produto
-                                          ?.nome
-                                      }
-                                    </td>
-
-                                    <td
-                                      style={
-                                        td
-                                      }
-                                    >
-
-                                      <span
-                                        style={{
-                                          color:
-                                            "#16823b",
-                                          fontWeight:
-                                            600,
-                                        }}
-                                      >
-                                        Disponível
-                                      </span>
-
-                                    </td>
-
-                                    <td
-                                      style={
-                                        td
-                                      }
-                                    >
-
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-
-                                          const idx =
-                                            itens.findIndex(
-                                              (
-                                                x
-                                              ) =>
-                                                x.produtoId ===
-                                                a.produtoId
-                                            );
-
-                                          let destino =
-                                            idx;
-
-                                          if (
-                                            destino < 0
-                                          ) {
-                                            destino =
-                                              itens.findIndex(
-                                                (
-                                                  x
-                                                ) =>
-                                                  x.produtoId ===
-                                                  ""
-                                              );
-                                          }
-
-                                          if (
-                                            destino >=
-                                            0
-                                          ) {
-
-                                            if (
-                                              itens[destino]
-                                                .produtoId ===
-                                              ""
-                                            ) {
-                                              atualizarItem(
-                                                destino,
-                                                {
-                                                  produtoId:
-                                                    a.produtoId,
-
-                                                  quantidade: 1,
-
-                                                  imeis: [
-                                                    a.imei,
-                                                  ],
-                                                }
-                                              );
-                                            } else {
-                                              adicionarImeiAoItem(
-                                                destino,
-                                                a.imei
-                                              );
-                                            }
-
-                                            setImeiInputAtivo(
-                                              destino
-                                            );
-
-                                            setImeiBusca(
-                                              ""
-                                            );
-
-                                            focarCampoImei(
-                                              destino
-                                            );
-                                          }
-
-                                        }}
-                                        style={
-                                          smallBlueButton
-                                        }
-                                      >
-                                        Adicionar
-                                      </button>
-
-                                    </td>
-
-                                  </tr>
-                                )
-                              )}
-
-                            </tbody>
-
-                          </table>
-
-                        </div>
-
-                      ) : (
-
-                        <div
-                          style={{
-                            color:
-                              "#b42318",
-                          }}
-                        >
-                          IMEI não encontrado
-                          ou já vendido.
-                        </div>
-
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          adicionarImeiEncontrado(
-                            index
-                          )
-                        }
-                        style={{
-                          ...blueButton,
-                          marginTop: 10,
-                        }}
-                      >
-                        Buscar / Adicionar
-                      </button>
-
-                    </div>
-                  )}
-
-                </div>
-
-                {/* ================================================= */}
-                {/* IMEIS ADICIONADOS */}
-                {/* ================================================= */}
-
-                <div
-                  style={{
-                    marginTop: 14,
-                  }}
-                >
-
-                  <strong>
-                    IMEIs adicionados (
-                    {
-                      item.imeis
-                        .length
-                    }
-                    )
-                  </strong>
-
-                  {item.imeis
-                    .length === 0 ? (
-
-                    <p
-                      style={{
-                        color:
-                          "#777",
-                      }}
-                    >
-                      Nenhum IMEI adicionado ainda.
-                    </p>
-
-                  ) : (
-
-                    <div
-                      style={{
-                        display:
-                          "flex",
-                        flexWrap:
-                          "wrap",
-                        gap: 8,
-                        marginTop: 8,
-                      }}
-                    >
-
-                      {item.imeis.map(
-                        (
-                          imei
-                        ) => (
-
-                          <span
-                            key={
-                              imei
-                            }
-                            style={{
-                              border:
-                                "1px solid #ddd",
-                              borderRadius:
-                                8,
-                              padding:
-                                "7px 10px",
-                            }}
-                          >
-
-                            {imei}
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                removerImei(
-                                  index,
-                                  imei
-                                )
-                              }
-                              style={{
-                                marginLeft: 8,
-                                border: 0,
-                                background:
-                                  "transparent",
-                                cursor:
-                                  "pointer",
-                                color:
-                                  "#c62828",
-                              }}
-                            >
-                              ×
-                            </button>
-
-                          </span>
-
-                        )
-                      )}
-
-                    </div>
-
-                  )}
-
-                </div>
-
-              </div>
-            );
-          }
-        )}
+              )) : <span style={{ color: "#b42318" }}>IMEI não encontrado ou já vendido.</span>}
+            </div>
+          )}
+        </div>
+
+        <div style={{ marginTop: 22, overflowX: "auto", border: "1px solid #e5e7eb", borderRadius: 10 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
+            <thead><tr>
+              <th style={th}>Qtde</th><th style={th}>Nome</th><th style={th}>Código / IMEI</th><th style={th}>Preço Unitário</th><th style={th}>Valor Total</th><th style={th}>Ações</th>
+            </tr></thead>
+            <tbody>
+              {itens.map((item, index) => {
+                if (item.produtoId === "") return null;
+                const produto = produtos.find((p) => p.id === item.produtoId);
+                const subtotal = (Number(item.quantidade) || 0) * (Number(String(item.valorUnitario || 0).replace(",", ".")) || 0);
+                return <tr key={`${item.produtoId}-${index}`}>
+                  <td style={td}>
+                    <input type="number" min={1} max={Math.max(item.quantidade, produto?.quantidade || 1)} value={item.quantidade} onChange={(e) => atualizarItem(index, { quantidade: Math.max(1, Number(e.target.value) || 1) })} style={{ ...inputStyle, width: 76, padding: 8 }} />
+                  </td>
+                  <td style={td}><strong>{produto?.nome || "Produto"}</strong></td>
+                  <td style={td}>{item.imeis.length ? item.imeis.map((imei) => <div key={imei} style={{ whiteSpace: "nowrap" }}>{imei} <button type="button" onClick={() => removerImei(index, imei)} title="Remover IMEI" style={{ border: 0, background: "transparent", color: "#b42318", cursor: "pointer" }}>×</button></div>) : <span style={{ color: "#777" }}>IMEI pendente</span>}</td>
+                  <td style={td}><input value={item.valorUnitario} onChange={(e) => atualizarItem(index, { valorUnitario: e.target.value })} placeholder="R$ 0,00" inputMode="decimal" style={{ ...inputStyle, width: 130, padding: 8 }} /></td>
+                  <td style={td}><strong>{dinheiro(subtotal)}</strong></td>
+                  <td style={td}><button type="button" onClick={() => setItens((atuais) => atuais.filter((_, i) => i !== index))} style={{ ...smallBlueButton, background: "#333" }}>Excluir</button></td>
+                </tr>;
+              })}
+              {!itens.some((item) => item.produtoId !== "") && <tr><td style={td} colSpan={6}><span style={{ color: "#777" }}>Nenhum produto adicionado ainda.</span></td></tr>}
+              <tr style={{ background: "#f3f4f6", fontWeight: 700 }}><td style={td} colSpan={4} align="right">Total</td><td style={td}>{dinheiro(total)}</td><td style={td}></td></tr>
+            </tbody>
+          </table>
+        </div>
 
         {/* ================================================= */}
         {/* ERRO */}
@@ -2957,52 +2344,50 @@ export default function VendasPage() {
           </div>
         )}
 
-        {/* ================================================= */}
-        {/* BOTÕES */}
-        {/* ================================================= */}
+          </div>
 
-        <div
-          style={{
-            display: "flex",
-            gap: 10,
-            marginTop: 20,
-            flexWrap:
-              "wrap",
-          }}
-        >
-
-          <button
-            type="button"
-            onClick={
-              adicionarModelo
-            }
-            style={
-              blueButton
-            }
-          >
-            + Adicionar outro modelo
-          </button>
-
-          <button
-            type="button"
-            onClick={
-              registrarVenda
-            }
-            disabled={
-              salvando
-            }
-            style={
-              blackButton
-            }
-          >
-            {salvando
-              ? "Salvando..."
-              : "Registrar venda"}
-          </button>
-
+          <aside style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 18, background: "#fafafa", position: "sticky", top: 18 }}>
+            <h3 style={{ margin: "0 0 18px", fontSize: 18 }}>Pagamentos</h3>
+            <div style={{ display: "grid", gap: 0 }}>
+              <div style={summaryRowStyle}><span>Total</span><strong>{dinheiro(total)}</strong></div>
+              <div style={summaryRowStyle}><span>Descontos</span><span style={{ display: "flex", alignItems: "center", gap: 8 }}><strong>{dinheiro(totalDescontos)}</strong><button type="button" onClick={() => setEditarDesconto((v) => !v)} aria-label="Editar desconto" title="Editar desconto" style={{ border: 0, background: "transparent", color: "#1677d2", cursor: "pointer", fontSize: 17 }}>✎</button></span></div>
+              {editarDesconto && <div style={{ padding: "8px 0 12px" }}><label style={{ display: "grid", gap: 6, fontSize: 13 }}>Desconto na venda inteira (R$)<input autoFocus type="number" min="0" step="0.01" value={descontoVenda} onChange={(e) => setDescontoVenda(e.target.value)} placeholder="0,00" style={inputStyle} /></label><button type="button" onClick={() => setEditarDesconto(false)} style={{ ...smallBlueButton, marginTop: 8 }}>Concluir</button></div>}
+              <div style={summaryRowStyle}><span>Valor final</span><strong>{dinheiro(totalLiquido)}</strong></div>
+              <div style={summaryRowStyle}><span>Pagamentos</span><strong>{dinheiro(totalPagamentos)}</strong></div>
+              <div style={{ ...summaryRowStyle, borderBottom: 0, paddingTop: 16, fontSize: 16 }}><span>Total em aberto</span><strong style={{ color: saldoPendente > 0 ? "#b45309" : "#15803d" }}>{dinheiro(saldoPendente)}</strong></div>
+            </div>
+            <div style={{ display: "grid", gap: 10, marginTop: 18 }}>
+              <button type="button" onClick={() => setTelaPagamento(true)} style={blueButton}>$ Informar pagamento</button>
+            </div>
+          </aside>
         </div>
 
       </section>
+
+      {telaPagamento && (
+        <div role="dialog" aria-modal="true" aria-label="Informar pagamento" style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(15,23,42,.55)", display: "grid", placeItems: "center", padding: 18 }}>
+          <div style={{ width: "min(760px, 100%)", maxHeight: "90vh", overflowY: "auto", background: "#fff", borderRadius: 14, padding: 24, boxShadow: "0 20px 60px rgba(0,0,0,.25)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 18 }}><h2 style={{ margin: 0 }}>Informar pagamento</h2><button type="button" onClick={() => setTelaPagamento(false)} style={{ border: 0, background: "transparent", fontSize: 26, cursor: "pointer" }} aria-label="Fechar">×</button></div>
+            <div style={{ display: "grid", gap: 0, marginBottom: 18 }}>
+              <div style={summaryRowStyle}><span>Total</span><strong>{dinheiro(total)}</strong></div>
+              <div style={summaryRowStyle}><span>Descontos</span><strong>{dinheiro(totalDescontos)}</strong></div>
+              <div style={summaryRowStyle}><span>Valor final</span><strong>{dinheiro(totalLiquido)}</strong></div>
+              <div style={summaryRowStyle}><span>Pagamentos</span><strong>{dinheiro(totalPagamentos)}</strong></div>
+              <div style={{ ...summaryRowStyle, borderBottom: 0 }}><span>Total em aberto</span><strong>{dinheiro(saldoPendente)}</strong></div>
+            </div>
+            {pagamentos.map((pagamento, index) => (
+              <div key={index} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, alignItems: "end", padding: 12, background: "#f8f8f8", borderRadius: 8, marginBottom: 10 }}>
+                <label style={{ display: "grid", gap: 6 }}>Forma de pagamento<select value={pagamento.forma} onChange={(e) => atualizarPagamento(index, "forma", e.target.value)} style={inputStyle}><option>Dinheiro</option><option>Pix</option><option>Cartão de crédito</option><option>Cartão de débito</option><option>Transferência</option><option>Outro</option></select></label>
+                <label style={{ display: "grid", gap: 6 }}>Valor pago (R$)<input type="number" min="0" step="0.01" value={pagamento.valor} onChange={(e) => atualizarPagamento(index, "valor", e.target.value)} placeholder="0,00" style={inputStyle} /></label>
+                <label style={{ display: "grid", gap: 6 }}>Observação (opcional)<input value={pagamento.observacao} onChange={(e) => atualizarPagamento(index, "observacao", e.target.value)} placeholder="Ex.: 2x no cartão" style={inputStyle} /></label>
+                {pagamentos.length > 1 && <button type="button" onClick={() => removerPagamento(index)} style={{ padding: 10, borderRadius: 8, border: "1px solid #d33", color: "#b00", background: "white", cursor: "pointer" }}>Remover</button>}
+              </div>
+            ))}
+            <button type="button" onClick={adicionarPagamento} style={{ padding: 10, borderRadius: 8, border: "1px solid #888", background: "white", cursor: "pointer", marginBottom: 20 }}>+ Adicionar outra forma de pagamento</button>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}><button type="button" onClick={() => setTelaPagamento(false)} style={{ ...blueButton, background: "#64748b" }}>← Voltar</button><div style={{ display: "flex", alignItems: "center", gap: 12 }}><span style={{ fontSize: 13, color: "#555" }}>Estado: <strong>{totalPagamentos <= 0 ? "Não pago" : totalPagamentos + 0.005 >= totalLiquido ? "Pago" : "Parcial"}</strong></span><button type="button" onClick={registrarVenda} disabled={salvando} style={{ ...blueButton, background: "#15803d", opacity: salvando ? .6 : 1 }}>{salvando ? "Salvando..." : "Finalizar venda"}</button></div></div>
+          </div>
+        </div>
+      )}
 
       {/* ================================================= */}
       {/* HISTÓRICO POR DIA */}
@@ -4055,6 +3440,16 @@ export default function VendasPage() {
 /* ================================================= */
 /* ESTILOS */
 /* ================================================= */
+
+const summaryRowStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  padding: "13px 0",
+  borderBottom: "1px solid #e5e7eb",
+  color: "#374151",
+};
 
 const inputStyle: React.CSSProperties =
   {
