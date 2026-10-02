@@ -67,6 +67,7 @@ type Venda = {
   itens?: any[];
   pagamentos?: { id?: number; forma?: string | null; valor?: number; desconto?: number; observacao?: string | null }[];
   descontoVenda?: number;
+  desconto?: number;
   descontosPagamentos?: number;
   valorFinal?: number;
   totalPago?: number;
@@ -182,6 +183,9 @@ export default function VendasPage() {
     useState(false);
 
   const [excluindoVendaId, setExcluindoVendaId] =
+    useState<number | null>(null);
+
+  const [editandoVendaId, setEditandoVendaId] =
     useState<number | null>(null);
 
   const [devolvendoAparelhoId, setDevolvendoAparelhoId] =
@@ -1106,7 +1110,7 @@ export default function VendasPage() {
         await fetch(
           "/api/vendas",
           {
-            method: "POST",
+            method: editandoVendaId ? "PUT" : "POST",
 
             headers: {
               "Content-Type":
@@ -1114,6 +1118,7 @@ export default function VendasPage() {
             },
 
             body: JSON.stringify({
+              ...(editandoVendaId ? { vendaId: editandoVendaId } : {}),
               cliente,
 
               dataVenda,
@@ -1184,8 +1189,9 @@ export default function VendasPage() {
 
       setMensagem(
         data.message ||
-          "Venda registrada com sucesso!"
+          (editandoVendaId ? "Venda atualizada com sucesso!" : "Venda registrada com sucesso!")
       );
+      setEditandoVendaId(null);
       setTelaPagamento(false);
 
       setCliente("");
@@ -1236,6 +1242,61 @@ export default function VendasPage() {
     } finally {
       setSalvando(false);
     }
+  }
+
+  // =====================================================
+  // EDITAR VENDA EXISTENTE
+  // =====================================================
+
+  function iniciarEdicaoVenda(venda: Venda) {
+    const itensVenda = Array.isArray(venda.itens) ? venda.itens : [];
+    if (!itensVenda.length) {
+      setErro("Esta venda não possui itens para editar.");
+      return;
+    }
+
+    setErro("");
+    setMensagem("");
+    setEditandoVendaId(venda.id);
+    setCliente(venda.cliente || "");
+    setDataVenda(String(venda.dataVenda || venda.createdAt || "").slice(0, 10) || dataHoje());
+    setTaxa(venda.taxa == null ? "" : String(venda.taxa));
+    setDescontoVenda(String(Number(venda.descontoVenda ?? (venda as any).desconto ?? 0)));
+    setFormaPagamento(venda.formaPagamento || "Não informado");
+    setEstadoFatura(venda.estadoFatura || "Não informado");
+    setItens(itensVenda.map((item: any) => {
+      const aparelhos = Array.isArray(item.aparelhos) ? item.aparelhos : [];
+      return {
+        produtoId: Number(item.produtoId ?? item.produto?.id) || "",
+        quantidade: Number(item.quantidade) || aparelhos.length || 1,
+        valorUnitario: String(Number(item.valorUnitario ?? item.preco ?? item.valor ?? 0)),
+        imeis: aparelhos.map((a: any) => String(a.imei || "")).filter(Boolean),
+      };
+    }));
+    const pagamentosVenda = Array.isArray(venda.pagamentos) ? venda.pagamentos : [];
+    setPagamentos(pagamentosVenda.length ? pagamentosVenda.map((p: any) => ({
+      forma: p.forma || "Dinheiro",
+      valor: String(Number(p.valor || 0)),
+      observacao: p.observacao || "",
+    })) : [{ forma: venda.formaPagamento || "Dinheiro", valor: "", observacao: "" }]);
+    setBuscaModelo({});
+    setImeiBusca("");
+    setTelaPagamento(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function cancelarEdicaoVenda() {
+    setEditandoVendaId(null);
+    setCliente("");
+    setTaxa("");
+    setDescontoVenda("");
+    setPagamentos([{ forma: "Dinheiro", valor: "", observacao: "" }]);
+    setEstadoFatura("Não informado");
+    setDataVenda(dataHoje());
+    setItens([{ produtoId: "", quantidade: 1, valorUnitario: "", imeis: [] }]);
+    setBuscaModelo({});
+    setImeiBusca("");
+    setTelaPagamento(false);
   }
 
   // =====================================================
@@ -1819,131 +1880,102 @@ export default function VendasPage() {
   // WHATSAPP
   // =====================================================
 
-  function enviarWhatsApp(
-    venda: Venda
-  ) {
-    const itensVenda =
-      Array.isArray(
-        venda.itens
-      )
-        ? venda.itens
-        : [];
+  async function enviarWhatsApp(venda: Venda) {
+    const itensVenda = Array.isArray(venda.itens) ? venda.itens : [];
+    const numeroFatura = String(venda.id).padStart(6, "0");
+    const dataVendaTexto = formatarData(venda.dataVenda || venda.createdAt || venda.data);
+    const totalBruto = totalDaVenda(venda);
+    const desconto = Number(venda.descontoVenda ?? (venda as any).desconto ?? 0) || 0;
+    const totalFinal = Math.max(0, totalBruto - desconto);
 
-    const numeroFatura =
-      String(
-        venda.id
-      ).padStart(
-        6,
-        "0"
-      );
-
-    const dataVendaTexto =
-      formatarData(
-        venda.dataVenda ||
-          venda.createdAt ||
-          venda.data
-      );
-
-    let texto =
-      `*Adel's Mundo Cell*\n` +
-      `🧾 *Fatura #${numeroFatura}*\n\n`;
-
-    texto +=
-      `👤 Cliente: ${
-        venda.cliente ||
-        "Não informado"
-      }\n`;
-
-    texto +=
-      `📅 Data: ${dataVendaTexto}\n`;
-
-    texto +=
-      `💳 Pagamento: ${
-        venda.formaPagamento ||
-        "Não informado"
-      }\n`;
-
-    texto +=
-      `📄 Estado: ${
-        venda.estadoFatura ||
-        "Não informado"
-      }\n\n`;
-
-    texto +=
-      `*Produtos:*\n`;
-
-    itensVenda.forEach(
-      (
-        item: any,
-        index: number
-      ) => {
-        const quantidade =
-          Number(
-            item.quantidade
-          ) || 0;
-
-        const valor =
-          Number(
-            item.valorUnitario ??
-              item.preco ??
-              item.valor ??
-              0
-          ) || 0;
-
-        const subtotal =
-          typeof item.total ===
-          "number"
-            ? item.total
-            : quantidade *
-              valor;
-
-        const nome =
-          nomeProdutoDoItem(
-            item
-          );
-
-        const imeis =
-          imeisDoItem(
-            item
-          );
-
-        texto +=
-          `\n${index + 1}. *${nome}*\n`;
-
-        texto +=
-          `Quantidade: ${quantidade}\n`;
-
-        texto +=
-          `Preço: ${dinheiro(valor)}\n`;
-
-        texto +=
-          `IMEI: ${imeis}\n`;
-
-        texto +=
-          `Subtotal: ${dinheiro(subtotal)}\n`;
+    const canvas = document.createElement("canvas");
+    const width = 1000;
+    const padding = 64;
+    const lineHeight = 38;
+    const itemLines: string[] = [];
+    itensVenda.forEach((item: any, index: number) => {
+      const quantidade = Number(item.quantidade) || 0;
+      const valor = Number(item.valorUnitario ?? item.preco ?? item.valor ?? 0) || 0;
+      const subtotal = typeof item.total === "number" ? item.total : quantidade * valor;
+      itemLines.push(`${index + 1}. ${nomeProdutoDoItem(item)}  |  Qtde: ${quantidade}`);
+      itemLines.push(`   IMEI: ${imeisDoItem(item) || "—"}`);
+      itemLines.push(`   Unitário: ${dinheiro(valor)}  |  Subtotal: ${dinheiro(subtotal)}`);
+      itemLines.push("");
+    });
+    const lines = [
+      "ADEL'S MUNDO CELL",
+      `FATURA #${numeroFatura}`,
+      `Cliente: ${venda.cliente || "Não informado"}`,
+      `Data: ${dataVendaTexto}`,
+      "",
+      "PRODUTOS",
+      ...itemLines,
+      "────────────────────────────────────────",
+      `Total: ${dinheiro(totalBruto)}`,
+      `Desconto: ${dinheiro(desconto)}`,
+      `VALOR FINAL: ${dinheiro(totalFinal)}`,
+      `Pagamento: ${venda.formaPagamento || "Não informado"}`,
+      `Estado: ${venda.estadoFatura || "Não informado"}`,
+      "",
+      "Obrigado pela preferência!",
+    ];
+    canvas.width = width;
+    canvas.height = padding * 2 + lines.length * lineHeight + 50;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      setErro("Não foi possível gerar a imagem da fatura neste navegador.");
+      return;
+    }
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#111827";
+    ctx.textBaseline = "top";
+    lines.forEach((line, i) => {
+      if (i === 0) {
+        ctx.font = "bold 34px Arial";
+        ctx.fillStyle = "#0f172a";
+      } else if (i === 1) {
+        ctx.font = "bold 27px Arial";
+        ctx.fillStyle = "#2563eb";
+      } else if (line === "PRODUTOS") {
+        ctx.font = "bold 23px Arial";
+        ctx.fillStyle = "#111827";
+      } else if (line.startsWith("VALOR FINAL:")) {
+        ctx.font = "bold 25px Arial";
+        ctx.fillStyle = "#15803d";
+      } else {
+        ctx.font = "20px Arial";
+        ctx.fillStyle = "#374151";
       }
-    );
+      ctx.fillText(line, padding, padding + i * lineHeight, width - padding * 2);
+    });
 
-    texto +=
-      `\n💰 *TOTAL: ${dinheiro(
-        totalDaVenda(venda)
-      )}*\n\n`;
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) {
+      setErro("Não foi possível criar a imagem da fatura.");
+      return;
+    }
+    const file = new File([blob], `Fatura-${numeroFatura}.png`, { type: "image/png" });
+    const texto = `Olá! Segue a imagem da fatura #${numeroFatura} da Adel's Mundo Cell.`;
+    try {
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: `Fatura #${numeroFatura}`, text: texto });
+        return;
+      }
+    } catch (error: any) {
+      if (error?.name === "AbortError") return;
+    }
 
-    texto +=
-      `Obrigado pela preferência! 🙏\n`;
-
-    texto +=
-      `*Adel's Mundo Cell*`;
-
-    const url =
-      `https://wa.me/?text=${encodeURIComponent(
-        texto
-      )}`;
-
-    window.open(
-      url,
-      "_blank"
-    );
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Fatura-${numeroFatura}.png`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, "_blank");
+    window.alert("A imagem da fatura foi baixada. No WhatsApp, anexe a imagem baixada para enviar como foto.");
   }
 
   // =====================================================
@@ -2357,7 +2389,7 @@ export default function VendasPage() {
               <div style={{ ...summaryRowStyle, borderBottom: 0, paddingTop: 16, fontSize: 16 }}><span>Total em aberto</span><strong style={{ color: saldoPendente > 0 ? "#b45309" : "#15803d" }}>{dinheiro(saldoPendente)}</strong></div>
             </div>
             <div style={{ display: "grid", gap: 10, marginTop: 18 }}>
-              <button type="button" onClick={() => setTelaPagamento(true)} style={blueButton}>$ Informar pagamento</button>
+              <button type="button" onClick={() => setTelaPagamento(true)} style={blueButton}>$ Informar pagamento</button>{editandoVendaId && <button type="button" onClick={cancelarEdicaoVenda} style={{ ...blueButton, background: "#b91c1c", marginTop: 8 }}>Cancelar edição</button>}
             </div>
           </aside>
         </div>
@@ -2384,7 +2416,7 @@ export default function VendasPage() {
               </div>
             ))}
             <button type="button" onClick={adicionarPagamento} style={{ padding: 10, borderRadius: 8, border: "1px solid #888", background: "white", cursor: "pointer", marginBottom: 20 }}>+ Adicionar outra forma de pagamento</button>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}><button type="button" onClick={() => setTelaPagamento(false)} style={{ ...blueButton, background: "#64748b" }}>← Voltar</button><div style={{ display: "flex", alignItems: "center", gap: 12 }}><span style={{ fontSize: 13, color: "#555" }}>Estado: <strong>{totalPagamentos <= 0 ? "Não pago" : totalPagamentos + 0.005 >= totalLiquido ? "Pago" : "Parcial"}</strong></span><button type="button" onClick={registrarVenda} disabled={salvando} style={{ ...blueButton, background: "#15803d", opacity: salvando ? .6 : 1 }}>{salvando ? "Salvando..." : "Finalizar venda"}</button></div></div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}><button type="button" onClick={() => setTelaPagamento(false)} style={{ ...blueButton, background: "#64748b" }}>← Voltar</button>{editandoVendaId && <button type="button" onClick={cancelarEdicaoVenda} style={{ ...blueButton, background: "#b91c1c" }}>Cancelar edição</button>}<div style={{ display: "flex", alignItems: "center", gap: 12 }}><span style={{ fontSize: 13, color: "#555" }}>Estado: <strong>{totalPagamentos <= 0 ? "Não pago" : totalPagamentos + 0.005 >= totalLiquido ? "Pago" : "Parcial"}</strong></span><button type="button" onClick={registrarVenda} disabled={salvando} style={{ ...blueButton, background: "#15803d", opacity: salvando ? .6 : 1 }}>{salvando ? "Salvando..." : editandoVendaId ? "Salvar alterações" : "Finalizar venda"}</button></div></div>
           </div>
         </div>
       )}
@@ -3218,6 +3250,14 @@ export default function VendasPage() {
                                         }
                                       >
                                         🧾 Fatura
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => iniciarEdicaoVenda(venda)}
+                                        style={{ ...invoiceButton, background: "#475569" }}
+                                      >
+                                        ✏️ Editar venda
                                       </button>
 
                                       <button
