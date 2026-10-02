@@ -379,10 +379,6 @@ export async function POST(req: Request) {
             valorUnitario,
             imeis,
           };
-        },
-        {
-          maxWait: 10000,
-          timeout: 15000,
         }
       );
     } catch (error) {
@@ -683,6 +679,10 @@ export async function POST(req: Request) {
             venda: vendaCompleta,
             totalVenda,
           };
+        },
+        {
+          maxWait: 10000,
+          timeout: 15000,
         }
       );
 

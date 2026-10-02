@@ -1956,10 +1956,9 @@ export default function VendasPage() {
       return;
     }
     const file = new File([blob], `Fatura-${numeroFatura}.png`, { type: "image/png" });
-    const texto = `Olá! Segue a imagem da fatura #${numeroFatura} da Adel's Mundo Cell.`;
     try {
       if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: `Fatura #${numeroFatura}`, text: texto });
+        await navigator.share({ files: [file], title: `Fatura #${numeroFatura}` });
         return;
       }
     } catch (error: any) {
@@ -1974,7 +1973,7 @@ export default function VendasPage() {
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
-    window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, "_blank");
+    window.open("https://wa.me/", "_blank");
     window.alert("A imagem da fatura foi baixada. No WhatsApp, anexe a imagem baixada para enviar como foto.");
   }
 
