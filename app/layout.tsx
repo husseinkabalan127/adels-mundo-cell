@@ -58,8 +58,7 @@ export default function RootLayout({
           return;
         }
 
-        const data =
-          await response.json();
+        const data = await response.json();
 
         if (data?.user) {
           setUsuario(data.user);
@@ -123,13 +122,12 @@ export default function RootLayout({
     setSaindo(true);
 
     try {
-      const response =
-        await fetch(
-          "/api/logout",
-          {
-            method: "POST",
-          }
-        );
+      const response = await fetch(
+        "/api/logout",
+        {
+          method: "POST",
+        }
+      );
 
       if (!response.ok) {
         alert(
@@ -196,16 +194,16 @@ export default function RootLayout({
             SIDEBAR
         ================================================== */}
 
-        <aside className="fixed left-0 top-0 z-50 h-screen w-64 border-r bg-white shadow-lg">
+        <aside className="fixed left-0 top-0 z-50 h-screen w-64 overflow-y-auto border-r bg-white shadow-lg">
 
           {/* =================================================
               LOGO
           ================================================== */}
 
-          <div className="flex h-20 items-center border-b px-5">
+          <div className="flex h-16 items-center border-b px-4">
             <Link
               href="/"
-              className="text-xl font-bold text-gray-900"
+              className="text-lg font-bold text-gray-900"
             >
               📱 Adel's Mundo Cell
             </Link>
@@ -216,12 +214,12 @@ export default function RootLayout({
           ================================================== */}
 
           {!carregando && usuario && (
-            <div className="border-b px-5 py-4">
-              <div className="font-semibold text-gray-800">
+            <div className="border-b px-4 py-2.5">
+              <div className="font-semibold text-sm text-gray-800">
                 {usuario.nome}
               </div>
 
-              <div className="mt-1 text-xs text-gray-500">
+              <div className="mt-0.5 text-[11px] text-gray-500">
                 {isAdmin
                   ? "👑 Administrador"
                   : "👷 Funcionário"}
@@ -233,18 +231,116 @@ export default function RootLayout({
               MENU
           ================================================== */}
 
-          <nav className="p-4">
-            <div className="space-y-2">
+          <nav className="p-3">
+            <div className="space-y-1">
 
               {/* =================================================
-                  ADMIN
+                  CALENDÁRIO
+              ================================================== */}
+
+              <Link
+                href="/calendario"
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+              >
+                <span>📅</span>
+                <span>Calendário</span>
+              </Link>
+
+              {/* =================================================
+                  CLIENTES
+              ================================================== */}
+
+              <Link
+                href="/clientes"
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+              >
+                <span>👤</span>
+                <span>Clientes</span>
+              </Link>
+
+              {/* =================================================
+                  ASSISTÊNCIA
+              ================================================== */}
+
+              <Link
+                href="/assistencias"
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+              >
+                <span>🔧</span>
+                <span>Assistência</span>
+              </Link>
+
+              {/* =================================================
+                  VENDAS
+              ================================================== */}
+
+              <Link
+                href="/vendas"
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+              >
+                <span>💰</span>
+                <span>Vendas</span>
+              </Link>
+
+              {/* =================================================
+                  ESTOQUE
+              ================================================== */}
+
+              <Link
+                href="/estoque"
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+              >
+                <span>📦</span>
+                <span>Estoque</span>
+              </Link>
+
+              {/* =================================================
+                  CONTAS A RECEBER
+              ================================================== */}
+
+              {isAdmin && (
+                <Link
+                  href="/contas-a-receber"
+                  className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+                >
+                  <span>💳</span>
+                  <span>Contas a Receber</span>
+                </Link>
+              )}
+
+              {/* =================================================
+                  COMPRAS
+              ================================================== */}
+
+              <Link
+                href="/compras"
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+              >
+                <span>🛒</span>
+                <span>Compras</span>
+              </Link>
+
+              {/* =================================================
+                  CONSULTA IMEI
+              ================================================== */}
+
+              <Link
+                href="/consulta-imei"
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+              >
+                <span>🔍</span>
+                <span>Consulta IMEI</span>
+              </Link>
+
+              {/* =================================================
+                  RESTANTE - ADMIN
               ================================================== */}
 
               {isAdmin && (
                 <>
                   <Link
                     href="/dashboard"
-                    className="flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-gray-700 transition hover:bg-gray-100"
+                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
                   >
                     <span>📊</span>
                     <span>Dashboard</span>
@@ -252,7 +348,7 @@ export default function RootLayout({
 
                   <Link
                     href="/telefones-sem-preco"
-                    className="flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-gray-700 transition hover:bg-gray-100"
+                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
                   >
                     <span>🏷️</span>
                     <span>
@@ -261,18 +357,8 @@ export default function RootLayout({
                   </Link>
 
                   <Link
-                    href="/contas-a-receber"
-                    className="flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-gray-700 transition hover:bg-gray-100"
-                  >
-                    <span>💳</span>
-                    <span>
-                      Contas a Receber
-                    </span>
-                  </Link>
-
-                  <Link
                     href="/relatorio"
-                    className="flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-gray-700 transition hover:bg-gray-100"
+                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
                   >
                     <span>📋</span>
                     <span>Relatório</span>
@@ -280,77 +366,21 @@ export default function RootLayout({
 
                   <Link
                     href="/configuracoes"
-                    className="flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-gray-700 transition hover:bg-gray-100"
+                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
                   >
                     <span>⚙️</span>
-                    <span>
-                      Configurações
-                    </span>
+                    <span>Configurações</span>
                   </Link>
 
                   <Link
                     href="/usuarios"
-                    className="flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-gray-700 transition hover:bg-gray-100"
+                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
                   >
                     <span>👥</span>
                     <span>Usuários</span>
                   </Link>
                 </>
               )}
-
-              {/* =================================================
-                  ESTOQUE
-                  ADMIN + FUNCIONÁRIO
-              ================================================== */}
-
-              <Link
-                href="/estoque"
-                className="flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-gray-700 transition hover:bg-gray-100"
-              >
-                <span>📦</span>
-                <span>Estoque</span>
-              </Link>
-
-              {/* =================================================
-                  VENDAS
-                  ADMIN + FUNCIONÁRIO
-              ================================================== */}
-
-              <Link
-                href="/vendas"
-                className="flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-gray-700 transition hover:bg-gray-100"
-              >
-                <span>💰</span>
-                <span>Vendas</span>
-              </Link>
-
-              {/* =================================================
-                  CONSULTA IMEI
-                  ADMIN + FUNCIONÁRIO
-              ================================================== */}
-
-              <Link
-                href="/consulta-imei"
-                className="flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-gray-700 transition hover:bg-gray-100"
-              >
-                <span>🔍</span>
-                <span>
-                  Consulta IMEI
-                </span>
-              </Link>
-
-              {/* =================================================
-                  ASSISTÊNCIA
-                  ADMIN + FUNCIONÁRIO
-              ================================================== */}
-
-              <Link
-                href="/assistencias"
-                className="flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-gray-700 transition hover:bg-gray-100"
-              >
-                <span>🔧</span>
-                <span>Assistência</span>
-              </Link>
 
             </div>
           </nav>
@@ -367,42 +397,42 @@ export default function RootLayout({
               HEADER
           ================================================== */}
 
-          <header className="sticky top-0 z-40 flex h-20 items-center justify-between border-b bg-white px-6 shadow-sm">
+          <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b bg-white px-5 shadow-sm">
 
             <div>
-              <h1 className="text-xl font-bold text-gray-900">
+              <h1 className="text-lg font-bold text-gray-900">
                 Adel's Mundo Cell
               </h1>
 
-              <p className="text-sm text-gray-500">
+              <p className="text-xs text-gray-500">
                 Sistema de gerenciamento da loja
               </p>
             </div>
 
-            {/* DIREITA */}
+            {/* =================================================
+                USUÁRIO / SAIR
+            ================================================== */}
 
             {!carregando && usuario && (
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
 
                 <div className="hidden text-right sm:block">
-                  <p className="font-semibold text-gray-800">
+                  <p className="text-sm font-semibold text-gray-800">
                     {usuario.nome}
                   </p>
 
-                  <p className="text-xs text-gray-500">
+                  <p className="text-[11px] text-gray-500">
                     {isAdmin
                       ? "👑 Administrador"
                       : "👷 Funcionário"}
                   </p>
                 </div>
 
-                {/* SAIR */}
-
                 <button
                   type="button"
                   onClick={sair}
                   disabled={saindo}
-                  className="rounded-xl border border-red-300 bg-white px-5 py-2.5 font-semibold text-red-600 shadow-sm transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-600 shadow-sm transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {saindo
                     ? "Saindo..."
@@ -418,7 +448,7 @@ export default function RootLayout({
               CONTEÚDO
           ================================================== */}
 
-          <main className="min-h-[calc(100vh-5rem)]">
+          <main className="min-h-[calc(100vh-4rem)]">
             {children}
           </main>
 

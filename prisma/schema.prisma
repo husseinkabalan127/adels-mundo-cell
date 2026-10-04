@@ -39,12 +39,21 @@ model Produto {
 model Lote {
   id             Int        @id @default(autoincrement())
   fornecedor     String?
+
+  // Preço de compra
+  precoCompra    Float?
+  moedaCompra    String?    // USD ou BRL
+
+  // Mantidos para não quebrar o sistema antigo
   precoCompraUsd Float?
   precoCompraBrl Float?
+
   tipoCusto      String?
   quantidade     Int        @default(0)
   observacao     String?
+  dataCompra     DateTime   @default(now())
   createdAt      DateTime   @default(now())
+
   produtoId      Int
   aparelhos      Aparelho[]
   produto        Produto    @relation(fields: [produtoId], references: [id])
@@ -53,31 +62,61 @@ model Lote {
 model Aparelho {
   id           Int           @id @default(autoincrement())
   imei         String        @unique
+
+  // Informações do aparelho
+  cor          String?
+  memoria      String?
+
   vendido      Boolean       @default(false)
   createdAt    DateTime      @default(now())
+
   loteId       Int
   produtoId    Int
   vendaItemId  Int?
+
   lote         Lote          @relation(fields: [loteId], references: [id])
   produto      Produto       @relation(fields: [produtoId], references: [id])
   vendaItem    VendaItem?    @relation(fields: [vendaItemId], references: [id])
   assistencias Assistencia[]
 }
 
+model Cliente {
+  id          Int      @id @default(autoincrement())
+  nome        String
+  telefone    String?
+  cpfCnpj     String   @unique
+  email       String?
+  observacao  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  vendas      Venda[]
+  garantias   Garantia[]
+  assistencias Assistencia[]
+}
+
 model Venda {
   id             Int         @id @default(autoincrement())
   cliente        String
+
+  // Cliente cadastrado
+  clienteId      Int?
+  clienteObj     Cliente?    @relation(fields: [clienteId], references: [id])
+
   taxa           Float?
   taxaFechada    Boolean     @default(false)
   dataVenda      DateTime    @default(now())
   createdAt      DateTime    @default(now())
+
   produtoId      Int?
   quantidade     Int?
   valorVenda     Float?
   precoCompraUsd Float?
+
   formaPagamento String?     @default("Não informado")
   estadoFatura   String?     @default("Em aberto")
   desconto       Float       @default(0)
+
   pagamentos     Pagamento[]
   produto        Produto?    @relation("VendaProdutoLegado", fields: [produtoId], references: [id])
   itens          VendaItem[]
@@ -88,11 +127,15 @@ model VendaItem {
   quantidade     Int
   valorUnitario  Float
   total          Float
+
   precoCompraUsd Float?
   custoTotal     Float?
+
   createdAt      DateTime   @default(now())
+
   vendaId        Int
   produtoId      Int
+
   aparelhos      Aparelho[]
   produto        Produto    @relation(fields: [produtoId], references: [id])
   venda           Venda      @relation(fields: [vendaId], references: [id])
@@ -105,38 +148,56 @@ model Pagamento {
   forma      String?
   observacao String?
   createdAt  DateTime @default(now())
+
   vendaId    Int
-  venda      Venda   @relation(fields: [vendaId], references: [id])
+  venda      Venda    @relation(fields: [vendaId], references: [id])
 }
 
 model Garantia {
-  id         Int      @id @default(autoincrement())
-  cliente    String
-  telefone   String?
-  tipo       String
-  inicio     DateTime
-  fim        DateTime
-  observacao String?
-  createdAt  DateTime @default(now())
-  produtoId  Int
-  produto    Produto  @relation(fields: [produtoId], references: [id])
+  id          Int       @id @default(autoincrement())
+
+  cliente     String
+  telefone    String?
+
+  // Cliente cadastrado
+  clienteId   Int?
+  clienteObj  Cliente?  @relation(fields: [clienteId], references: [id])
+
+  tipo        String
+  inicio      DateTime
+  fim         DateTime
+  observacao  String?
+  createdAt   DateTime  @default(now())
+
+  produtoId   Int
+  produto     Produto   @relation(fields: [produtoId], references: [id])
 }
 
 model Assistencia {
   id          Int       @id @default(autoincrement())
+
   cliente     String
   telefone    String?
+
+  // Cliente cadastrado
+  clienteId   Int?
+  clienteObj  Cliente?  @relation(fields: [clienteId], references: [id])
+
   problema    String
   observacao  String?
   status      String    @default("Pendente")
   custo       Float     @default(0)
+
   dataEntrada DateTime  @default(now())
   dataSaida   DateTime?
+
   createdAt   DateTime  @default(now())
+
   produtoId   Int
   aparelhoId  Int?
+
   aparelho    Aparelho? @relation(fields: [aparelhoId], references: [id])
-  produto     Produto   @relation(fields: [produtoId], references: [id])
+  produto     Produto    @relation(fields: [produtoId], references: [id])
 }
 
 enum Role {

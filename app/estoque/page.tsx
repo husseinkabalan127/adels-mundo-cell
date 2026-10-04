@@ -755,6 +755,50 @@ export default function EstoquePage() {
   }
 
   // =====================================================
+  // EXCLUIR IMEI INDIVIDUAL
+  // =====================================================
+
+  async function excluirImei(aparelho: Aparelho) {
+    if (!isAdmin) {
+      setErro("Apenas o administrador pode excluir IMEI.");
+      return;
+    }
+
+    const confirmar = window.confirm(
+      `Tem certeza que deseja excluir o IMEI ${aparelho.imei}?`
+    );
+
+    if (!confirmar) return;
+
+    setMensagem("");
+    setErro("");
+
+    try {
+      const response = await fetch("/api/estoque", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ aparelhoId: aparelho.id }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.error || "Erro ao excluir IMEI.");
+      }
+
+      setMensagem(
+        data?.message || "IMEI removido do estoque com sucesso."
+      );
+
+      await carregarEstoque();
+    } catch (error: any) {
+      setErro(error?.message || "Erro ao excluir IMEI.");
+    }
+  }
+
+  // =====================================================
   // ALTERAR NOME DO PRODUTO
   // =====================================================
 
@@ -1740,9 +1784,12 @@ export default function EstoquePage() {
                                 <span
                                   key={aparelho.id}
                                   style={{
+                                    position: "relative",
+                                    display: "inline-block",
                                     background: "#dcfce7",
                                     color: "#166534",
-                                    padding: "8px 11px",
+                                    padding: "9px 12px",
+                                    paddingRight: "24px",
                                     borderRadius: "7px",
                                     fontSize: "13px",
                                     fontWeight: 600,
@@ -1750,6 +1797,41 @@ export default function EstoquePage() {
                                   }}
                                 >
                                   {aparelho.imei}
+
+                                  {isAdmin && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        excluirImei(aparelho);
+                                      }}
+                                      title="Excluir IMEI"
+                                      aria-label={`Excluir IMEI ${aparelho.imei}`}
+                                      style={{
+                                        position: "absolute",
+                                        top: "-7px",
+                                        right: "-7px",
+                                        width: "18px",
+                                        height: "18px",
+                                        minWidth: "18px",
+                                        padding: 0,
+                                        border: "2px solid #fff",
+                                        borderRadius: "50%",
+                                        background: "#dc2626",
+                                        color: "#fff",
+                                        cursor: "pointer",
+                                        fontSize: "11px",
+                                        lineHeight: "14px",
+                                        fontWeight: 800,
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        zIndex: 2,
+                                      }}
+                                    >
+                                      ×
+                                    </button>
+                                  )}
                                 </span>
                               ))}
                             </div>
@@ -1908,9 +1990,12 @@ export default function EstoquePage() {
                                               <span
                                                 key={aparelho.id}
                                                 style={{
+                                                  position: "relative",
+                                                  display: "inline-block",
                                                   background: "#dcfce7",
                                                   color: "#166534",
-                                                  padding: "7px 9px",
+                                                  padding: "8px 10px",
+                                                  paddingRight: "22px",
                                                   borderRadius: "7px",
                                                   fontSize: "12px",
                                                   fontWeight: 600,
@@ -1918,6 +2003,41 @@ export default function EstoquePage() {
                                                 }}
                                               >
                                                 {aparelho.imei}
+
+                                                {isAdmin && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      excluirImei(aparelho);
+                                                    }}
+                                                    title="Excluir IMEI"
+                                                    aria-label={`Excluir IMEI ${aparelho.imei}`}
+                                                    style={{
+                                                      position: "absolute",
+                                                      top: "-7px",
+                                                      right: "-7px",
+                                                      width: "17px",
+                                                      height: "17px",
+                                                      minWidth: "17px",
+                                                      padding: 0,
+                                                      border: "2px solid #fff",
+                                                      borderRadius: "50%",
+                                                      background: "#dc2626",
+                                                      color: "#fff",
+                                                      cursor: "pointer",
+                                                      fontSize: "10px",
+                                                      lineHeight: "13px",
+                                                      fontWeight: 800,
+                                                      display: "flex",
+                                                      alignItems: "center",
+                                                      justifyContent: "center",
+                                                      zIndex: 2,
+                                                    }}
+                                                  >
+                                                    ×
+                                                  </button>
+                                                )}
                                               </span>
                                             )
                                           )}

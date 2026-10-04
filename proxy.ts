@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const session = request.cookies.get("adel_session")?.value;
 
   const pathname = request.nextUrl.pathname;
@@ -50,16 +50,12 @@ export function middleware(request: NextRequest) {
   // =====================================================
 
   if (usuario.role === "FUNCIONARIO") {
-
-    // Se funcionário entrar na página inicial,
-    // manda direto para Vendas
     if (pathname === "/") {
       return NextResponse.redirect(
         new URL("/vendas", request.url)
       );
     }
 
-    // Páginas proibidas para funcionário
     const paginasBloqueadas = [
       "/dashboard",
       "/contas-a-receber",
