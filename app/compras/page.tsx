@@ -232,22 +232,20 @@ export default function ComprasPage() {
         );
       }
 
-      const lista = Array.isArray(data)
-        ? data
+      const lista: Compra[] = Array.isArray(data)
+        ? (data as Compra[])
         : Array.isArray(data?.compras)
-        ? data.compras
+        ? (data.compras as Compra[])
         : [];
 
       setCompras(lista);
 
       const nomes: string[] = lista
-        .map(
-          (item: Compra) =>
-            String(item.produtoNome || "").trim()
+        .map((item: Compra): string =>
+          String(item.produtoNome || "").trim()
         )
-        .filter(
-          (nome): nome is string =>
-            Boolean(nome)
+        .filter((nome: string): boolean =>
+          Boolean(nome)
         );
 
       setModelos(
