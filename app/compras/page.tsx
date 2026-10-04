@@ -240,14 +240,18 @@ export default function ComprasPage() {
 
       setCompras(lista);
 
-      const nomes = lista
+      const nomes: string[] = lista
         .map(
-          (item: Compra) => item.produtoNome
+          (item: Compra) =>
+            String(item.produtoNome || "").trim()
         )
-        .filter(Boolean);
+        .filter(
+          (nome): nome is string =>
+            Boolean(nome)
+        );
 
       setModelos(
-        Array.from(new Set(nomes)).sort(
+        Array.from(new Set<string>(nomes)).sort(
           (a, b) => a.localeCompare(b)
         )
       );
