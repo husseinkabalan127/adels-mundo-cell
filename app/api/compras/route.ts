@@ -1,19 +1,10 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
-
 import { prisma } from "@/lib/prisma";
 import { obterSessao } from "@/lib/auth";
 
-// =====================================================
-// HELPERS
-// =====================================================
-
 function numeroOuNull(valor: unknown): number | null {
-  if (
-    valor === null ||
-    valor === undefined ||
-    valor === ""
-  ) {
+  if (valor === null || valor === undefined || valor === "") {
     return null;
   }
 
@@ -21,43 +12,21 @@ function numeroOuNull(valor: unknown): number | null {
     String(valor).replace(",", ".")
   );
 
-  if (!Number.isFinite(numero)) {
-    return null;
-  }
-
-  return numero;
+  return Number.isFinite(numero) ? numero : null;
 }
 
-function dataValida(
-  valor: unknown
-): Date | null {
-  const texto =
-    String(valor || "").trim();
+function dataValida(valor: unknown): Date | null {
+  const texto = String(valor || "").trim();
 
-  if (!texto) {
-    return null;
-  }
+  if (!texto) return null;
 
-  const data = new Date(
-    `${texto}T12:00:00`
-  );
+  const data = new Date(`${texto}T12:00:00`);
 
-  if (Number.isNaN(data.getTime())) {
-    return null;
-  }
-
-  return data;
+  return Number.isNaN(data.getTime()) ? null : data;
 }
 
-function moedaValida(
-  valor: unknown
-): "USD" | "BRL" {
-  const moeda =
-    String(valor || "USD")
-      .trim()
-      .toUpperCase();
-
-  return moeda === "BRL"
+function moedaValida(valor: unknown): "USD" | "BRL" {
+  return String(valor || "USD").trim().toUpperCase() === "BRL"
     ? "BRL"
     : "USD";
 }
@@ -68,14 +37,12 @@ function moedaValida(
 
 export async function GET() {
   try {
-    const usuario =
-      await obterSessao();
+    const usuario = await obterSessao();
 
     if (!usuario) {
       return NextResponse.json(
         {
-          error:
-            "Não autorizado.",
+          error: "Não autorizado.",
         },
         {
           status: 401,
@@ -83,83 +50,58 @@ export async function GET() {
       );
     }
 
-    const lotes =
-      await prisma.lote.findMany({
-        orderBy: {
-          createdAt: "desc",
-        },
+    const lotes = await prisma.lote.findMany({
+      orderBy: {
+        createdAt: "desc",
+      },
 
-        include: {
-          produto: true,
+      include: {
+        produto: true,
 
-          aparelhos: {
-            orderBy: {
-              createdAt: "desc",
-            },
+        aparelhos: {
+          orderBy: {
+            createdAt: "desc",
           },
         },
-      });
+      },
+    });
 
-    // =================================================
-    // ORGANIZAR COMPRAS
-    // =================================================
+    const compras = lotes.map((lote) => {
+      const primeiroAparelho =
+        lote.aparelhos?.[0] || null;
 
-    const compras =
-      lotes.map((lote) => {
-        const primeiroAparelho =
-          lote.aparelhos?.[0] ||
-          null;
+      return {
+        ...lote,
 
-        return {
-          ...lote,
+        produtoNome:
+          lote.produto?.nome || "",
 
-          // MODELO
-          produtoNome:
-            lote.produto?.nome ||
-            "",
+        cor:
+          primeiroAparelho?.cor || "",
 
-          // COR
-          // OPCIONAL
-          cor:
-            primeiroAparelho?.cor ||
-            "",
+        memoria:
+          primeiroAparelho?.memoria || "",
 
-          // MEMÓRIA
-          // OPCIONAL
-          memoria:
-            primeiroAparelho?.memoria ||
-            "",
+        precoCompra:
+          lote.precoCompra ?? null,
 
-          // PREÇO
-          precoCompra:
-            lote.precoCompra ??
-            null,
+        moedaCompra:
+          lote.moedaCompra ?? null,
 
-          // MOEDA
-          moedaCompra:
-            lote.moedaCompra ??
-            null,
+        precoCompraUsd:
+          lote.precoCompraUsd ?? null,
 
-          // COMPATIBILIDADE
-          precoCompraUsd:
-            lote.precoCompraUsd ??
-            null,
+        precoCompraBrl:
+          lote.precoCompraBrl ?? null,
 
-          precoCompraBrl:
-            lote.precoCompraBrl ??
-            null,
+        dataCompra:
+          lote.dataCompra ??
+          lote.createdAt,
 
-          // DATA
-          dataCompra:
-            lote.dataCompra ??
-            lote.createdAt,
-
-          // APARELHOS
-          aparelhos:
-            lote.aparelhos ||
-            [],
-        };
-      });
+        aparelhos:
+          lote.aparelhos || [],
+      };
+    });
 
     return NextResponse.json(
       compras
@@ -187,9 +129,6 @@ export async function GET() {
 // =====================================================
 // POST - CADASTRAR COMPRA
 // SOMENTE ADMIN
-//
-// COR É OPCIONAL
-// MEMÓRIA É OPCIONAL
 // =====================================================
 
 export async function POST(
@@ -198,10 +137,6 @@ export async function POST(
   try {
     const usuario =
       await obterSessao();
-
-    // =================================================
-    // LOGIN
-    // =================================================
 
     if (!usuario) {
       return NextResponse.json(
@@ -215,12 +150,9 @@ export async function POST(
       );
     }
 
-    // =================================================
-    // ADMIN
-    // =================================================
-
     if (
-      usuario.role !== "ADMIN"
+      usuario.role !==
+      "ADMIN"
     ) {
       return NextResponse.json(
         {
@@ -246,10 +178,6 @@ export async function POST(
         body.dataCompra || ""
       ).trim();
 
-    // =================================================
-    // ITENS
-    // =================================================
-
     let itens =
       Array.isArray(
         body.itens
@@ -270,13 +198,11 @@ export async function POST(
           body.modelo || ""
         ).trim();
 
-      // COR OPCIONAL
       const cor =
         String(
           body.cor || ""
         ).trim();
 
-      // MEMÓRIA OPCIONAL
       const memoria =
         String(
           body.memoria || ""
@@ -291,14 +217,11 @@ export async function POST(
           .trim()
           .toUpperCase();
 
-      const precoCompraRaw =
-        body.precoCompra ??
-        body.precoCompraUsd ??
-        "";
-
       const precoCompra =
         numeroOuNull(
-          precoCompraRaw
+          body.precoCompra ??
+            body.precoCompraUsd ??
+            ""
         );
 
       const imeis =
@@ -379,10 +302,6 @@ export async function POST(
       );
     }
 
-    // =================================================
-    // DATA
-    // =================================================
-
     const dataCompra =
       dataValida(
         dataCompraRaw
@@ -435,10 +354,6 @@ export async function POST(
       const item =
         itens[i];
 
-      // =================================================
-      // MODELO
-      // =================================================
-
       const modelo =
         String(
           item?.modelo || ""
@@ -458,29 +373,15 @@ export async function POST(
         );
       }
 
-      // =================================================
-      // COR
-      // OPCIONAL
-      // =================================================
-
       const cor =
         String(
           item?.cor || ""
         ).trim();
 
-      // =================================================
-      // MEMÓRIA
-      // OPCIONAL
-      // =================================================
-
       const memoria =
         String(
           item?.memoria || ""
         ).trim();
-
-      // =================================================
-      // QUANTIDADE
-      // =================================================
 
       const quantidade =
         Number(
@@ -506,20 +407,12 @@ export async function POST(
         );
       }
 
-      // =================================================
-      // MOEDA
-      // =================================================
-
       const moedaCompra =
         moedaValida(
           item?.moedaCompra ||
             item?.moeda ||
             "USD"
         );
-
-      // =================================================
-      // PREÇO
-      // =================================================
 
       const precoRaw =
         item?.precoCompra ??
@@ -558,10 +451,6 @@ export async function POST(
         );
       }
 
-      // =================================================
-      // IMEIS
-      // =================================================
-
       const imeis =
         Array.isArray(
           item?.imeis
@@ -593,17 +482,10 @@ export async function POST(
 
       itensPreparados.push({
         modelo,
-
-        // COR PODE SER ""
         cor,
-
-        // MEMÓRIA PODE SER ""
         memoria,
-
         quantidade,
-
         precoCompra,
-
         moedaCompra,
 
         precoCompraUsd:
@@ -627,16 +509,13 @@ export async function POST(
     }
 
     // =================================================
-    // IMEI DUPLICADO NA MESMA COMPRA
+    // IMEI DUPLICADO
     // =================================================
 
-    const imeisUnicos =
+    if (
       new Set(
         todosImeis
-      );
-
-    if (
-      imeisUnicos.size !==
+      ).size !==
       todosImeis.length
     ) {
       return NextResponse.json(
@@ -709,10 +588,6 @@ export async function POST(
             const item of
               itensPreparados
           ) {
-            // -----------------------------------------
-            // PRODUTO
-            // -----------------------------------------
-
             let produto =
               await tx.produto.findFirst(
                 {
@@ -738,10 +613,6 @@ export async function POST(
                 );
             }
 
-            // -----------------------------------------
-            // LOTE
-            // -----------------------------------------
-
             const lote =
               await tx.lote.create(
                 {
@@ -754,8 +625,7 @@ export async function POST(
                     createdAt:
                       dataCompra,
 
-                    dataCompra:
-                      dataCompra,
+                    dataCompra,
 
                     produtoId:
                       produto.id,
@@ -775,10 +645,6 @@ export async function POST(
                 }
               );
 
-            // -----------------------------------------
-            // APARELHOS
-            // -----------------------------------------
-
             await tx.aparelho.createMany(
               {
                 data:
@@ -795,12 +661,10 @@ export async function POST(
                       produtoId:
                         produto.id,
 
-                      // COR OPCIONAL
                       cor:
                         item.cor ||
                         null,
 
-                      // MEMÓRIA OPCIONAL
                       memoria:
                         item.memoria ||
                         null,
@@ -808,10 +672,6 @@ export async function POST(
                   ),
               }
             );
-
-            // -----------------------------------------
-            // ESTOQUE
-            // -----------------------------------------
 
             const produtoAtualizado =
               await tx.produto.update(
@@ -901,20 +761,6 @@ export async function POST(
 
 // =====================================================
 // PATCH - EDITAR COMPRA
-//
-// PODE EDITAR MESMO SE APARELHOS JÁ FORAM VENDIDOS.
-//
-// COR = OPCIONAL
-// MEMÓRIA = OPCIONAL
-//
-// MUDAR MODELO:
-// - aparelhos vendidos acompanham o novo modelo
-// - aparelhos disponíveis acompanham o novo modelo
-// - estoque muda somente pelos não vendidos
-//
-// IMEI:
-// - vendido não pode ter IMEI alterado
-// - não vendido pode ter IMEI alterado
 // =====================================================
 
 export async function PATCH(
@@ -923,10 +769,6 @@ export async function PATCH(
   try {
     const usuario =
       await obterSessao();
-
-    // =================================================
-    // LOGIN
-    // =================================================
 
     if (!usuario) {
       return NextResponse.json(
@@ -940,12 +782,9 @@ export async function PATCH(
       );
     }
 
-    // =================================================
-    // ADMIN
-    // =================================================
-
     if (
-      usuario.role !== "ADMIN"
+      usuario.role !==
+      "ADMIN"
     ) {
       return NextResponse.json(
         {
@@ -960,10 +799,6 @@ export async function PATCH(
 
     const body =
       await req.json();
-
-    // =================================================
-    // ID DO LOTE
-    // =================================================
 
     const loteId =
       Number(
@@ -988,15 +823,12 @@ export async function PATCH(
       );
     }
 
-    // =================================================
-    // BUSCAR LOTE
-    // =================================================
-
     const lote =
       await prisma.lote.findUnique(
         {
           where: {
-            id: loteId,
+            id:
+              loteId,
           },
 
           include: {
@@ -1118,14 +950,6 @@ export async function PATCH(
 
     // =================================================
     // COR
-    //
-    // OPCIONAL
-    //
-    // Se não vier no PATCH:
-    // mantém a cor atual.
-    //
-    // Se vier "":
-    // remove a cor.
     // =================================================
 
     let novaCor:
@@ -1144,8 +968,6 @@ export async function PATCH(
 
     // =================================================
     // MEMÓRIA
-    //
-    // OPCIONAL
     // =================================================
 
     let novaMemoria:
@@ -1258,11 +1080,6 @@ export async function PATCH(
         body.imeis
       )
     ) {
-      // IMPORTANTE:
-      // usamos uma variável local que é SEMPRE string[]
-      // depois do Array.isArray. Isso evita o erro do
-      // TypeScript/Vercel dizendo que novosImeis pode ser null.
-
       const imeisRecebidos:
         string[] =
         body.imeis
@@ -1297,13 +1114,10 @@ export async function PATCH(
       // DUPLICADOS
       // -----------------------------------------------
 
-      const imeisSet =
+      if (
         new Set(
           imeisRecebidos
-        );
-
-      if (
-        imeisSet.size !==
+        ).size !==
         imeisRecebidos.length
       ) {
         return NextResponse.json(
@@ -1398,8 +1212,6 @@ export async function PATCH(
         }
       }
 
-      // Só atribuímos depois que todas
-      // as validações passaram.
       novosImeis =
         imeisRecebidos;
     }
@@ -1418,13 +1230,18 @@ export async function PATCH(
           // PRODUTO DESTINO
           // =========================================
 
+          /*
+           * IMPORTANTE:
+           * produtoDestino nunca recebe null.
+           */
+
           let produtoDestino =
             lote.produto;
 
           if (
             mudouModelo
           ) {
-            produtoDestino =
+            const produtoExistente =
               await tx.produto.findFirst(
                 {
                   where: {
@@ -1435,8 +1252,11 @@ export async function PATCH(
               );
 
             if (
-              !produtoDestino
+              produtoExistente
             ) {
+              produtoDestino =
+                produtoExistente;
+            } else {
               produtoDestino =
                 await tx.produto.create(
                   {
@@ -1452,7 +1272,7 @@ export async function PATCH(
             }
 
             // =======================================
-            // SOMENTE NÃO VENDIDOS
+            // QUANTIDADE DISPONÍVEL
             // =======================================
 
             const quantidadeDisponivel =
@@ -1486,16 +1306,11 @@ export async function PATCH(
                   },
                 }
               );
-            }
 
-            // =======================================
-            // ADICIONAR AO NOVO
-            // =======================================
+              // =====================================
+              // ADICIONAR AO NOVO ESTOQUE
+              // =====================================
 
-            if (
-              quantidadeDisponivel >
-              0
-            ) {
               await tx.produto.update(
                 {
                   where: {
@@ -1514,8 +1329,7 @@ export async function PATCH(
             }
 
             // =======================================
-            // MOVER TODOS OS APARELHOS
-            //
+            // MOVER APARELHOS
             // INCLUSIVE VENDIDOS
             // =======================================
 
@@ -1578,8 +1392,6 @@ export async function PATCH(
 
           // =========================================
           // COR / MEMÓRIA
-          //
-          // AMBOS OPCIONAIS
           // =========================================
 
           if (
@@ -1598,10 +1410,6 @@ export async function PATCH(
                 | null;
             } = {};
 
-            // ---------------------------------------
-            // COR
-            // ---------------------------------------
-
             if (
               novaCor !==
               undefined
@@ -1610,10 +1418,6 @@ export async function PATCH(
                 novaCor ||
                 null;
             }
-
-            // ---------------------------------------
-            // MEMÓRIA
-            // ---------------------------------------
 
             if (
               novaMemoria !==
@@ -1639,7 +1443,6 @@ export async function PATCH(
 
           // =========================================
           // ATUALIZAR IMEIS
-          //
           // SOMENTE NÃO VENDIDOS
           // =========================================
 
@@ -1657,7 +1460,6 @@ export async function PATCH(
               const aparelho =
                 lote.aparelhos[i];
 
-              // NÃO MEXER NO IMEI VENDIDO
               if (
                 aparelho.vendido
               ) {
@@ -1686,29 +1488,26 @@ export async function PATCH(
           // RESULTADO FINAL
           // =========================================
 
-          const loteFinal =
-            await tx.lote.findUnique(
-              {
-                where: {
-                  id:
-                    loteId,
-                },
+          return tx.lote.findUnique(
+            {
+              where: {
+                id:
+                  loteId,
+              },
 
-                include: {
-                  produto:
-                    true,
+              include: {
+                produto:
+                  true,
 
-                  aparelhos: {
-                    orderBy: {
-                      createdAt:
-                        "desc",
-                    },
+                aparelhos: {
+                  orderBy: {
+                    createdAt:
+                      "desc",
                   },
                 },
-              }
-            );
-
-          return loteFinal;
+              },
+            }
+          );
         }
       );
 
