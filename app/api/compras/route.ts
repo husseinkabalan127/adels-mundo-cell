@@ -1258,7 +1258,13 @@ export async function PATCH(
         body.imeis
       )
     ) {
-      novosImeis =
+      // IMPORTANTE:
+      // usamos uma variável local que é SEMPRE string[]
+      // depois do Array.isArray. Isso evita o erro do
+      // TypeScript/Vercel dizendo que novosImeis pode ser null.
+
+      const imeisRecebidos:
+        string[] =
         body.imeis
           .map(
             (imei: unknown) =>
@@ -1273,7 +1279,7 @@ export async function PATCH(
       // -----------------------------------------------
 
       if (
-        novosImeis.length !==
+        imeisRecebidos.length !==
         lote.aparelhos.length
       ) {
         return NextResponse.json(
@@ -1293,12 +1299,12 @@ export async function PATCH(
 
       const imeisSet =
         new Set(
-          novosImeis
+          imeisRecebidos
         );
 
       if (
         imeisSet.size !==
-        novosImeis.length
+        imeisRecebidos.length
       ) {
         return NextResponse.json(
           {
@@ -1321,7 +1327,7 @@ export async function PATCH(
             where: {
               imei: {
                 in:
-                  novosImeis,
+                  imeisRecebidos,
               },
 
               NOT: {
@@ -1378,7 +1384,7 @@ export async function PATCH(
         if (
           aparelho.vendido &&
           aparelho.imei !==
-            novosImeis[i]
+            imeisRecebidos[i]
         ) {
           return NextResponse.json(
             {
@@ -1391,6 +1397,11 @@ export async function PATCH(
           );
         }
       }
+
+      // Só atribuímos depois que todas
+      // as validações passaram.
+      novosImeis =
+        imeisRecebidos;
     }
 
     // =================================================
