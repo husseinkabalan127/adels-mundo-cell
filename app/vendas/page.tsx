@@ -629,13 +629,13 @@ export default function VendasPage() {
   }
 
   function adicionarImeiEncontrado(
-    itemIndexPreferido?: number
+    itemIndexPreferido?: number,
+    aparelhoSelecionado?: Aparelho
   ) {
     setErro("");
     setMensagem("");
 
-    const imei =
-      imeiBusca.trim();
+    const imei = aparelhoSelecionado?.imei?.trim() || imeiBusca.trim();
 
     if (!imei) {
       setErro(
@@ -645,7 +645,12 @@ export default function VendasPage() {
       return;
     }
 
-    if (!aparelhoEncontrado) {
+    // Quando o usuário clica em "Adicionar" nos resultados de busca,
+    // usamos exatamente o aparelho daquela linha. Isso permite pesquisar
+    // por parte do IMEI (ex.: 123) e adicionar o IMEI completo encontrado.
+    const aparelho = aparelhoSelecionado || aparelhoEncontrado;
+
+    if (!aparelho) {
       setErro(
         "IMEI não encontrado ou já vendido."
       );
@@ -670,14 +675,14 @@ export default function VendasPage() {
       (
         itemPreferido.produtoId !== "" &&
         itemPreferido.produtoId !==
-          aparelhoEncontrado.produtoId
+          aparelho.produtoId
       )
     ) {
       index =
         itens.findIndex(
           (item) =>
             item.produtoId ===
-            aparelhoEncontrado.produtoId
+            aparelho.produtoId
         );
     }
 
@@ -701,14 +706,14 @@ export default function VendasPage() {
 
         {
           produtoId:
-            aparelhoEncontrado.produtoId,
+            aparelho.produtoId,
 
           quantidade: 1,
 
-          valorUnitario: itens.find((item) => item.produtoId === aparelhoEncontrado.produtoId && item.valorUnitario !== "")?.valorUnitario || "",
+          valorUnitario: itens.find((item) => item.produtoId === aparelho.produtoId && item.valorUnitario !== "")?.valorUnitario || "",
 
           imeis: [
-            aparelhoEncontrado.imei,
+            aparelho.imei,
           ],
         },
       ]);
@@ -732,7 +737,7 @@ export default function VendasPage() {
 
     adicionarImeiAoItem(
       index,
-      aparelhoEncontrado.imei
+      aparelho.imei
     );
 
     if (
@@ -743,7 +748,7 @@ export default function VendasPage() {
         index,
         {
           produtoId:
-            aparelhoEncontrado.produtoId,
+            aparelho.produtoId,
         }
       );
     }
@@ -2301,7 +2306,7 @@ export default function VendasPage() {
               {resultadosBusca.length > 0 ? resultadosBusca.map((a) => (
                 <div key={a.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: 8, borderBottom: "1px solid #eee" }}>
                   <span>{a.produto?.nome || produtos.find((p) => p.id === a.produtoId)?.nome || "Produto"} — IMEI {a.imei}</span>
-                  <button type="button" onClick={() => adicionarImeiEncontrado()} style={smallBlueButton}>Adicionar</button>
+                  <button type="button" onClick={() => adicionarImeiEncontrado(undefined, a)} style={smallBlueButton}>Adicionar</button>
                 </div>
               )) : <span style={{ color: "#b42318" }}>IMEI não encontrado ou já vendido.</span>}
             </div>
