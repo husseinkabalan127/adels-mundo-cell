@@ -13,6 +13,8 @@ type Aparelho = {
   id: number;
   imei: string;
   vendido: boolean;
+  cor: string | null;
+  memoria: string | null;
   produtoId: number;
   loteId: number;
 };
@@ -191,9 +193,29 @@ export default function EstoquePage() {
           produto.aparelhos || []
         ).filter((aparelho) => !aparelho.vendido);
 
+        const variantesMap = new Map<string, number>();
+
+        aparelhosDisponiveis.forEach((aparelho) => {
+          const cor = aparelho.cor?.trim() || "Cor não informada";
+          const memoria = aparelho.memoria?.trim() || "GB não informado";
+          const chave = `${cor} • ${memoria}`;
+          variantesMap.set(
+            chave,
+            (variantesMap.get(chave) || 0) + 1
+          );
+        });
+
+        const variantes = Array.from(variantesMap.entries()).map(
+          ([descricao, quantidade]) => ({
+            descricao,
+            quantidade,
+          })
+        );
+
         return {
           ...produto,
           aparelhosDisponiveis,
+          variantes,
         };
       })
       .filter((produto) => {
@@ -432,6 +454,17 @@ export default function EstoquePage() {
                           </strong>{" "}
                           aparelho(s) disponível(is)
                         </div>
+
+                        <div style={variantListStyle}>
+                          {produto.variantes.map((variante) => (
+                            <span
+                              key={variante.descricao}
+                              style={variantBadgeStyle}
+                            >
+                              {variante.descricao} — {variante.quantidade}
+                            </span>
+                          ))}
+                        </div>
                       </div>
 
                       <div style={arrowStyle}>
@@ -453,9 +486,27 @@ export default function EstoquePage() {
                               (aparelho) => (
                                 <span
                                   key={aparelho.id}
-                                  style={imeiBadgeStyle}
+                                  style={{
+                                    ...imeiBadgeStyle,
+                                    display: "inline-flex",
+                                    flexDirection: "column",
+                                    alignItems: "flex-start",
+                                    gap: "3px",
+                                  }}
                                 >
-                                  {aparelho.imei}
+                                  <strong>{aparelho.imei}</strong>
+                                  <span
+                                    style={{
+                                      fontSize: "11px",
+                                      color: "#475569",
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    {aparelho.cor || "Cor não informada"}
+                                    {aparelho.memoria
+                                      ? ` • ${aparelho.memoria}`
+                                      : ""}
+                                  </span>
                                 </span>
                               )
                             )}
@@ -546,9 +597,27 @@ export default function EstoquePage() {
                                           (aparelho) => (
                                             <span
                                               key={aparelho.id}
-                                              style={imeiSmallStyle}
+                                              style={{
+                                                ...imeiSmallStyle,
+                                                display: "inline-flex",
+                                                flexDirection: "column",
+                                                alignItems: "flex-start",
+                                                gap: "2px",
+                                              }}
                                             >
-                                              {aparelho.imei}
+                                              <strong>{aparelho.imei}</strong>
+                                              <span
+                                                style={{
+                                                  fontSize: "10px",
+                                                  color: "#64748b",
+                                                  fontWeight: 600,
+                                                }}
+                                              >
+                                                {aparelho.cor || "Cor não informada"}
+                                                {aparelho.memoria
+                                                  ? ` • ${aparelho.memoria}`
+                                                  : ""}
+                                              </span>
                                             </span>
                                           )
                                         )}
@@ -743,6 +812,25 @@ const productQuantityStyle: React.CSSProperties = {
   marginTop: "7px",
   color: "#555",
   fontSize: "15px",
+};
+
+const variantListStyle: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "7px",
+  marginTop: "10px",
+};
+
+const variantBadgeStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  background: "#f1f5f9",
+  border: "1px solid #cbd5e1",
+  color: "#334155",
+  padding: "6px 9px",
+  borderRadius: "8px",
+  fontSize: "12px",
+  fontWeight: 700,
 };
 
 const arrowStyle: React.CSSProperties = {

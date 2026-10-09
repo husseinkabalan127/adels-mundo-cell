@@ -39,6 +39,15 @@ type Compra = Lote & {
   produtoNome: string;
 };
 
+type ItemCompraPendente = {
+  modelo: string;
+  cor: string;
+  memoria: string;
+  moeda: Moeda;
+  precoCompra: number;
+  imeis: string[];
+};
+
 function hoje() {
   const agora = new Date();
 
@@ -139,6 +148,7 @@ export default function ComprasPage() {
 
   const [imeiAtual, setImeiAtual] = useState("");
   const [imeis, setImeis] = useState<string[]>([]);
+  const [itensPendentes, setItensPendentes] = useState<ItemCompraPendente[]>([]);
 
   const [modelos, setModelos] = useState<string[]>([]);
 
@@ -232,20 +242,22 @@ export default function ComprasPage() {
         );
       }
 
-      const lista: Compra[] = Array.isArray(data)
-        ? (data as Compra[])
+      const lista = Array.isArray(data)
+        ? data
         : Array.isArray(data?.compras)
-        ? (data.compras as Compra[])
+        ? data.compras
         : [];
 
       setCompras(lista);
 
       const nomes: string[] = lista
-        .map((item: Compra): string =>
-          String(item.produtoNome || "").trim()
+        .map(
+          (item: Compra) =>
+            String(item.produtoNome || "").trim()
         )
-        .filter((nome: string): boolean =>
-          Boolean(nome)
+        .filter(
+          (nome: string): nome is string =>
+            Boolean(nome)
         );
 
       setModelos(
@@ -599,6 +611,56 @@ export default function ComprasPage() {
     }
   }
 
+  function adicionarItemCompra() {
+    setMensagem("");
+    setErro("");
+
+    const nomeLimpo = modelo.trim();
+    const preco = numero(precoCompra);
+
+    if (!nomeLimpo) {
+      setErro("Informe o modelo do aparelho para adicionar este item.");
+      return;
+    }
+    if (imeis.length === 0) {
+      setErro("Adicione pelo menos um IMEI para este modelo/cor.");
+      return;
+    }
+    if (preco === null || preco < 0) {
+      setErro("Informe um preço de compra válido para este item.");
+      return;
+    }
+
+    const imeisAnteriores = new Set(itensPendentes.flatMap((item) => item.imeis));
+    const repetido = imeis.find((imei) => imeisAnteriores.has(imei));
+    if (repetido) {
+      setErro(`O IMEI ${repetido} já está em outro item desta compra.`);
+      return;
+    }
+
+    setItensPendentes((atuais) => [
+      ...atuais,
+      {
+        modelo: nomeLimpo,
+        cor: cor.trim(),
+        memoria: memoria.trim(),
+        moeda,
+        precoCompra: preco,
+        imeis: [...imeis],
+      },
+    ]);
+
+    // Mantém o modelo para facilitar cadastrar outra cor do mesmo aparelho.
+    setCor("");
+    setMemoria("");
+    setImeis([]);
+    setImeiAtual("");
+  }
+
+  function removerItemPendente(index: number) {
+    setItensPendentes((atuais) => atuais.filter((_, i) => i !== index));
+  }
+
   async function registrarCompra(
     e: FormEvent
   ) {
@@ -607,50 +669,57 @@ export default function ComprasPage() {
     setMensagem("");
     setErro("");
 
-    const nomeLimpo =
-      modelo.trim();
-
-    const fornecedorLimpo =
-      fornecedor.trim();
-
-    if (!nomeLimpo) {
-      setErro(
-        "Informe o modelo do aparelho."
-      );
-      return;
-    }
+    const fornecedorLimpo = fornecedor.trim();
+    const nomeLimpo = modelo.trim();
+    const precoAtual = numero(precoCompra);
 
     if (!fornecedorLimpo) {
-      setErro(
-        "Informe o fornecedor."
-      );
+      setErro("Informe o fornecedor.");
       return;
     }
-
     if (!dataCompra) {
-      setErro(
-        "Informe a data da compra."
-      );
+      setErro("Informe a data da compra.");
       return;
     }
 
-    if (imeis.length === 0) {
-      setErro(
-        "Adicione pelo menos um IMEI."
-      );
+    // O modelo e o preço podem continuar preenchidos para facilitar
+    // adicionar outra cor; sem cor/memória/IMEI, não é um item novo.
+    const itemAtualTemDados = Boolean(
+      cor.trim() || memoria.trim() || imeis.length > 0
+    );
+    const itensParaRegistrar: ItemCompraPendente[] = [...itensPendentes];
+
+    if (itemAtualTemDados) {
+      if (!nomeLimpo) {
+        setErro("Informe o modelo do último item ou remova os campos vazios.");
+        return;
+      }
+      if (imeis.length === 0) {
+        setErro("Adicione pelo menos um IMEI para o último item.");
+        return;
+      }
+      if (precoAtual === null || precoAtual < 0) {
+        setErro("Informe um preço de compra válido para o último item.");
+        return;
+      }
+      itensParaRegistrar.push({
+        modelo: nomeLimpo,
+        cor: cor.trim(),
+        memoria: memoria.trim(),
+        moeda,
+        precoCompra: precoAtual,
+        imeis: [...imeis],
+      });
+    }
+
+    if (itensParaRegistrar.length === 0) {
+      setErro("Adicione pelo menos um item à compra.");
       return;
     }
 
-    const preco =
-      numero(precoCompra);
-
-    if (
-      preco === null ||
-      preco < 0
-    ) {
-      setErro(
-        "Informe um preço de compra válido."
-      );
+    const todosImeis = itensParaRegistrar.flatMap((item) => item.imeis);
+    if (new Set(todosImeis).size !== todosImeis.length) {
+      setErro("Não pode haver IMEI repetido entre os itens desta compra.");
       return;
     }
 
@@ -668,16 +737,17 @@ export default function ComprasPage() {
             },
             body: JSON.stringify({
               dataCompra,
-              modelo: nomeLimpo,
-              fornecedor:
-                fornecedorLimpo,
-              cor:
-                cor.trim() || null,
-              memoria:
-                memoria.trim() || null,
-              moeda,
-              precoCompra: preco,
-              imeis,
+              fornecedor: fornecedorLimpo,
+              itens: itensParaRegistrar.map((item) => ({
+                modelo: item.modelo,
+                cor: item.cor || null,
+                memoria: item.memoria || null,
+                moeda: item.moeda,
+                moedaCompra: item.moeda,
+                precoCompra: item.precoCompra,
+                quantidade: item.imeis.length,
+                imeis: item.imeis,
+              })),
             }),
           }
         );
@@ -705,6 +775,7 @@ export default function ComprasPage() {
       setPrecoCompra("");
       setImeis([]);
       setImeiAtual("");
+      setItensPendentes([]);
 
       await carregarCompras();
     } catch (error: any) {
@@ -1309,6 +1380,26 @@ export default function ComprasPage() {
             </div>
           </div>
 
+          {itensPendentes.length > 0 && (
+            <div style={{ ...styles.imeiBox, marginTop: 16 }}>
+              <h3 style={styles.sectionTitle}>Itens adicionados nesta compra ({itensPendentes.length})</h3>
+              <p style={styles.muted}>Estes itens serão registrados juntos em uma única compra.</p>
+              <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+                {itensPendentes.map((item, index) => (
+                  <div key={`${item.modelo}-${item.cor}-${index}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: 12, border: "1px solid #dbe3ef", borderRadius: 10, background: "#fff" }}>
+                    <div>
+                      <strong>{item.modelo}</strong>
+                      <div style={styles.muted}>{item.cor || "Cor não informada"} · {item.memoria || "GB não informado"} · {item.imeis.length} aparelho(s)</div>
+                      <div style={styles.muted}>IMEIs: {item.imeis.join(", ")}</div>
+                      <div style={styles.muted}>Preço por aparelho: {dinheiro(item.precoCompra, item.moeda)}</div>
+                    </div>
+                    <button type="button" onClick={() => removerItemPendente(index)} style={styles.chipButton} aria-label="Remover item">×</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div style={styles.imeiBox}>
             <div style={styles.imeiHeader}>
               <div>
@@ -1403,6 +1494,17 @@ export default function ComprasPage() {
             </div>
           </div>
 
+          <div style={{ display: "flex", justifyContent: "flex-start", marginTop: 14 }}>
+            <button
+              type="button"
+              onClick={adicionarItemCompra}
+              disabled={salvando}
+              style={styles.addButton}
+            >
+              + Adicionar modelo/cor nesta compra
+            </button>
+          </div>
+
           <div
             style={styles.formFooter}
           >
@@ -1416,21 +1518,21 @@ export default function ComprasPage() {
               </span>
 
               <strong>
-                {imeis.length}
+                {itensPendentes.reduce((soma, item) => soma + item.imeis.length, 0) + imeis.length}
               </strong>
 
               <span>
-                Total
+                Totais separados por moeda
               </span>
 
               <strong>
-                {dinheiro(
-                  (numero(
-                    precoCompra
-                  ) || 0) *
-                    imeis.length,
-                  moeda
-                )}
+                {`USD ${dinheiro(
+                  itensPendentes.filter((item) => item.moeda === "USD").reduce((soma, item) => soma + item.precoCompra * item.imeis.length, 0) + (moeda === "USD" ? (numero(precoCompra) || 0) * imeis.length : 0),
+                  "USD"
+                )} · BRL ${dinheiro(
+                  itensPendentes.filter((item) => item.moeda === "BRL").reduce((soma, item) => soma + item.precoCompra * item.imeis.length, 0) + (moeda === "BRL" ? (numero(precoCompra) || 0) * imeis.length : 0),
+                  "BRL"
+                )}`}
               </strong>
             </div>
 
