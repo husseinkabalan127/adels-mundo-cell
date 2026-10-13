@@ -13,6 +13,8 @@ type Aparelho = {
   vendido: boolean;
   produtoId: number;
   loteId: number;
+  cor?: string | null;
+  memoria?: string | null;
 
   produto?: {
     id: number;
@@ -42,6 +44,8 @@ type VendaItemForm = {
 };
 
 type PagamentoForm = { forma: string; valor: string; observacao: string };
+
+type ClienteOpcao = { id?: number | string; nome: string; telefone?: string | null; cpfCnpj?: string | null };
 
 type Venda = {
   id: number;
@@ -89,6 +93,19 @@ export default function VendasPage() {
 
   const [cliente, setCliente] =
     useState("");
+  const [clientesCadastrados, setClientesCadastrados] = useState<ClienteOpcao[]>([]);
+  const [mostrarListaClientes, setMostrarListaClientes] = useState(false);
+  const [carregandoClientes, setCarregandoClientes] = useState(false);
+
+  // Campos visuais do formulário conforme o layout solicitado.
+  const [responsavel, setResponsavel] = useState("Hassan");
+  const [responsavelCarregado, setResponsavelCarregado] = useState(false);
+  const [garantia, setGarantia] = useState("Sem garantia");
+  const [observacoes, setObservacoes] = useState("");
+  const [frete, setFrete] = useState("0");
+  const [editarFrete, setEditarFrete] = useState(false);
+  const [precoEditandoIndex, setPrecoEditandoIndex] = useState<number | null>(null);
+  const [menuItemAberto, setMenuItemAberto] = useState<number | null>(null);
 
   const [formaPagamento, setFormaPagamento] =
     useState("Não informado");
@@ -292,13 +309,67 @@ export default function VendasPage() {
   }
 
   // =====================================================
+  // CARREGAR CLIENTES CADASTRADOS (para selecionar na venda)
+  // =====================================================
+
+  async function carregarClientes() {
+    setCarregandoClientes(true);
+    try {
+      const res = await fetch("/api/clientes", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      const lista = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.clientes)
+          ? data.clientes
+          : Array.isArray(data?.data)
+            ? data.data
+            : [];
+      const normalizados = lista
+        .map((c: any) => ({
+          id: c.id,
+          nome: String(c.nome ?? c.name ?? c.nomeCompleto ?? c.razaoSocial ?? "").trim(),
+          telefone: c.telefone ?? c.celular ?? c.phone ?? null,
+          cpfCnpj: c.cpfCnpj ?? c.cpf ?? c.cnpj ?? null,
+        }))
+        .filter((c: ClienteOpcao) => c.nome);
+      setClientesCadastrados(normalizados);
+    } catch (error) {
+      // A venda continua funcionando com o campo de cliente digitado manualmente.
+      console.warn("Não foi possível carregar a lista de clientes:", error);
+    } finally {
+      setCarregandoClientes(false);
+    }
+  }
+
+  // =====================================================
   // CARREGAR AO ABRIR
   // =====================================================
 
   useEffect(() => {
     carregarEstoque();
     carregarVendas();
+    carregarClientes();
+
+    // Recupera o último responsável usado neste navegador.
+    try {
+      const salvo = window.localStorage.getItem("adels_vendas_responsavel");
+      if (salvo !== null) setResponsavel(salvo);
+    } catch (error) {
+      console.error("Não foi possível carregar o responsável salvo:", error);
+    } finally {
+      setResponsavelCarregado(true);
+    }
   }, []);
+
+  useEffect(() => {
+    if (!responsavelCarregado) return;
+    try {
+      window.localStorage.setItem("adels_vendas_responsavel", responsavel);
+    } catch (error) {
+      console.error("Não foi possível salvar o responsável:", error);
+    }
+  }, [responsavel, responsavelCarregado]);
 
   // =====================================================
   // APARELHOS DISPONÍVEIS
@@ -324,6 +395,20 @@ export default function VendasPage() {
             }))
       );
     }, [produtos]);
+
+  // Busca os dados reais de cada aparelho pelo IMEI.
+  // Cor e memória vêm do aparelho cadastrado em Compras/Estoque.
+  function dadosAparelhoPorImei(imei: string) {
+    return aparelhosDisponiveis.find((aparelho) => aparelho.imei === imei) || null;
+  }
+
+  function detalhesAparelho(aparelho: Aparelho) {
+    const cor = aparelho.cor?.trim();
+    const memoria = aparelho.memoria?.trim();
+    return [cor ? `Cor: ${cor}` : null, memoria ? `Memória: ${memoria}` : null]
+      .filter(Boolean)
+      .join(" • ");
+  }
 
   // =====================================================
   // IMEI ENCONTRADO
@@ -629,136 +714,56 @@ export default function VendasPage() {
   }
 
   function adicionarImeiEncontrado(
-    itemIndexPreferido?: number,
+    _itemIndexPreferido?: number,
     aparelhoSelecionado?: Aparelho
   ) {
     setErro("");
     setMensagem("");
 
     const imei = aparelhoSelecionado?.imei?.trim() || imeiBusca.trim();
-
     if (!imei) {
-      setErro(
-        "Digite o IMEI para buscar."
-      );
-
+      setErro("Digite o IMEI para buscar.");
       return;
     }
 
-    // Quando o usuário clica em "Adicionar" nos resultados de busca,
-    // usamos exatamente o aparelho daquela linha. Isso permite pesquisar
-    // por parte do IMEI (ex.: 123) e adicionar o IMEI completo encontrado.
+    // Cada aparelho fica em uma linha própria. Assim, o mesmo modelo
+    // pode ter preço diferente conforme cor, memória ou condição.
     const aparelho = aparelhoSelecionado || aparelhoEncontrado;
-
     if (!aparelho) {
-      setErro(
-        "IMEI não encontrado ou já vendido."
-      );
-
+      setErro("IMEI não encontrado ou já vendido.");
       return;
     }
 
-    // Primeiro tentamos usar o Produto onde o usuário
-    // está digitando/scaneando o IMEI.
-    let index =
-      typeof itemIndexPreferido === "number"
-        ? itemIndexPreferido
-        : imeiInputAtivo;
-
-    const itemPreferido =
-      itens[index];
-
-    // Se o campo ativo já tem um modelo diferente,
-    // procuramos o item do mesmo modelo do IMEI.
-    if (
-      !itemPreferido ||
-      (
-        itemPreferido.produtoId !== "" &&
-        itemPreferido.produtoId !==
-          aparelho.produtoId
-      )
-    ) {
-      index =
-        itens.findIndex(
-          (item) =>
-            item.produtoId ===
-            aparelho.produtoId
-        );
-    }
-
-    // Se ainda não encontrou, usa o primeiro item vazio.
-    if (index === -1) {
-      index =
-        itens.findIndex(
-          (item) =>
-            item.produtoId === ""
-        );
-    }
-
-    // Se não existe nenhum item disponível,
-    // cria um novo Produto no final.
-    if (index === -1) {
-      const novoIndex =
-        itens.length;
-
-      setItens((atual) => [
-        ...atual,
-
-        {
-          produtoId:
-            aparelho.produtoId,
-
-          quantidade: 1,
-
-          valorUnitario: itens.find((item) => item.produtoId === aparelho.produtoId && item.valorUnitario !== "")?.valorUnitario || "",
-
-          imeis: [
-            aparelho.imei,
-          ],
-        },
-      ]);
-
-      setImeiInputAtivo(novoIndex);
+    const imeiJaAdicionado = itens.some((item) => item.imeis.includes(aparelho.imei));
+    if (imeiJaAdicionado) {
+      setErro("Este IMEI já foi adicionado a esta venda.");
       setImeiBusca("");
-
-      // Espera o novo Produto aparecer na tela
-      // antes de colocar o foco nele.
-      setTimeout(() => {
-        const input =
-          imeiInputRefs.current[novoIndex];
-
-        input?.focus({
-          preventScroll: true,
-        });
-      }, 100);
-
       return;
     }
 
-    adicionarImeiAoItem(
-      index,
-      aparelho.imei
-    );
+    const produto = produtos.find((p) => p.id === aparelho.produtoId);
+    const novoItem: VendaItemForm = {
+      produtoId: aparelho.produtoId,
+      quantidade: 1,
+      // Preço individual: não copiar o preço de outro aparelho do mesmo modelo.
+      valorUnitario: "",
+      imeis: [aparelho.imei],
+    };
 
-    if (
-      itens[index]
-        .produtoId === ""
-    ) {
-      atualizarItem(
-        index,
-        {
-          produtoId:
-            aparelho.produtoId,
-        }
-      );
-    }
-
-    setImeiInputAtivo(index);
+    setItens((atuais) => [
+      ...atuais.filter((item) => item.produtoId !== ""),
+      novoItem,
+    ]);
     setImeiBusca("");
+    setBuscaModelo({});
+    setImeiInputAtivo(0);
+    setMensagem(`${produto?.nome || "Aparelho"}${detalhesAparelho(aparelho) ? ` - ${detalhesAparelho(aparelho)}` : ""} adicionado à venda. Informe o preço deste aparelho.`);
 
-    // Mantém o foco exatamente no Produto
-    // onde o IMEI foi escaneado.
-    focarCampoImei(index);
+    // Mantém o foco no leitor/campo de IMEI para o próximo aparelho.
+    setTimeout(() => {
+      const input = document.querySelector<HTMLInputElement>('input[placeholder="Digite ou faça Scan do IMEI"]');
+      input?.focus({ preventScroll: true });
+    }, 50);
   }
 
   // =====================================================
@@ -953,6 +958,22 @@ export default function VendasPage() {
     }
 
     return "-";
+  }
+
+  // Cor e memória por aparelho vendido, quando a API devolve esses campos.
+  function detalhesAparelhosDoItem(item: any) {
+    const aparelhos = Array.isArray(item?.aparelhos) ? item.aparelhos : [];
+    const detalhes = aparelhos.map((a: any) => {
+      const cor = String(a?.cor ?? "").trim();
+      const memoriaRaw = String(a?.memoria ?? a?.gb ?? "").trim();
+      const memoria = memoriaRaw && !/gb/i.test(memoriaRaw) ? `${memoriaRaw} GB` : memoriaRaw;
+      return [cor ? `Cor: ${cor}` : "", memoria ? `Memória: ${memoria}` : ""].filter(Boolean).join(" • ");
+    }).filter(Boolean);
+    if (detalhes.length) return [...new Set(detalhes)].join(" / ");
+    const cor = String(item?.cor ?? "").trim();
+    const memoriaRaw = String(item?.memoria ?? item?.gb ?? "").trim();
+    const memoria = memoriaRaw && !/gb/i.test(memoriaRaw) ? `${memoriaRaw} GB` : memoriaRaw;
+    return [cor ? `Cor: ${cor}` : "", memoria ? `Memória: ${memoria}` : ""].filter(Boolean).join(" • ");
   }
 
   // =====================================================
@@ -1200,7 +1221,9 @@ export default function VendasPage() {
       setTelaPagamento(false);
 
       setCliente("");
-
+      setGarantia("Sem garantia");
+      setObservacoes("");
+      setFrete("0");
       setTaxa("");
 
       setFormaPagamento("Não informado");
@@ -1293,6 +1316,9 @@ export default function VendasPage() {
   function cancelarEdicaoVenda() {
     setEditandoVendaId(null);
     setCliente("");
+    setGarantia("Sem garantia");
+    setObservacoes("");
+    setFrete("0");
     setTaxa("");
     setDescontoVenda("");
     setPagamentos([{ forma: "Dinheiro", valor: "", observacao: "" }]);
@@ -1486,6 +1512,7 @@ export default function VendasPage() {
               <strong>${nome}</strong>
               <br>
               <small>IMEI: ${imeis}</small>
+              ${detalhesAparelhosDoItem(item) ? `<br><small>${detalhesAparelhosDoItem(item)}</small>` : ""}
             </td>
 
             <td style="text-align:center">
@@ -1904,6 +1931,8 @@ export default function VendasPage() {
       const subtotal = typeof item.total === "number" ? item.total : quantidade * valor;
       itemLines.push(`${index + 1}. ${nomeProdutoDoItem(item)}  |  Qtde: ${quantidade}`);
       itemLines.push(`   IMEI: ${imeisDoItem(item) || "—"}`);
+      const detalhes = detalhesAparelhosDoItem(item);
+      if (detalhes) itemLines.push(`   ${detalhes}`);
       itemLines.push(`   Unitário: ${dinheiro(valor)}  |  Subtotal: ${dinheiro(subtotal)}`);
       itemLines.push("");
     });
@@ -2065,10 +2094,10 @@ export default function VendasPage() {
     <main
       style={{
         padding: 24,
-        maxWidth: 1450,
+        maxWidth: 1550,
         margin: "0 auto",
-        fontFamily:
-          "Arial, sans-serif",
+        fontFamily: "Arial, sans-serif",
+        color: "#111827",
       }}
     >
 
@@ -2153,10 +2182,11 @@ export default function VendasPage() {
 
       <section
         style={{
-          border: "1px solid #e5e5e5",
-          borderRadius: 12,
-          padding: 20,
+          border: "1px solid #e1e5ec",
+          borderRadius: 16,
+          padding: 22,
           background: "#fff",
+          boxShadow: "0 8px 28px rgba(15, 23, 42, .04)",
         }}
       >
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.7fr) minmax(280px, .8fr)", gap: 22, alignItems: "start" }}>
@@ -2189,91 +2219,84 @@ export default function VendasPage() {
 
         </div>
 
-        {/* ================================================= */}
-        {/* DATA + CLIENTE + PAGAMENTO + ESTADO */}
-        {/* ================================================= */}
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns:
-              "repeat(auto-fit, minmax(220px, 1fr))",
-            gap: 14,
-          }}
-        >
-
-          {/* DATA */}
-
-          <label>
-
-            Data da venda
-
-            <input
-              type="date"
-              value={
-                dataVenda
-              }
-              onChange={(e) =>
-                setDataVenda(
-                  e.target.value
-                )
-              }
-              style={
-                inputStyle
-              }
-            />
-
-            <small
-              style={{
-                color: "#666",
-                display:
-                  "block",
-                marginTop: 5,
-              }}
-            >
-              Você pode colocar uma data anterior.
-            </small>
-
+        {/* Dados principais da venda, no layout de referência */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 16, marginBottom: 16 }}>
+          <label style={{ display: "grid", gap: 7, fontWeight: 500 }}>
+            Responsável
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 8 }}>
+              <input
+                type="text"
+                value={responsavel}
+                onChange={(e) => setResponsavel(e.target.value)}
+                placeholder="Digite o nome do responsável"
+                style={{ ...inputStyle, marginTop: 0 }}
+                autoComplete="off"
+              />
+              <button
+                type="button"
+                onClick={() => setResponsavel("")}
+                title="Apagar nome do responsável"
+                aria-label="Apagar nome do responsável"
+                style={{ ...blueButton, padding: "0 14px", background: "#fff", color: "#b91c1c", border: "1px solid #d1d5db" }}
+              >
+                ×
+              </button>
+            </div>
           </label>
-
-          {/* CLIENTE */}
-
-          <label>
-
-            Cliente (opcional)
-
-            <input
-              value={cliente}
-              onChange={(e) =>
-                setCliente(
-                  e.target.value
-                )
-              }
-              placeholder="Nome do cliente"
-              style={
-                inputStyle
-              }
-            />
-
+          <label style={{ display: "grid", gap: 7, fontWeight: 500 }}>
+            Garantia
+            <select value={garantia} onChange={(e) => setGarantia(e.target.value)} style={inputStyle}>
+              <option>Sem garantia</option>
+              <option>1 mês</option>
+              <option>3 meses</option>
+              <option>6 meses</option>
+              <option>1 ano</option>
+              <option>Garantia do fabricante</option>
+            </select>
           </label>
-
-          {/* O estado do pagamento é calculado automaticamente pelo valor pago. */}
-
         </div>
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: "block", fontWeight: 500, marginBottom: 7 }}>Cliente</label>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 12 }}>
+            <input value={cliente} onChange={(e) => setCliente(e.target.value)} placeholder="Nome do cliente" style={{ ...inputStyle, marginTop: 0 }} />
+            <button type="button" onClick={() => { const abrir = !mostrarListaClientes; setMostrarListaClientes(abrir); if (abrir) carregarClientes(); }} style={{ ...blueButton, background: "#fff", color: "#1f2937", border: "1px solid #d1d5db" }}>♟ Selecionar Cliente</button>
+          </div>
+          {mostrarListaClientes && (
+            <div style={{ marginTop: 10, padding: 12, border: "1px solid #d1d5db", borderRadius: 10, background: "#f8fafc" }}>
+              <label style={{ display: "grid", gap: 6, fontWeight: 500 }}>
+                {carregandoClientes ? "Carregando clientes..." : `Clientes cadastrados (${clientesCadastrados.length})`}
+                <select value={clientesCadastrados.some((c) => c.nome === cliente) ? cliente : ""} onChange={(e) => { if (e.target.value) setCliente(e.target.value); }} style={inputStyle}>
+                  <option value="">Selecione um cliente...</option>
+                  {clientesCadastrados.map((c, i) => <option key={String(c.id ?? `${c.nome}-${i}`)} value={c.nome}>{c.nome}{c.telefone ? ` — ${c.telefone}` : ""}</option>)}
+                </select>
+              </label>
+              {!carregandoClientes && clientesCadastrados.length === 0 && <small style={{ display: "block", marginTop: 6, color: "#92400e" }}>Não foi possível encontrar clientes cadastrados pela rota /api/clientes. Você ainda pode digitar o nome acima.</small>}
+              <button type="button" onClick={() => setMostrarListaClientes(false)} style={{ ...blueButton, marginTop: 10, background: "#e5e7eb", color: "#111827" }}>Fechar lista</button>
+            </div>
+          )}
+        </div>
+        <label style={{ display: "grid", gap: 7, fontWeight: 500, marginBottom: 18 }}>
+          Observações
+          <textarea value={observacoes} onChange={(e) => setObservacoes(e.target.value)} placeholder="Observações sobre esta venda" rows={3} style={{ ...inputStyle, resize: "vertical", minHeight: 84 }} />
+        </label>
 
         {/* ================================================= */}
         {/* BUSCA DE PRODUTO E ITENS DA VENDA */}
         <div style={{ marginTop: 18, position: "relative" }}>
           <label style={{ display: "grid", gap: 7, fontWeight: 500 }}>
             Buscar produto por nome ou código
-            <input
-              value={buscaProdutoTabela}
-              onChange={(e) => setBuscaProdutoTabela(e.target.value)}
-              placeholder="Digite o modelo para buscar um produto"
-              autoComplete="off"
-              style={inputStyle}
-            />
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 0 }}>
+              <input
+                value={buscaProdutoTabela}
+                onChange={(e) => setBuscaProdutoTabela(e.target.value)}
+                placeholder="Clique ou digite para buscar um produto"
+                autoComplete="off"
+                style={{ ...inputStyle, marginTop: 0, borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
+              />
+              <button type="button" onClick={() => { if (!buscaProdutoTabela.trim()) setErro("Digite o nome do produto para buscar."); }} style={{ ...blueButton, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, display: "flex", alignItems: "center", gap: 8 }}>⌕ Buscar</button>
+            </div>
           </label>
+          <small style={{ display: "block", marginTop: 7, color: "#475569" }}>Atalhos: F4 busca produto | F6 resumo da venda</small>
           {buscaProdutoTabela.trim() && (
             <div style={{ position: "absolute", zIndex: 30, left: 0, right: 0, top: "100%", background: "#fff", border: "1px solid #d8d8d8", borderRadius: 8, boxShadow: "0 6px 18px rgba(0,0,0,.12)", maxHeight: 260, overflowY: "auto" }}>
               {produtos.filter((p) => p.quantidade > 0 && p.nome.toLowerCase().includes(buscaProdutoTabela.trim().toLowerCase())).slice(0, 20).map((p) => (
@@ -2305,39 +2328,18 @@ export default function VendasPage() {
             <div style={{ marginTop: 8, border: "1px solid #b9d8ff", borderRadius: 8, padding: 12 }}>
               {resultadosBusca.length > 0 ? resultadosBusca.map((a) => (
                 <div key={a.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: 8, borderBottom: "1px solid #eee" }}>
-                  <span>{a.produto?.nome || produtos.find((p) => p.id === a.produtoId)?.nome || "Produto"} — IMEI {a.imei}</span>
+                  <div style={{ minWidth: 0, display: "grid", gap: 4 }}>
+                    <strong>{a.produto?.nome || produtos.find((p) => p.id === a.produtoId)?.nome || "Produto"}</strong>
+                    <span style={{ fontSize: 12, color: "#475569" }}>IMEI: {a.imei}</span>
+                    <span style={{ fontSize: 12, color: "#166534", fontWeight: 600 }}>
+                      {detalhesAparelho(a) || "Cor/GB não cadastrados para este aparelho"}
+                    </span>
+                  </div>
                   <button type="button" onClick={() => adicionarImeiEncontrado(undefined, a)} style={smallBlueButton}>Adicionar</button>
                 </div>
               )) : <span style={{ color: "#b42318" }}>IMEI não encontrado ou já vendido.</span>}
             </div>
           )}
-        </div>
-
-        <div style={{ marginTop: 22, overflowX: "auto", border: "1px solid #e5e7eb", borderRadius: 10 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
-            <thead><tr>
-              <th style={th}>Qtde</th><th style={th}>Nome</th><th style={th}>Código / IMEI</th><th style={th}>Preço Unitário</th><th style={th}>Valor Total</th><th style={th}>Ações</th>
-            </tr></thead>
-            <tbody>
-              {itens.map((item, index) => {
-                if (item.produtoId === "") return null;
-                const produto = produtos.find((p) => p.id === item.produtoId);
-                const subtotal = (Number(item.quantidade) || 0) * (Number(String(item.valorUnitario || 0).replace(",", ".")) || 0);
-                return <tr key={`${item.produtoId}-${index}`}>
-                  <td style={td}>
-                    <input type="number" min={1} max={Math.max(item.quantidade, produto?.quantidade || 1)} value={item.quantidade} onChange={(e) => atualizarItem(index, { quantidade: Math.max(1, Number(e.target.value) || 1) })} style={{ ...inputStyle, width: 76, padding: 8 }} />
-                  </td>
-                  <td style={td}><strong>{produto?.nome || "Produto"}</strong></td>
-                  <td style={td}>{item.imeis.length ? item.imeis.map((imei) => <div key={imei} style={{ whiteSpace: "nowrap" }}>{imei} <button type="button" onClick={() => removerImei(index, imei)} title="Remover IMEI" style={{ border: 0, background: "transparent", color: "#b42318", cursor: "pointer" }}>×</button></div>) : <span style={{ color: "#777" }}>IMEI pendente</span>}</td>
-                  <td style={td}><input value={item.valorUnitario} onChange={(e) => atualizarItem(index, { valorUnitario: e.target.value })} placeholder="R$ 0,00" inputMode="decimal" style={{ ...inputStyle, width: 130, padding: 8 }} /></td>
-                  <td style={td}><strong>{dinheiro(subtotal)}</strong></td>
-                  <td style={td}><button type="button" onClick={() => setItens((atuais) => atuais.filter((_, i) => i !== index))} style={{ ...smallBlueButton, background: "#333" }}>Excluir</button></td>
-                </tr>;
-              })}
-              {!itens.some((item) => item.produtoId !== "") && <tr><td style={td} colSpan={6}><span style={{ color: "#777" }}>Nenhum produto adicionado ainda.</span></td></tr>}
-              <tr style={{ background: "#f3f4f6", fontWeight: 700 }}><td style={td} colSpan={4} align="right">Total</td><td style={td}>{dinheiro(total)}</td><td style={td}></td></tr>
-            </tbody>
-          </table>
         </div>
 
         {/* ================================================= */}
@@ -2386,16 +2388,76 @@ export default function VendasPage() {
             <h3 style={{ margin: "0 0 18px", fontSize: 18 }}>Pagamentos</h3>
             <div style={{ display: "grid", gap: 0 }}>
               <div style={summaryRowStyle}><span>Total</span><strong>{dinheiro(total)}</strong></div>
-              <div style={summaryRowStyle}><span>Descontos</span><span style={{ display: "flex", alignItems: "center", gap: 8 }}><strong>{dinheiro(totalDescontos)}</strong><button type="button" onClick={() => setEditarDesconto((v) => !v)} aria-label="Editar desconto" title="Editar desconto" style={{ border: 0, background: "transparent", color: "#1677d2", cursor: "pointer", fontSize: 17 }}>✎</button></span></div>
+              <div style={summaryRowStyle}><span>Descontos</span><span style={{ display: "flex", alignItems: "center", gap: 8 }}><strong>{dinheiro(totalDescontos)}</strong><button type="button" onClick={() => setEditarDesconto((v) => !v)} aria-label="Editar desconto" title="Editar desconto" style={{ border: 0, background: "transparent", color: "#1684ef", cursor: "pointer", fontSize: 19 }}>✎</button></span></div>
               {editarDesconto && <div style={{ padding: "8px 0 12px" }}><label style={{ display: "grid", gap: 6, fontSize: 13 }}>Desconto na venda inteira (R$)<input autoFocus type="number" min="0" step="0.01" value={descontoVenda} onChange={(e) => setDescontoVenda(e.target.value)} placeholder="0,00" style={inputStyle} /></label><button type="button" onClick={() => setEditarDesconto(false)} style={{ ...smallBlueButton, marginTop: 8 }}>Concluir</button></div>}
-              <div style={summaryRowStyle}><span>Valor final</span><strong>{dinheiro(totalLiquido)}</strong></div>
+              <div style={summaryRowStyle}><span>Valor frete</span><span style={{ display: "flex", alignItems: "center", gap: 8 }}><strong>{dinheiro(Number(String(frete || 0).replace(",", ".")) || 0)}</strong><button type="button" onClick={() => setEditarFrete((v) => !v)} title="Editar frete" style={{ border: 0, background: "transparent", color: "#1684ef", cursor: "pointer", fontSize: 19 }}>✎</button></span></div>
+              {editarFrete && <div style={{ padding: "8px 0 12px" }}><label style={{ display: "grid", gap: 6, fontSize: 13 }}>Valor do frete (R$)<input autoFocus type="number" min="0" step="0.01" value={frete} onChange={(e) => setFrete(e.target.value)} placeholder="0,00" style={inputStyle} /></label><button type="button" onClick={() => setEditarFrete(false)} style={{ ...smallBlueButton, marginTop: 8 }}>Concluir</button></div>}
+              <div style={summaryRowStyle}><span>Valor final</span><strong>{dinheiro(totalLiquido + (Number(String(frete || 0).replace(",", ".")) || 0))}</strong></div>
               <div style={summaryRowStyle}><span>Pagamentos</span><strong>{dinheiro(totalPagamentos)}</strong></div>
               <div style={{ ...summaryRowStyle, borderBottom: 0, paddingTop: 16, fontSize: 16 }}><span>Total em aberto</span><strong style={{ color: saldoPendente > 0 ? "#b45309" : "#15803d" }}>{dinheiro(saldoPendente)}</strong></div>
             </div>
             <div style={{ display: "grid", gap: 10, marginTop: 18 }}>
-              <button type="button" onClick={() => setTelaPagamento(true)} style={blueButton}>$ Informar pagamento</button>{editandoVendaId && <button type="button" onClick={cancelarEdicaoVenda} style={{ ...blueButton, background: "#b91c1c", marginTop: 8 }}>Cancelar edição</button>}
+              <button type="button" onClick={() => setTelaPagamento(true)} style={{ ...blueButton, padding: "13px 14px", fontSize: 14 }}>＄ Informar pagamento</button>
+              <button type="button" onClick={() => setTelaPagamento(true)} style={{ ...blueButton, padding: "13px 14px", fontSize: 14, background: "#24965b" }}>✓ Finalizar venda</button>
+              {editandoVendaId && <button type="button" onClick={cancelarEdicaoVenda} style={{ ...blueButton, background: "#b91c1c", marginTop: 8 }}>Cancelar edição</button>}
             </div>
           </aside>
+        </div>
+
+        {/* TABELA DA VENDA: largura total, abaixo dos dois painéis */}
+        <div style={{ marginTop: 22, overflowX: "auto", border: "1px solid #e1e5ec", borderRadius: 12, background: "#fff" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
+            <thead><tr>
+              <th style={{ ...th, textAlign: "center", padding: 15 }}>Qtde</th><th style={{ ...th, padding: 15 }}>Nome</th><th style={{ ...th, padding: 15 }}>Código</th><th style={{ ...th, padding: 15 }}>Preço Unitário (por aparelho)</th><th style={{ ...th, padding: 15 }}>Valor Total</th><th style={{ ...th, padding: 15 }}>Ações</th>
+            </tr></thead>
+            <tbody>
+              {itens.map((item, index) => {
+                if (item.produtoId === "") return null;
+                const produto = produtos.find((p) => p.id === item.produtoId);
+                const subtotal = (Number(item.quantidade) || 0) * (Number(String(item.valorUnitario || 0).replace(",", ".")) || 0);
+                const aparelhosDaLinha = item.imeis.map((imei) => dadosAparelhoPorImei(imei)).filter(Boolean) as Aparelho[];
+                const detalhes = [...new Set(aparelhosDaLinha.map((a) => detalhesAparelho(a)).filter(Boolean))].join(" • ");
+                return <tr key={`${item.produtoId}-${index}`} style={{ borderBottom: "1px solid #e5e7eb" }}>
+                  <td style={{ ...td, textAlign: "center", padding: 16 }}>
+                    <strong>{item.quantidade}x</strong>
+                  </td>
+                  <td style={{ ...td, padding: 16, minWidth: 260 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <div style={{ width: 42, height: 48, flex: "0 0 42px", borderRadius: 7, background: "linear-gradient(145deg,#e5e7eb,#f8fafc)", border: "1px solid #d1d5db", display: "grid", placeItems: "center", fontSize: 25 }}>📱</div>
+                      <div style={{ minWidth: 0 }}>
+                        <strong>{produto?.nome || "Produto"}{detalhes ? ` - ${detalhes}` : ""}</strong>
+                        <div style={{ fontSize: 12, color: "#64748b", marginTop: 5 }}>Aparelho individual</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td style={{ ...td, padding: 16, minWidth: 180 }}>
+                    {item.imeis.length ? item.imeis.map((imei) => (
+                      <div key={imei} style={{ padding: "4px 0", borderBottom: "1px solid #f1f5f9", whiteSpace: "nowrap", fontSize: 13 }}>
+                        <span>IMEI&gt;{imei}</span>
+                        <button type="button" onClick={() => removerImei(index, imei)} title="Remover IMEI" style={{ border: 0, background: "transparent", color: "#b42318", cursor: "pointer", fontSize: 16, marginLeft: 5 }}>×</button>
+                      </div>
+                    )) : <span style={{ color: "#777" }}>IMEI pendente</span>}
+                  </td>
+                  <td style={{ ...td, padding: 16, whiteSpace: "nowrap" }}>
+                    {precoEditandoIndex === index ? <input autoFocus value={item.valorUnitario} onChange={(e) => atualizarItem(index, { valorUnitario: e.target.value })} placeholder="R$ 0,00" inputMode="decimal" style={{ ...inputStyle, width: 130, padding: 8, marginTop: 0 }} /> : <strong>{dinheiro(Number(String(item.valorUnitario || 0).replace(",", ".")) || 0)}</strong>}
+                  </td>
+                  <td style={{ ...td, padding: 16, whiteSpace: "nowrap" }}><strong>{dinheiro(subtotal)}</strong></td>
+                  <td style={{ ...td, padding: 16, whiteSpace: "nowrap" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <button type="button" onClick={() => setPrecoEditandoIndex(precoEditandoIndex === index ? null : index)} title={precoEditandoIndex === index ? "Concluir edição" : "Editar preço"} style={{ width: 40, height: 40, border: 0, borderRadius: 999, background: "#1684ef", color: "white", fontSize: 18, fontWeight: 700, cursor: "pointer" }}>{precoEditandoIndex === index ? "✓" : "✎"}</button>
+                      <button type="button" onClick={() => setItens((atuais) => atuais.filter((_, i) => i !== index))} title="Excluir item" style={{ width: 40, height: 40, border: 0, borderRadius: 999, background: "#111827", color: "white", fontSize: 17, cursor: "pointer" }}>▣</button>
+                      <div style={{ position: "relative" }}>
+                        <button type="button" onClick={() => setMenuItemAberto(menuItemAberto === index ? null : index)} title="Mais opções" style={{ border: 0, background: "transparent", color: "#111827", fontSize: 22, cursor: "pointer", padding: "4px 2px" }}>⋮</button>
+                        {menuItemAberto === index && <div style={{ position: "absolute", right: 0, top: "100%", zIndex: 20, minWidth: 145, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,.12)", padding: 5 }}><button type="button" onClick={() => { setPrecoEditandoIndex(index); setMenuItemAberto(null); }} style={{ display: "block", width: "100%", textAlign: "left", padding: 9, border: 0, background: "white", cursor: "pointer" }}>Editar preço</button><button type="button" onClick={() => { setItens((atuais) => atuais.filter((_, i) => i !== index)); setMenuItemAberto(null); }} style={{ display: "block", width: "100%", textAlign: "left", padding: 9, border: 0, background: "white", color: "#b91c1c", cursor: "pointer" }}>Excluir item</button></div>}
+                      </div>
+                    </div>
+                  </td>
+                </tr>;
+              })}
+              {!itens.some((item) => item.produtoId !== "") && <tr><td style={td} colSpan={6}><span style={{ color: "#777" }}>Nenhum produto adicionado ainda.</span></td></tr>}
+              <tr style={{ background: "#eef0f4", fontWeight: 700 }}><td style={{ ...td, padding: 16 }} colSpan={4} align="right">Total</td><td style={{ ...td, padding: 16, whiteSpace: "nowrap" }}>{dinheiro(total)}</td><td style={td}></td></tr>
+            </tbody>
+          </table>
         </div>
 
       </section>
@@ -3027,8 +3089,7 @@ export default function VendasPage() {
 
                                     <h3
                                       style={{
-                                        margin:
-                                          "0 0 12px",
+                                        margin: "0 0 12px",
                                         fontSize: 17,
                                       }}
                                     >
@@ -3037,199 +3098,157 @@ export default function VendasPage() {
 
                                     <div
                                       style={{
-                                        display: "flex",
-                                        flexDirection: "column",
-                                        gap: 10,
+                                        overflowX: "auto",
+                                        border: "1px solid #e5e7eb",
+                                        borderRadius: 10,
+                                        background: "#fff",
                                       }}
                                     >
-
-                                      {itensVenda.length ===
-                                      0 ? (
-                                        <p
-                                          style={{
-                                            color: "#777",
-                                            margin: 0,
-                                          }}
-                                        >
-                                          Nenhum produto encontrado.
-                                        </p>
-                                      ) : (
-                                        itensVenda.map(
-                                          (
-                                            item: any,
-                                            index: number
-                                          ) => {
-                                            const aparelhos =
-                                              Array.isArray(
-                                                item.aparelhos
-                                              )
+                                      <table
+                                        style={{
+                                          width: "100%",
+                                          borderCollapse: "collapse",
+                                          minWidth: 760,
+                                        }}
+                                      >
+                                        <thead>
+                                          <tr>
+                                            <th style={th}>Qtde</th>
+                                            <th style={th}>Nome</th>
+                                            <th style={th}>Código / IMEI</th>
+                                            <th style={th}>Preço Unitário</th>
+                                            <th style={th}>Valor Total</th>
+                                            <th style={th}>Ações</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {itensVenda.length === 0 ? (
+                                            <tr>
+                                              <td style={td} colSpan={6}>
+                                                <span style={{ color: "#777" }}>
+                                                  Nenhum produto encontrado.
+                                                </span>
+                                              </td>
+                                            </tr>
+                                          ) : (
+                                            itensVenda.flatMap((item: any, index: number) => {
+                                              const aparelhos = Array.isArray(item.aparelhos)
                                                 ? item.aparelhos
                                                 : [];
+                                              const quantidade = Math.max(
+                                                1,
+                                                Number(item.quantidade) || aparelhos.length || 1
+                                              );
+                                              const precoUnitario = Number(
+                                                item.valorUnitario ?? item.preco ?? item.valor ?? 0
+                                              ) || 0;
+                                              const nome = nomeProdutoDoItem(item);
+                                              const aparelhosComLinha = aparelhos.length
+                                                ? aparelhos
+                                                : [null];
 
-                                            const subtotal =
-                                              typeof item.total ===
-                                              "number"
-                                                ? item.total
-                                                : (
-                                                    Number(
-                                                      item.quantidade
-                                                    ) || 0
-                                                  ) *
-                                                  (
-                                                    Number(
-                                                      item.valorUnitario ??
-                                                        item.preco ??
-                                                        item.valor ??
-                                                        0
-                                                    ) || 0
-                                                  );
+                                              return aparelhosComLinha.map((aparelho: any, aparelhoIndex: number) => {
+                                                const imei = String(aparelho?.imei || "");
+                                                const nomeComDetalhes = [
+                                                  nome,
+                                                  aparelho?.cor,
+                                                  aparelho?.memoria,
+                                                ]
+                                                  .filter((valor) => Boolean(String(valor || "").trim()))
+                                                  .join(" - ");
+                                                const quantidadeLinha = aparelhos.length > 0 ? 1 : quantidade;
+                                                const totalLinha = precoUnitario * quantidadeLinha;
+                                                const chave = `${venda.id}-${index}-${aparelho?.id ?? aparelhoIndex}`;
 
-                                            return (
-                                              <div
-                                                key={index}
-                                                style={{
-                                                  border:
-                                                    "1px solid #eee",
-                                                  borderRadius: 10,
-                                                  padding: 14,
-                                                  background:
-                                                    "#fafafa",
-                                                }}
-                                              >
-
-                                                <div
-                                                  style={{
-                                                    display: "flex",
-                                                    justifyContent:
-                                                      "space-between",
-                                                    alignItems:
-                                                      "flex-start",
-                                                    gap: 12,
-                                                    flexWrap:
-                                                      "wrap",
-                                                  }}
-                                                >
-
-                                                  <div>
-                                                    <strong
-                                                      style={{
-                                                        fontSize:
-                                                          16,
-                                                      }}
-                                                    >
-                                                      📱{" "}
-                                                      {nomeProdutoDoItem(
-                                                        item
-                                                      )}
-                                                    </strong>
-
-                                                    <div
-                                                      style={{
-                                                        marginTop:
-                                                          5,
-                                                        color:
-                                                          "#555",
-                                                      }}
-                                                    >
-                                                      Quantidade:{" "}
-                                                      <strong>
-                                                        {
-                                                          item.quantidade
-                                                        }
-                                                      </strong>
-                                                    </div>
-
-                                                    <div
-                                                      style={{
-                                                        marginTop:
-                                                          4,
-                                                        color:
-                                                          "#555",
-                                                      }}
-                                                    >
-                                                      Valor unitário:{" "}
-                                                      <strong>
-                                                        {dinheiro(
-                                                          Number(
-                                                            item.valorUnitario ??
-                                                              item.preco ??
-                                                              item.valor ??
-                                                              0
-                                                          )
-                                                        )}
-                                                      </strong>
-                                                    </div>
-                                                  </div>
-
-                                                  <strong
-                                                    style={{
-                                                      fontSize:
-                                                        17,
-                                                    }}
-                                                  >
-                                                    {dinheiro(
-                                                      subtotal
-                                                    )}
-                                                  </strong>
-
-                                                </div>
-
-                                                {aparelhos.length >
-                                                  0 && (
-                                                  <div
-                                                    style={{
-                                                      marginTop:
-                                                        12,
-                                                      paddingTop:
-                                                        10,
-                                                      borderTop:
-                                                        "1px solid #eee",
-                                                    }}
-                                                  >
-                                                    <strong
-                                                      style={{
-                                                        fontSize:
-                                                          13,
-                                                      }}
-                                                    >
-                                                      IMEI:
-                                                    </strong>
-
-                                                    <div
-                                                      style={{
-                                                        marginTop:
-                                                          5,
-                                                        fontSize:
-                                                          13,
-                                                        color:
-                                                          "#555",
-                                                        wordBreak:
-                                                          "break-all",
-                                                      }}
-                                                    >
-                                                      {aparelhos
-                                                        .map(
-                                                          (
-                                                            aparelho: any
-                                                          ) =>
-                                                            aparelho?.imei
-                                                        )
-                                                        .filter(
-                                                          Boolean
-                                                        )
-                                                        .join(
-                                                          ", "
-                                                        )}
-                                                    </div>
-                                                  </div>
-                                                )}
-
-                                              </div>
-                                            );
-                                          }
-                                        )
-                                      )}
-
+                                                return (
+                                                  <tr key={chave}>
+                                                    <td style={td}>{quantidadeLinha}x</td>
+                                                    <td style={td}>
+                                                      <strong>{nomeComDetalhes || nome || "Produto"}</strong>
+                                                    </td>
+                                                    <td style={{ ...td, wordBreak: "break-all" }}>
+                                                      {imei || "—"}
+                                                    </td>
+                                                    <td style={td}>{dinheiro(precoUnitario)}</td>
+                                                    <td style={td}>
+                                                      <strong>{dinheiro(totalLinha)}</strong>
+                                                    </td>
+                                                    <td style={td}>
+                                                      <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                                                        <button
+                                                          type="button"
+                                                          title="Editar venda"
+                                                          aria-label="Editar venda"
+                                                          onClick={() => iniciarEdicaoVenda(venda)}
+                                                          style={{
+                                                            width: 34,
+                                                            height: 34,
+                                                            border: 0,
+                                                            borderRadius: "50%",
+                                                            background: "#1685f8",
+                                                            color: "#fff",
+                                                            cursor: "pointer",
+                                                            fontSize: 16,
+                                                            fontWeight: 700,
+                                                          }}
+                                                        >
+                                                          ✎
+                                                        </button>
+                                                        <button
+                                                          type="button"
+                                                          title={aparelho?.id ? "Devolver aparelho ao estoque" : "Excluir venda inteira"}
+                                                          aria-label={aparelho?.id ? "Devolver aparelho ao estoque" : "Excluir venda inteira"}
+                                                          onClick={() => {
+                                                            if (aparelho?.id && imei) {
+                                                              void devolverAparelho(venda.id, Number(aparelho.id), imei);
+                                                            } else {
+                                                              void excluirVenda(venda.id);
+                                                            }
+                                                          }}
+                                                          style={{
+                                                            width: 34,
+                                                            height: 34,
+                                                            border: 0,
+                                                            borderRadius: "50%",
+                                                            background: "#202124",
+                                                            color: "#fff",
+                                                            cursor: "pointer",
+                                                            fontSize: 15,
+                                                          }}
+                                                        >
+                                                          ▣
+                                                        </button>
+                                                        <button
+                                                          type="button"
+                                                          title="Mais ações da venda"
+                                                          aria-label="Mais ações da venda"
+                                                          onClick={() => abrirFatura(venda)}
+                                                          style={{
+                                                            border: 0,
+                                                            background: "transparent",
+                                                            color: "#111827",
+                                                            cursor: "pointer",
+                                                            fontSize: 22,
+                                                            lineHeight: 1,
+                                                            padding: "0 3px",
+                                                          }}
+                                                        >
+                                                          ⋮
+                                                        </button>
+                                                      </div>
+                                                    </td>
+                                                  </tr>
+                                                );
+                                              });
+                                            })
+                                          )}
+                                          <tr style={{ background: "#f3f4f6", fontWeight: 700 }}>
+                                            <td style={td} colSpan={4} align="right">Total</td>
+                                            <td style={td}>{dinheiro(totalDaVenda(venda))}</td>
+                                            <td style={td}></td>
+                                          </tr>
+                                        </tbody>
+                                      </table>
                                     </div>
 
                                     {/* AÇÕES DA VENDA */}
@@ -3509,8 +3528,7 @@ const inputStyle: React.CSSProperties =
     padding:
       "11px 12px",
 
-    border:
-      "1px solid #d8d8d8",
+    border: "1px solid #d1d5db",
 
     borderRadius: 8,
 
@@ -3659,8 +3677,8 @@ const th: React.CSSProperties =
 
     fontSize: 13,
 
-    background:
-      "#f7f7f7",
+    background: "#f1f3f7",
+    color: "#1f2937",
   };
 
 const td: React.CSSProperties =
