@@ -24,7 +24,7 @@ type Aparelho = {
 
   id: number;
 
-  imei: string;
+  imei: string | null;
 
   vendido: boolean;
 
@@ -58,7 +58,7 @@ type Lote = {
 
 
 
-type ItemConferencia = Aparelho & { produtoNome: string };
+type ItemConferencia = Omit<Aparelho, "imei"> & { imei: string; produtoNome: string };
 
 
 type Produto = {
@@ -435,7 +435,10 @@ export default function EstoquePage() {
       const lista: ItemConferencia[] = [];
       for (const produto of (Array.isArray(data) ? data : []) as Produto[]) {
         for (const aparelho of produto.aparelhos || []) {
-          if (!aparelho.vendido) lista.push({ ...aparelho, produtoNome: produto.nome });
+          // A conferência por scanner só inclui aparelhos que possuem IMEI.
+          if (!aparelho.vendido && aparelho.imei?.trim()) {
+            lista.push({ ...aparelho, imei: aparelho.imei.trim(), produtoNome: produto.nome });
+          }
         }
       }
       setItensConferencia(lista);
@@ -1262,7 +1265,7 @@ export default function EstoquePage() {
 
                                 >
 
-                                  <strong>{aparelho.imei}</strong>
+                                  <strong>{aparelho.imei || "Sem IMEI"}</strong>
 
                                   <span
 
@@ -1472,7 +1475,7 @@ export default function EstoquePage() {
 
                                             >
 
-                                              <strong>{aparelho.imei}</strong>
+                                              <strong>{aparelho.imei || "Sem IMEI"}</strong>
 
                                               <span
 

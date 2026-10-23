@@ -180,6 +180,71 @@ export async function GET(req: Request) {
         },
       });
 
+    // =================================================
+    // TODAS AS VENDAS COM TAXA PENDENTE
+    // INDEPENDENTE DO FILTRO DE DATA DO RELATÓRIO
+    // =================================================
+
+    const vendasPendentesRaw = await prisma.venda.findMany({
+      // No schema.prisma, taxaFechada é Boolean não anulável
+      // (Boolean @default(false)); portanto, filtrar somente false.
+      where: {
+        taxaFechada: false,
+      },
+      orderBy: { createdAt: "asc" },
+      include: {
+        itens: {
+          include: {
+            produto: { select: { nome: true } },
+            aparelhos: {
+              select: {
+                imei: true,
+                lote: {
+                  select: {
+                    precoCompraUsd: true,
+                    precoCompraBrl: true,
+                    tipoCusto: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const vendasPendentes = (vendasPendentesRaw as unknown as VendaRelatorio[]).map((venda) => {
+      const quantidade = venda.itens.reduce(
+        (total, item) => total + Number(item.quantidade ?? 0),
+        0
+      );
+      const valorVenda = venda.itens.reduce(
+        (total, item) => total + Number(item.total ?? 0),
+        0
+      );
+      const produtosVenda = venda.itens
+        .map((item) => item.produto?.nome)
+        .filter((nome): nome is string => Boolean(nome));
+      const agora = new Date();
+      const dataVenda = new Date(venda.createdAt);
+      const diasPendente = Math.max(
+        0,
+        Math.floor((new Date(agora.getFullYear(), agora.getMonth(), agora.getDate()).getTime() -
+          new Date(dataVenda.getFullYear(), dataVenda.getMonth(), dataVenda.getDate()).getTime()) / 86400000)
+      );
+
+      return {
+        id: venda.id,
+        dataVenda: venda.createdAt,
+        cliente: venda.cliente ?? "",
+        produto: produtosVenda.length ? produtosVenda.join(", ") : "Modelo não informado",
+        quantidade,
+        valorVenda,
+        taxa: venda.taxa === null || venda.taxa === undefined ? null : Number(venda.taxa),
+        diasPendente,
+      };
+    });
+
     const vendas =
       vendasRaw as unknown as VendaRelatorio[];
 
@@ -581,6 +646,8 @@ export async function GET(req: Request) {
       quantidadeAparelhos,
 
       vendasTaxaPendente,
+
+      vendasPendentes,
 
       valorVendas,
 

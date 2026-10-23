@@ -525,26 +525,15 @@ export async function POST(req: Request) {
 
 
 
-    if (imeis.length !== quantidade) {
-
+    // Pode cadastrar por quantidade (Android sem IMEI) ou informar
+    // um IMEI para cada unidade (ex.: iPhone). Não aceitar lista parcial.
+    if (imeis.length !== 0 && imeis.length !== quantidade) {
       return NextResponse.json(
-
         {
-
-          error:
-
-            "A quantidade de IMEI deve ser igual à quantidade de aparelhos.",
-
+          error: "Informe todos os IMEIs ou deixe a lista vazia para cadastrar somente por quantidade.",
         },
-
-        {
-
-          status: 400,
-
-        }
-
+        { status: 400 }
       );
-
     }
 
 
@@ -631,29 +620,12 @@ export async function POST(req: Request) {
 
 
 
-    const aparelhosExistentes =
-
-      await prisma.aparelho.findMany({
-
-        where: {
-
-          imei: {
-
-            in: imeis,
-
-          },
-
-        },
-
-
-
-        select: {
-
-          imei: true,
-
-        },
-
-      });
+    const aparelhosExistentes = imeis.length > 0
+      ? await prisma.aparelho.findMany({
+          where: { imei: { in: imeis } },
+          select: { imei: true },
+        })
+      : [];
 
 
 
@@ -667,20 +639,8 @@ export async function POST(req: Request) {
 
         aparelhosExistentes
 
-          .map(
-
-            (
-
-              item: {
-
-                imei: string;
-
-              }
-
-            ) => item.imei
-
-          )
-
+          .map((item: { imei: string | null }) => item.imei)
+          .filter((imei): imei is string => imei !== null)
           .join(", ");
 
 
@@ -850,41 +810,14 @@ export async function POST(req: Request) {
 
 
           await tx.aparelho.createMany({
-
-            data: imeis.map(
-
-              (imei: string) => ({
-
-                imei,
-
-
-
-                vendido: false,
-
-
-
-                cor,
-
-
-
-                memoria,
-
-
-
-                loteId:
-
-                  lote.id,
-
-
-
-                produtoId:
-
-                  produto.id,
-
-              })
-
-            ),
-
+            data: Array.from({ length: quantidade }, (_, index) => ({
+              imei: imeis.length > 0 ? imeis[index] : null,
+              vendido: false,
+              cor,
+              memoria,
+              loteId: lote.id,
+              produtoId: produto.id,
+            })),
           });
 
 

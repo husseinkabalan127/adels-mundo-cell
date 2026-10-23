@@ -295,6 +295,18 @@ export default function RootLayout({
               </Link>
 
               {/* =================================================
+                  LISTA DE PREÇOS
+              ================================================== */}
+
+              <Link
+                href="/lista-de-precos"
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+              >
+                <span>🏷️</span>
+                <span>Lista de Preços</span>
+              </Link>
+
+              {/* =================================================
                   CONTAS A RECEBER
               ================================================== */}
 

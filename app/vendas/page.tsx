@@ -165,6 +165,8 @@ export default function VendasPage() {
 
   const [buscaModelo, setBuscaModelo] =
     useState<Record<number, string>>({});
+  const [imeiEntradaPorItem, setImeiEntradaPorItem] =
+    useState<Record<number, string>>({});
   const [buscaProdutoTabela, setBuscaProdutoTabela] = useState("");
   const [telaPagamento, setTelaPagamento] = useState(false);
   const [editarDesconto, setEditarDesconto] = useState(false);
@@ -449,9 +451,7 @@ export default function VendasPage() {
 
       return aparelhosDisponiveis
         .filter((a) =>
-          a.imei.includes(
-            busca
-          )
+          (a.imei || "").includes(busca)
         )
         .slice(0, 50);
     }, [
@@ -622,38 +622,31 @@ export default function VendasPage() {
       return;
     }
 
+    const jaExiste = itens.some((item) =>
+      item.imeis.some((existente) => existente.toLowerCase() === valor.toLowerCase())
+    );
+
+    if (jaExiste) {
+      setErro("Este IMEI já foi adicionado a esta venda.");
+      return;
+    }
+
+    const itemAtual = itens[itemIndex];
+    if (!itemAtual) return;
+
+    if (itemAtual.imeis.length >= Number(itemAtual.quantidade)) {
+      setErro("A quantidade de IMEIs não pode ser maior que a quantidade de aparelhos.");
+      return;
+    }
+
     setItens((atual) =>
-      atual.map(
-        (item, i) => {
-          if (
-            i !== itemIndex
-          ) {
-            return item;
-          }
-
-          if (
-            item.imeis.includes(
-              valor
-            )
-          ) {
-            return item;
-          }
-
-          return {
-            ...item,
-
-            imeis: [
-              ...item.imeis,
-              valor,
-            ],
-
-            quantidade:
-              item.imeis.length +
-              1,
-          };
-        }
+      atual.map((item, i) =>
+        i === itemIndex
+          ? { ...item, imeis: [...item.imeis, valor] }
+          : item
       )
     );
+    setErro("");
   }
 
   // =====================================================
@@ -681,13 +674,7 @@ export default function VendasPage() {
 
           return {
             ...item,
-
             imeis: novos,
-
-            quantidade:
-              novos.length > 0
-                ? novos.length
-                : 1,
           };
         }
       )
@@ -1085,14 +1072,11 @@ export default function VendasPage() {
       }
 
       if (
-        !item.imeis.length ||
-        item.imeis.length !==
-          Number(
-            item.quantidade
-          )
+        item.imeis.length >
+          Number(item.quantidade)
       ) {
         setErro(
-          "A quantidade de IMEI precisa ser igual à quantidade do aparelho."
+          "A quantidade de IMEIs não pode ser maior que a quantidade de aparelhos."
         );
 
         return;
@@ -1334,6 +1318,34 @@ export default function VendasPage() {
   // DEVOLVER UM APARELHO DA VENDA
   // NÃO EXCLUI A FATURA
   // =====================================================
+
+  async function adicionarImeiPosteriormente(vendaId: number, aparelhoId: number) {
+    const imei = window.prompt("Faça o scan ou digite o IMEI deste aparelho vendido:");
+    if (imei === null) return;
+    const valor = imei.trim();
+
+    if (!valor) {
+      setErro("Informe o IMEI.");
+      return;
+    }
+
+    setErro("");
+    setMensagem("");
+    try {
+      const res = await fetch("/api/vendas", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "adicionarImeiAparelho", vendaId, aparelhoId, imei: valor }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Não foi possível adicionar o IMEI.");
+      setMensagem(data.message || "IMEI adicionado com sucesso.");
+      await carregarEstoque();
+      await carregarVendas();
+    } catch (e: any) {
+      setErro(e.message || "Erro ao adicionar IMEI.");
+    }
+  }
 
   async function devolverAparelho(
     vendaId: number,
@@ -2418,8 +2430,19 @@ export default function VendasPage() {
                 const aparelhosDaLinha = item.imeis.map((imei) => dadosAparelhoPorImei(imei)).filter(Boolean) as Aparelho[];
                 const detalhes = [...new Set(aparelhosDaLinha.map((a) => detalhesAparelho(a)).filter(Boolean))].join(" • ");
                 return <tr key={`${item.produtoId}-${index}`} style={{ borderBottom: "1px solid #e5e7eb" }}>
-                  <td style={{ ...td, textAlign: "center", padding: 16 }}>
-                    <strong>{item.quantidade}x</strong>
+                  <td style={{ ...td, textAlign: "center", padding: 16, minWidth: 92 }}>
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={item.quantidade}
+                      onChange={(e) => {
+                        const quantidade = Math.max(1, Math.floor(Number(e.target.value) || 1));
+                        atualizarItem(index, { quantidade });
+                      }}
+                      aria-label="Quantidade de aparelhos"
+                      style={{ ...inputStyle, width: 72, padding: 8, marginTop: 0, textAlign: "center" }}
+                    />
                   </td>
                   <td style={{ ...td, padding: 16, minWidth: 260 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -2430,13 +2453,45 @@ export default function VendasPage() {
                       </div>
                     </div>
                   </td>
-                  <td style={{ ...td, padding: 16, minWidth: 180 }}>
+                  <td style={{ ...td, padding: 16, minWidth: 240 }}>
                     {item.imeis.length ? item.imeis.map((imei) => (
                       <div key={imei} style={{ padding: "4px 0", borderBottom: "1px solid #f1f5f9", whiteSpace: "nowrap", fontSize: 13 }}>
                         <span>IMEI&gt;{imei}</span>
                         <button type="button" onClick={() => removerImei(index, imei)} title="Remover IMEI" style={{ border: 0, background: "transparent", color: "#b42318", cursor: "pointer", fontSize: 16, marginLeft: 5 }}>×</button>
                       </div>
-                    )) : <span style={{ color: "#777" }}>IMEI pendente</span>}
+                    )) : <span style={{ color: "#777" }}>Sem IMEI informado</span>}
+                    {item.imeis.length < Number(item.quantidade) && (
+                      <>
+                        <div style={{ display: "flex", gap: 6, marginTop: 8, alignItems: "center" }}>
+                          <input
+                            type="text"
+                            value={imeiEntradaPorItem[index] || ""}
+                            onChange={(e) => setImeiEntradaPorItem((atual) => ({ ...atual, [index]: e.target.value.replace(/\\s/g, "") }))}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                const valor = (imeiEntradaPorItem[index] || "").trim();
+                                if (!valor) return;
+                                adicionarImeiAoItem(index, valor);
+                                setImeiEntradaPorItem((atual) => ({ ...atual, [index]: "" }));
+                              }
+                            }}
+                            placeholder={`Scan IMEI (${item.imeis.length}/${item.quantidade})`}
+                            aria-label="Faça scan do IMEI do aparelho"
+                            autoComplete="off"
+                            style={{ ...inputStyle, width: 150, padding: 8, marginTop: 0 }}
+                          />
+                        </div>
+                        <div style={{ color: "#64748b", fontSize: 11, marginTop: 5 }}>
+                          IMEIs adicionados: {item.imeis.length} de {item.quantidade}. Faça o scan de cada aparelho; cada número será adicionado automaticamente.
+                        </div>
+                      </>
+                    )}
+                    {item.imeis.length >= Number(item.quantidade) && (
+                      <div style={{ color: "#15803d", fontSize: 11, marginTop: 5 }}>
+                        Todos os IMEIs desta quantidade foram informados.
+                      </div>
+                    )}
                   </td>
                   <td style={{ ...td, padding: 16, whiteSpace: "nowrap" }}>
                     {precoEditandoIndex === index ? <input autoFocus value={item.valorUnitario} onChange={(e) => atualizarItem(index, { valorUnitario: e.target.value })} placeholder="R$ 0,00" inputMode="decimal" style={{ ...inputStyle, width: 130, padding: 8, marginTop: 0 }} /> : <strong>{dinheiro(Number(String(item.valorUnitario || 0).replace(",", ".")) || 0)}</strong>}
@@ -3174,7 +3229,18 @@ export default function VendasPage() {
                                                       <strong>{dinheiro(totalLinha)}</strong>
                                                     </td>
                                                     <td style={td}>
-                                                      <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                                                      <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+                                                        {aparelho?.id && !imei && aparelho?.vendido === true && (
+                                                          <button
+                                                            type="button"
+                                                            title="Adicionar IMEI posteriormente"
+                                                            aria-label="Adicionar IMEI posteriormente"
+                                                            onClick={() => void adicionarImeiPosteriormente(venda.id, Number(aparelho.id))}
+                                                            style={{ border: 0, borderRadius: 7, background: "#15803d", color: "#fff", cursor: "pointer", padding: "7px 9px", fontSize: 12, whiteSpace: "nowrap" }}
+                                                          >
+                                                            + IMEI
+                                                          </button>
+                                                        )}
                                                         <button
                                                           type="button"
                                                           title="Editar venda"

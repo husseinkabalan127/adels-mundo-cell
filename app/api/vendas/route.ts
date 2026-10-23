@@ -11,8 +11,99 @@ type ItemPreparado = {
   produtoId: number;
   quantidade: number;
   valorUnitario: number;
+  // IMEIs são opcionais para aparelhos cadastrados sem IMEI.
   imeis: string[];
 };
+
+/**
+ * Seleciona exatamente a quantidade solicitada sem misturar aparelhos:
+ * - IMEI já cadastrado precisa pertencer a este produto e estar disponível;
+ * - IMEI novo pode ser atribuído a uma unidade disponível sem IMEI;
+ * - unidades restantes são retiradas somente do estoque sem IMEI.
+ */
+async function selecionarAparelhosParaVenda(
+  tx: Prisma.TransactionClient,
+  item: ItemPreparado
+) {
+  const selecionados: any[] = [];
+  const imeisInformados = item.imeis;
+
+  const registrosExistentes = imeisInformados.length
+    ? await tx.aparelho.findMany({
+        where: { imei: { in: imeisInformados } },
+        include: { lote: true },
+      })
+    : [];
+
+  const porImei = new Map(
+    registrosExistentes
+      .filter((a) => a.imei)
+      .map((a) => [a.imei as string, a])
+  );
+
+  const novosImeis: string[] = [];
+  for (const imei of imeisInformados) {
+    const existente = porImei.get(imei);
+    if (existente) {
+      if (existente.produtoId !== item.produtoId || existente.vendido) {
+        throw new Error(`O IMEI ${imei} não está disponível para este produto.`);
+      }
+      selecionados.push(existente);
+    } else {
+      novosImeis.push(imei);
+    }
+  }
+
+  if (selecionados.length > item.quantidade) {
+    throw new Error("A quantidade de IMEIs informados é maior que a quantidade da venda.");
+  }
+
+  const quantidadeSemImeiNecessaria = item.quantidade - selecionados.length;
+  const quantidadeVincularImeisNovos = Math.min(
+    novosImeis.length,
+    quantidadeSemImeiNecessaria
+  );
+  const quantidadeUnidadesEmBranco = quantidadeSemImeiNecessaria;
+
+  const aparelhosSemImei = await tx.aparelho.findMany({
+    where: {
+      produtoId: item.produtoId,
+      vendido: false,
+      imei: null,
+    },
+    include: { lote: true },
+    orderBy: { createdAt: "asc" },
+    take: quantidadeUnidadesEmBranco,
+  });
+
+  if (aparelhosSemImei.length < quantidadeSemImeiNecessaria) {
+    throw new Error(
+      `Estoque insuficiente de aparelhos sem IMEI para completar a venda. Disponíveis sem IMEI: ${aparelhosSemImei.length}.`
+    );
+  }
+
+  // Um IMEI novo só pode ser atribuído a uma unidade que estava sem IMEI.
+  for (let i = 0; i < quantidadeVincularImeisNovos; i++) {
+    const aparelho = aparelhosSemImei[i];
+    const imei = novosImeis[i];
+    await tx.aparelho.update({
+      where: { id: aparelho.id },
+      data: { imei },
+    });
+    selecionados.push({ ...aparelho, imei });
+  }
+
+  // Unidades restantes continuam sem IMEI.
+  for (let i = quantidadeVincularImeisNovos; i < aparelhosSemImei.length; i++) {
+    selecionados.push(aparelhosSemImei[i]);
+  }
+
+  if (selecionados.length !== item.quantidade) {
+    throw new Error("Não foi possível selecionar a quantidade correta de aparelhos para a venda.");
+  }
+
+  return selecionados;
+}
 
 // =====================================================
 // HELPERS — DIA DE VENDAS
@@ -357,9 +448,9 @@ export async function POST(req: Request) {
             );
           }
 
-          if (imeis.length !== quantidade) {
+          if (imeis.length > quantidade) {
             throw new Error(
-              `A quantidade de IMEI do item ${index + 1} não corresponde à quantidade.`
+              `O item ${index + 1} tem mais IMEIs do que a quantidade informada.`
             );
           }
 
@@ -495,32 +586,7 @@ export async function POST(req: Request) {
               );
             }
 
-            const aparelhos =
-              await tx.aparelho.findMany({
-                where: {
-                  imei: {
-                    in: item.imeis,
-                  },
-
-                  produtoId:
-                    item.produtoId,
-
-                  vendido: false,
-                },
-
-                include: {
-                  lote: true,
-                },
-              });
-
-            if (
-              aparelhos.length !==
-              item.quantidade
-            ) {
-              throw new Error(
-                `Um ou mais IMEIs não estão disponíveis no estoque para ${produto.nome}.`
-              );
-            }
+            const aparelhos = await selecionarAparelhosParaVenda(tx, item);
 
             let custoTotal = 0;
 
@@ -750,7 +816,7 @@ export async function PUT(req: Request) {
       if (!Number.isInteger(produtoId) || produtoId <= 0) throw new Error(`Produto inválido no item ${index + 1}.`);
       if (!Number.isInteger(quantidade) || quantidade <= 0) throw new Error(`Quantidade inválida no item ${index + 1}.`);
       if (!Number.isFinite(valorUnitario) || valorUnitario < 0) throw new Error(`Preço inválido no item ${index + 1}.`);
-      if (imeis.length !== quantidade) throw new Error(`A quantidade de IMEI do item ${index + 1} não corresponde à quantidade.`);
+      if (imeis.length > quantidade) throw new Error(`O item ${index + 1} tem mais IMEIs do que a quantidade informada.`);
       if (new Set(imeis).size !== imeis.length) throw new Error(`Há IMEI repetido no item ${index + 1}.`);
       return { produtoId, quantidade, valorUnitario, imeis };
     });
@@ -810,13 +876,7 @@ export async function PUT(req: Request) {
       for (const item of itensPreparados) {
         const produto = await tx.produto.findUnique({ where: { id: item.produtoId } });
         if (!produto) throw new Error("Produto não encontrado.");
-        const aparelhos = await tx.aparelho.findMany({
-          where: { imei: { in: item.imeis }, produtoId: item.produtoId, vendido: false },
-          include: { lote: true },
-        });
-        if (aparelhos.length !== item.quantidade) {
-          throw new Error(`Um ou mais IMEIs não estão disponíveis no estoque para ${produto.nome}. Confira o modelo e os IMEIs.`);
-        }
+        const aparelhos = await selecionarAparelhosParaVenda(tx, item);
         if (Number(produto.quantidade) < item.quantidade) {
           throw new Error(`Estoque insuficiente para ${produto.nome}. Disponível: ${produto.quantidade}.`);
         }
@@ -950,6 +1010,63 @@ export async function PATCH(req: Request) {
           createdAt: dia.createdAt,
           updatedAt: dia.updatedAt,
         },
+      });
+    }
+
+    // =================================================
+    // ADICIONAR IMEI POSTERIORMENTE A UM APARELHO VENDIDO
+    // Não altera quantidade, preço, pagamentos nem a fatura.
+    // =================================================
+
+    if (action === "adicionarImeiAparelho") {
+      const aparelhoId = Number(body.aparelhoId);
+      const imei = String(body.imei ?? "").trim();
+
+      if (!Number.isInteger(aparelhoId) || aparelhoId <= 0) {
+        return NextResponse.json({ error: "ID do aparelho inválido." }, { status: 400 });
+      }
+      if (!imei) {
+        return NextResponse.json({ error: "Informe o IMEI." }, { status: 400 });
+      }
+      if (imei.length < 8 || imei.length > 20 || !/^\\d+$/.test(imei)) {
+        return NextResponse.json({ error: "O IMEI deve conter somente números e ter entre 8 e 20 dígitos." }, { status: 400 });
+      }
+
+      const resultado = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        const aparelho = await tx.aparelho.findUnique({
+          where: { id: aparelhoId },
+          include: { vendaItem: { include: { venda: true } } },
+        });
+
+        if (!aparelho || !aparelho.vendido || !aparelho.vendaItem) {
+          throw new Error("Este aparelho não está vinculado a uma venda ativa.");
+        }
+        if (aparelho.imei) {
+          throw new Error("Este aparelho já tem um IMEI cadastrado.");
+        }
+
+        const diaVenda = await verificarDiaFechado(tx, chaveDaData(aparelho.vendaItem.venda.dataVenda));
+        if (diaVenda?.fechado) {
+          throw new Error("O dia desta venda está fechado. Reabra o dia antes de adicionar o IMEI.");
+        }
+
+        const duplicado = await tx.aparelho.findUnique({ where: { imei } });
+        if (duplicado) {
+          throw new Error("Este IMEI já está cadastrado em outro aparelho.");
+        }
+
+        await tx.aparelho.update({
+          where: { id: aparelhoId },
+          data: { imei },
+        });
+
+        return { aparelhoId, imei, vendaId: aparelho.vendaItem.vendaId };
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: "IMEI adicionado ao aparelho vendido. A quantidade e o valor da fatura não foram alterados.",
+        ...resultado,
       });
     }
 

@@ -13,10 +13,11 @@ type Moeda = "USD" | "BRL";
 
 type Aparelho = {
   id: number;
-  imei: string;
+  imei: string | null;
   vendido: boolean;
   cor: string | null;
   memoria: string | null;
+  estadoConservacao: string | null;
   produtoId: number;
   loteId: number;
 };
@@ -43,9 +44,12 @@ type ItemCompraPendente = {
   modelo: string;
   cor: string;
   memoria: string;
+  estadoConservacao: "Semi novo" | "Lacrado";
   moeda: Moeda;
-  precoCompra: number;
+  precoCompra: number | null;
   imeis: string[];
+  quantidade: number;
+  semImei: boolean;
 };
 
 function hoje() {
@@ -142,12 +146,15 @@ export default function ComprasPage() {
 
   const [cor, setCor] = useState("");
   const [memoria, setMemoria] = useState("");
+  const [estadoConservacao, setEstadoConservacao] = useState<"Semi novo" | "Lacrado">("Lacrado");
 
   const [moeda, setMoeda] = useState<Moeda>("USD");
   const [precoCompra, setPrecoCompra] = useState("");
 
   const [imeiAtual, setImeiAtual] = useState("");
   const [imeis, setImeis] = useState<string[]>([]);
+  const [modoSemImei, setModoSemImei] = useState(false);
+  const [quantidadeSemImei, setQuantidadeSemImei] = useState("1");
   const [itensPendentes, setItensPendentes] = useState<ItemCompraPendente[]>([]);
 
   const [modelos, setModelos] = useState<string[]>([]);
@@ -617,25 +624,32 @@ export default function ComprasPage() {
 
     const nomeLimpo = modelo.trim();
     const preco = numero(precoCompra);
+    const quantidade = modoSemImei ? Number(quantidadeSemImei) : imeis.length;
 
     if (!nomeLimpo) {
       setErro("Informe o modelo do aparelho para adicionar este item.");
       return;
     }
-    if (imeis.length === 0) {
-      setErro("Adicione pelo menos um IMEI para este modelo/cor.");
+    if (!Number.isInteger(quantidade) || quantidade <= 0) {
+      setErro(modoSemImei ? "Informe uma quantidade válida." : "Adicione pelo menos um IMEI para este modelo/cor.");
       return;
     }
-    if (preco === null || preco < 0) {
-      setErro("Informe um preço de compra válido para este item.");
+    if ((!modoSemImei && preco === null) || (preco !== null && preco < 0)) {
+      setErro(modoSemImei ? "O preço é opcional, mas se informado deve ser válido." : "Informe um preço de compra válido para este item.");
       return;
     }
 
-    const imeisAnteriores = new Set(itensPendentes.flatMap((item) => item.imeis));
-    const repetido = imeis.find((imei) => imeisAnteriores.has(imei));
-    if (repetido) {
-      setErro(`O IMEI ${repetido} já está em outro item desta compra.`);
+    if (modoSemImei && imeis.length > 0) {
+      setErro("Remova os IMEIs ou volte ao modo com IMEI antes de adicionar este item.");
       return;
+    }
+    if (!modoSemImei) {
+      const imeisAnteriores = new Set(itensPendentes.flatMap((item) => item.imeis));
+      const repetido = imeis.find((imei) => imeisAnteriores.has(imei));
+      if (repetido) {
+        setErro(`O IMEI ${repetido} já está em outro item desta compra.`);
+        return;
+      }
     }
 
     setItensPendentes((atuais) => [
@@ -644,48 +658,45 @@ export default function ComprasPage() {
         modelo: nomeLimpo,
         cor: cor.trim(),
         memoria: memoria.trim(),
+        estadoConservacao,
         moeda,
         precoCompra: preco,
-        imeis: [...imeis],
+        imeis: modoSemImei ? [] : [...imeis],
+        quantidade,
+        semImei: modoSemImei,
       },
     ]);
 
-    // Mantém o modelo para facilitar cadastrar outra cor do mesmo aparelho.
+    setModelo("");
     setCor("");
     setMemoria("");
+    setEstadoConservacao("Lacrado");
     setImeis([]);
     setImeiAtual("");
+    setQuantidadeSemImei("1");
   }
 
   function removerItemPendente(index: number) {
     setItensPendentes((atuais) => atuais.filter((_, i) => i !== index));
   }
 
-  async function registrarCompra(
-    e: FormEvent
-  ) {
+  async function registrarCompra(e: FormEvent) {
     e.preventDefault();
-
     setMensagem("");
     setErro("");
 
     const fornecedorLimpo = fornecedor.trim();
     const nomeLimpo = modelo.trim();
     const precoAtual = numero(precoCompra);
+    const quantidadeAtual = modoSemImei ? Number(quantidadeSemImei) : imeis.length;
 
-    if (!fornecedorLimpo) {
-      setErro("Informe o fornecedor.");
-      return;
-    }
     if (!dataCompra) {
       setErro("Informe a data da compra.");
       return;
     }
 
-    // O modelo e o preço podem continuar preenchidos para facilitar
-    // adicionar outra cor; sem cor/memória/IMEI, não é um item novo.
     const itemAtualTemDados = Boolean(
-      cor.trim() || memoria.trim() || imeis.length > 0
+      (modoSemImei && nomeLimpo) || cor.trim() || memoria.trim() || imeis.length > 0
     );
     const itensParaRegistrar: ItemCompraPendente[] = [...itensPendentes];
 
@@ -694,26 +705,38 @@ export default function ComprasPage() {
         setErro("Informe o modelo do último item ou remova os campos vazios.");
         return;
       }
-      if (imeis.length === 0) {
-        setErro("Adicione pelo menos um IMEI para o último item.");
+      if (!Number.isInteger(quantidadeAtual) || quantidadeAtual <= 0) {
+        setErro(modoSemImei ? "Informe uma quantidade válida para o último item." : "Adicione pelo menos um IMEI para o último item.");
         return;
       }
-      if (precoAtual === null || precoAtual < 0) {
-        setErro("Informe um preço de compra válido para o último item.");
+      if ((!modoSemImei && precoAtual === null) || (precoAtual !== null && precoAtual < 0)) {
+        setErro(modoSemImei ? "O preço é opcional, mas se informado deve ser válido." : "Informe um preço de compra válido para o último item.");
+        return;
+      }
+      if (modoSemImei && imeis.length > 0) {
+        setErro("Remova os IMEIs ou volte ao modo com IMEI antes de registrar.");
         return;
       }
       itensParaRegistrar.push({
         modelo: nomeLimpo,
         cor: cor.trim(),
         memoria: memoria.trim(),
+        estadoConservacao,
         moeda,
         precoCompra: precoAtual,
-        imeis: [...imeis],
+        imeis: modoSemImei ? [] : [...imeis],
+        quantidade: quantidadeAtual,
+        semImei: modoSemImei,
       });
     }
 
     if (itensParaRegistrar.length === 0) {
       setErro("Adicione pelo menos um item à compra.");
+      return;
+    }
+
+    if (!fornecedorLimpo && itensParaRegistrar.some((item) => !item.semImei)) {
+      setErro("Informe o fornecedor para compras com IMEI. No modo Android por quantidade, ele é opcional.");
       return;
     }
 
@@ -724,65 +747,78 @@ export default function ComprasPage() {
     }
 
     setSalvando(true);
-
     try {
-      const response =
-        await fetch(
-          "/api/compras",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
-            body: JSON.stringify({
-              dataCompra,
-              fornecedor: fornecedorLimpo,
-              itens: itensParaRegistrar.map((item) => ({
-                modelo: item.modelo,
-                cor: item.cor || null,
-                memoria: item.memoria || null,
-                moeda: item.moeda,
-                moedaCompra: item.moeda,
-                precoCompra: item.precoCompra,
-                quantidade: item.imeis.length,
-                imeis: item.imeis,
-              })),
-            }),
-          }
-        );
+      const response = await fetch("/api/compras", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dataCompra,
+          fornecedor: fornecedorLimpo,
+          itens: itensParaRegistrar.map((item) => ({
+            modelo: item.modelo,
+            cor: item.cor || null,
+            memoria: item.memoria || null,
+            estadoConservacao: item.estadoConservacao,
+            moeda: item.moeda,
+            moedaCompra: item.moeda,
+            precoCompra: item.precoCompra,
+            quantidade: item.quantidade,
+            semImei: item.semImei,
+            imeis: item.imeis,
+          })),
+        }),
+      });
 
-      const data =
-        await lerResposta(response);
-
+      const data = await lerResposta(response);
       if (!response.ok) {
-        throw new Error(
-          data?.error ||
-            "Erro ao registrar compra."
-        );
+        throw new Error(data?.error || "Erro ao registrar compra.");
       }
 
-      setMensagem(
-        "Compra registrada com sucesso e estoque atualizado."
-      );
-
+      setMensagem("Compra registrada com sucesso e estoque atualizado.");
       setDataCompra(hoje());
       setModelo("");
       setFornecedor("");
       setCor("");
       setMemoria("");
+      setEstadoConservacao("Lacrado");
       setMoeda("USD");
       setPrecoCompra("");
       setImeis([]);
       setImeiAtual("");
       setItensPendentes([]);
-
+      setModoSemImei(false);
+      setQuantidadeSemImei("1");
       await carregarCompras();
     } catch (error: any) {
-      setErro(
-        error?.message ||
-          "Erro ao registrar compra."
-      );
+      setErro(error?.message || "Erro ao registrar compra.");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function excluirCompra(compra: Compra) {
+    const confirmar = window.confirm(
+      `Deseja excluir a compra de ${compra.produtoNome}?\n\nQuantidade: ${compra.quantidade} aparelho(s).\n\nA exclusão só deve ser feita se nenhum aparelho deste lote tiver sido vendido.`
+    );
+    if (!confirmar) return;
+
+    setMensagem("");
+    setErro("");
+    setSalvando(true);
+    try {
+      const response = await fetch("/api/compras", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ loteId: compra.id }),
+      });
+      const data = await lerResposta(response);
+      if (!response.ok) throw new Error(data?.error || "Erro ao excluir compra.");
+      setMensagem("Compra excluída e estoque atualizado.");
+      if (compraAberta === compra.id) setCompraAberta(null);
+      if (editando?.id === compra.id) setEditando(null);
+      await carregarCompras();
+    } catch (error: any) {
+      setErro(error?.message || "Erro ao excluir compra.");
     } finally {
       setSalvando(false);
     }
@@ -996,7 +1032,7 @@ export default function ComprasPage() {
               .includes(termo) ||
             (compra.aparelhos || []).some(
               (a) =>
-                a.imei
+                (a.imei ?? "")
                   .toLowerCase()
                   .includes(termo)
             );
@@ -1128,9 +1164,34 @@ export default function ComprasPage() {
           </span>
         </div>
 
-        <form
-          onSubmit={registrarCompra}
-        >
+        <form onSubmit={registrarCompra}>
+          <div style={{ ...styles.imeiBox, marginBottom: 16 }}>
+            <h3 style={styles.sectionTitle}>Tipo de cadastro</h3>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setModoSemImei(false);
+                  setQuantidadeSemImei("1");
+                }}
+                style={modoSemImei ? styles.modeButton : styles.modeButtonActive}
+              >
+                Compra com IMEI
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setModoSemImei(true);
+                  setImeis([]);
+                  setImeiAtual("");
+                }}
+                style={modoSemImei ? styles.modeButtonActive : styles.modeButton}
+              >
+                Android por quantidade (sem IMEI)
+              </button>
+            </div>
+            <p style={styles.muted}>Escolha o modo para este item. Os aparelhos cadastrados com IMEI continuam usando o fluxo atual.</p>
+          </div>
           <div style={styles.grid4}>
             <label style={styles.label}>
               Data da compra
@@ -1380,6 +1441,19 @@ export default function ComprasPage() {
             </div>
           </div>
 
+          <div style={{ ...styles.label, marginTop: 16, maxWidth: 320 }}>
+            Estado do aparelho
+            <select
+              value={estadoConservacao}
+              onChange={(e) => setEstadoConservacao(e.target.value as "Semi novo" | "Lacrado")}
+              style={styles.input}
+            >
+              <option value="Lacrado">Lacrado</option>
+              <option value="Semi novo">Semi novo</option>
+            </select>
+            <p style={styles.muted}>Escolha se o aparelho é novo lacrado ou seminovo.</p>
+          </div>
+
           {itensPendentes.length > 0 && (
             <div style={{ ...styles.imeiBox, marginTop: 16 }}>
               <h3 style={styles.sectionTitle}>Itens adicionados nesta compra ({itensPendentes.length})</h3>
@@ -1389,8 +1463,8 @@ export default function ComprasPage() {
                   <div key={`${item.modelo}-${item.cor}-${index}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: 12, border: "1px solid #dbe3ef", borderRadius: 10, background: "#fff" }}>
                     <div>
                       <strong>{item.modelo}</strong>
-                      <div style={styles.muted}>{item.cor || "Cor não informada"} · {item.memoria || "GB não informado"} · {item.imeis.length} aparelho(s)</div>
-                      <div style={styles.muted}>IMEIs: {item.imeis.join(", ")}</div>
+                      <div style={styles.muted}>{item.cor || "Cor não informada"} · {item.memoria || "GB não informado"} · {item.estadoConservacao} · {item.quantidade} aparelho(s)</div>
+                      <div style={styles.muted}>{item.semImei ? "Cadastro por quantidade — sem IMEI" : `IMEIs: ${item.imeis.join(", ")}`}</div>
                       <div style={styles.muted}>Preço por aparelho: {dinheiro(item.precoCompra, item.moeda)}</div>
                     </div>
                     <button type="button" onClick={() => removerItemPendente(index)} style={styles.chipButton} aria-label="Remover item">×</button>
@@ -1400,14 +1474,18 @@ export default function ComprasPage() {
             </div>
           )}
 
-          <div style={styles.imeiBox}>
+          {modoSemImei && (
+            <div style={{ ...styles.label, marginTop: 16, maxWidth: 260 }}>
+              Quantidade de aparelhos
+              <input type="number" min="1" step="1" value={quantidadeSemImei} onChange={(e) => setQuantidadeSemImei(e.target.value)} style={styles.input} />
+              <p style={styles.muted}>Não é necessário informar IMEI nesta compra.</p>
+            </div>
+          )}
+
+          {!modoSemImei && <div style={styles.imeiBox}>
             <div style={styles.imeiHeader}>
               <div>
-                <h3
-                  style={
-                    styles.sectionTitle
-                  }
-                >
+                <h3 style={styles.sectionTitle}>
                   IMEIs da compra
                 </h3>
 
@@ -1492,7 +1570,7 @@ export default function ComprasPage() {
                 )
               )}
             </div>
-          </div>
+          </div>}
 
           <div style={{ display: "flex", justifyContent: "flex-start", marginTop: 14 }}>
             <button
@@ -1518,7 +1596,7 @@ export default function ComprasPage() {
               </span>
 
               <strong>
-                {itensPendentes.reduce((soma, item) => soma + item.imeis.length, 0) + imeis.length}
+                {itensPendentes.reduce((soma, item) => soma + item.quantidade, 0) + (modoSemImei ? (Number(quantidadeSemImei) || 0) : imeis.length)}
               </strong>
 
               <span>
@@ -1527,10 +1605,10 @@ export default function ComprasPage() {
 
               <strong>
                 {`USD ${dinheiro(
-                  itensPendentes.filter((item) => item.moeda === "USD").reduce((soma, item) => soma + item.precoCompra * item.imeis.length, 0) + (moeda === "USD" ? (numero(precoCompra) || 0) * imeis.length : 0),
+                  itensPendentes.filter((item) => item.moeda === "USD").reduce((soma, item) => soma + (item.precoCompra ?? 0) * item.quantidade, 0) + (moeda === "USD" ? (numero(precoCompra) || 0) * (modoSemImei ? (Number(quantidadeSemImei) || 0) : imeis.length) : 0),
                   "USD"
                 )} · BRL ${dinheiro(
-                  itensPendentes.filter((item) => item.moeda === "BRL").reduce((soma, item) => soma + item.precoCompra * item.imeis.length, 0) + (moeda === "BRL" ? (numero(precoCompra) || 0) * imeis.length : 0),
+                  itensPendentes.filter((item) => item.moeda === "BRL").reduce((soma, item) => soma + (item.precoCompra ?? 0) * item.quantidade, 0) + (moeda === "BRL" ? (numero(precoCompra) || 0) * (modoSemImei ? (Number(quantidadeSemImei) || 0) : imeis.length) : 0),
                   "BRL"
                 )}`}
               </strong>
@@ -1990,6 +2068,9 @@ export default function ComprasPage() {
                               compra.produtoNome
                             }
                           </strong>
+                          <div style={styles.muted}>
+                            {compra.aparelhos?.[0]?.estadoConservacao || "Estado não informado"}
+                          </div>
                         </td>
 
                         <td
@@ -2125,19 +2206,27 @@ export default function ComprasPage() {
                             styles.td
                           }
                         >
-                          <button
-                            type="button"
-                            onClick={() =>
-                              abrirEdicao(
-                                compra
-                              )
-                            }
-                            style={
-                              styles.editButton
-                            }
-                          >
-                            ✏️ Editar
-                          </button>
+                          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                            <button
+                              type="button"
+                              onClick={() => abrirEdicao(compra)}
+                              style={styles.iconActionButton}
+                              title="Editar compra"
+                              aria-label={`Editar compra ${compra.produtoNome}`}
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              type="button"
+                              disabled={salvando}
+                              onClick={() => excluirCompra(compra)}
+                              style={styles.deletePurchaseButton}
+                              title="Excluir compra"
+                              aria-label={`Excluir compra ${compra.produtoNome}`}
+                            >
+                              🗑️
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -2701,6 +2790,42 @@ const styles: Record<
     whiteSpace: "nowrap",
   },
 
+  // Botões próprios para o seletor de modo: não usar chipButton,
+  // pois chipButton tem position:absolute e é reservado para o X dos IMEIs.
+  modeButton: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "static",
+    border: "1px solid #cbd5e1",
+    borderRadius: 9,
+    padding: "11px 15px",
+    background: "#ffffff",
+    color: "#334155",
+    fontWeight: 700,
+    cursor: "pointer",
+    whiteSpace: "normal",
+    minHeight: 42,
+    textAlign: "center",
+  },
+
+  modeButtonActive: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "static",
+    border: "1px solid #334155",
+    borderRadius: 9,
+    padding: "11px 15px",
+    background: "#334155",
+    color: "#ffffff",
+    fontWeight: 800,
+    cursor: "pointer",
+    whiteSpace: "normal",
+    minHeight: 42,
+    textAlign: "center",
+  },
+
   imeiList: {
     display: "flex",
     flexWrap: "wrap",
@@ -2874,6 +2999,34 @@ const styles: Record<
     padding: "7px 10px",
     cursor: "pointer",
     fontWeight: 700,
+  },
+
+  iconActionButton: {
+    width: 40,
+    height: 38,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    border: "1px solid #fde68a",
+    background: "#fffbeb",
+    color: "#92400e",
+    borderRadius: 8,
+    cursor: "pointer",
+    fontSize: 17,
+  },
+
+  deletePurchaseButton: {
+    width: 40,
+    height: 38,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    border: "1px solid #fecaca",
+    background: "#fff1f2",
+    color: "#b91c1c",
+    borderRadius: 8,
+    cursor: "pointer",
+    fontSize: 17,
   },
 
   editButton: {
