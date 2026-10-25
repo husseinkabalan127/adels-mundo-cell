@@ -207,6 +207,7 @@ export default function ComprasPage() {
   const [fornecedorFiltro, setFornecedorFiltro] =
     useState("");
   const [dataFiltro, setDataFiltro] = useState("");
+  const [somenteSemPreco, setSomenteSemPreco] = useState(false);
 
   const [compraAberta, setCompraAberta] =
     useState<number | null>(null);
@@ -221,6 +222,8 @@ export default function ComprasPage() {
   const [editCor, setEditCor] = useState("");
   const [editMemoria, setEditMemoria] =
     useState("");
+  const [editEstadoConservacao, setEditEstadoConservacao] =
+    useState<"Semi novo" | "Lacrado">("Lacrado");
   const [editMoeda, setEditMoeda] =
     useState<Moeda>("USD");
   const [editPreco, setEditPreco] =
@@ -267,10 +270,19 @@ export default function ComprasPage() {
             Boolean(nome)
         );
 
+      let modelosOcultos: string[] = [];
+      try {
+        const salvos = JSON.parse(
+          localStorage.getItem("adels_compras_modelos_ocultos") || "[]"
+        );
+        if (Array.isArray(salvos)) {
+          modelosOcultos = salvos.filter((x): x is string => typeof x === "string");
+        }
+      } catch {}
       setModelos(
-        Array.from(new Set<string>(nomes)).sort(
-          (a, b) => a.localeCompare(b)
-        )
+        Array.from(new Set<string>(nomes))
+          .filter((nome) => !modelosOcultos.some((oculto) => oculto.toLowerCase() === nome.toLowerCase()))
+          .sort((a, b) => a.localeCompare(b))
       );
     } catch (error: any) {
       setErro(
@@ -318,15 +330,11 @@ export default function ComprasPage() {
         );
 
       if (Array.isArray(coresSalvas)) {
-        setCores((lista) =>
+        setCores(
           Array.from(
-            new Set([
-              ...lista,
-              ...coresSalvas.filter(
-                (x) =>
-                  typeof x === "string"
-              ),
-            ])
+            new Set(
+              coresSalvas.filter((x) => typeof x === "string" && x.trim())
+            )
           )
         );
       }
@@ -477,6 +485,44 @@ export default function ComprasPage() {
     });
 
     setCor(valor);
+  }
+
+  function removerCorSelecionada() {
+    const alvo = cor.trim();
+    if (!alvo) {
+      setErro("Selecione primeiro a cor que deseja remover.");
+      return;
+    }
+    if (!window.confirm(`Remover a cor "${alvo}" da lista? Isso não altera compras antigas.`)) return;
+
+    const novaLista = cores.filter((item) => item.toLowerCase() !== alvo.toLowerCase());
+    setCores(novaLista);
+    localStorage.setItem("adels_compras_cores", JSON.stringify(novaLista));
+    setCor("");
+    setMensagem(`Cor "${alvo}" removida da lista. As compras antigas foram mantidas.`);
+    setErro("");
+  }
+
+  function removerModeloDasSugestoes() {
+    const alvo = modelo.trim();
+    if (!alvo) {
+      setErro("Digite ou selecione primeiro o modelo que deseja remover das sugestões.");
+      return;
+    }
+    if (!window.confirm(`Remover "${alvo}" das sugestões de modelo? O histórico e o estoque não serão apagados.`)) return;
+
+    const ocultosRaw = localStorage.getItem("adels_compras_modelos_ocultos") || "[]";
+    let ocultos: string[] = [];
+    try {
+      const parsed = JSON.parse(ocultosRaw);
+      if (Array.isArray(parsed)) ocultos = parsed.filter((x): x is string => typeof x === "string");
+    } catch {}
+    if (!ocultos.some((item) => item.toLowerCase() === alvo.toLowerCase())) ocultos.push(alvo);
+    localStorage.setItem("adels_compras_modelos_ocultos", JSON.stringify(ocultos));
+    setModelos((lista) => lista.filter((item) => item.toLowerCase() !== alvo.toLowerCase()));
+    setModelo("");
+    setMensagem(`Modelo "${alvo}" removido das sugestões. O histórico e o estoque foram mantidos.`);
+    setErro("");
   }
 
   function adicionarMemoria() {
@@ -634,8 +680,8 @@ export default function ComprasPage() {
       setErro(modoSemImei ? "Informe uma quantidade válida." : "Adicione pelo menos um IMEI para este modelo/cor.");
       return;
     }
-    if ((!modoSemImei && preco === null) || (preco !== null && preco < 0)) {
-      setErro(modoSemImei ? "O preço é opcional, mas se informado deve ser válido." : "Informe um preço de compra válido para este item.");
+    if (preco !== null && preco < 0) {
+      setErro("O preço deve ser um valor válido ou pode ficar vazio para cadastrar depois.");
       return;
     }
 
@@ -667,10 +713,9 @@ export default function ComprasPage() {
       },
     ]);
 
-    setModelo("");
+    // Mantém os dados principais para adicionar outra cor do mesmo modelo.
+    // O usuário pode trocar o modelo manualmente quando quiser.
     setCor("");
-    setMemoria("");
-    setEstadoConservacao("Lacrado");
     setImeis([]);
     setImeiAtual("");
     setQuantidadeSemImei("1");
@@ -709,8 +754,8 @@ export default function ComprasPage() {
         setErro(modoSemImei ? "Informe uma quantidade válida para o último item." : "Adicione pelo menos um IMEI para o último item.");
         return;
       }
-      if ((!modoSemImei && precoAtual === null) || (precoAtual !== null && precoAtual < 0)) {
-        setErro(modoSemImei ? "O preço é opcional, mas se informado deve ser válido." : "Informe um preço de compra válido para o último item.");
+      if (precoAtual !== null && precoAtual < 0) {
+        setErro("O preço do último item deve ser válido ou pode ficar vazio para cadastrar depois.");
         return;
       }
       if (modoSemImei && imeis.length > 0) {
@@ -849,6 +894,12 @@ export default function ComprasPage() {
         ""
     );
 
+    setEditEstadoConservacao(
+      compra.aparelhos?.[0]?.estadoConservacao === "Semi novo"
+        ? "Semi novo"
+        : "Lacrado"
+    );
+
     setEditMoeda(
       compra.moedaCompra === "BRL"
         ? "BRL"
@@ -899,13 +950,8 @@ export default function ComprasPage() {
       return;
     }
 
-    if (
-      preco === null ||
-      preco < 0
-    ) {
-      setErro(
-        "Informe um preço válido."
-      );
+    if (preco !== null && preco < 0) {
+      setErro("Informe um preço válido ou deixe vazio para manter sem preço.");
       return;
     }
 
@@ -937,6 +983,7 @@ export default function ComprasPage() {
               memoria:
                 editMemoria.trim() ||
                 null,
+              estadoConservacao: editEstadoConservacao,
               moeda:
                 editMoeda,
               precoCompra:
@@ -1049,10 +1096,19 @@ export default function ComprasPage() {
               compra.dataCompra
             ) === dataFiltro;
 
+          const precoDaCompra =
+            compra.precoCompra ??
+            (compra.moedaCompra === "BRL"
+              ? compra.precoCompraBrl
+              : compra.precoCompraUsd);
+          const correspondePreco =
+            !somenteSemPreco || precoDaCompra === null || precoDaCompra === undefined;
+
           return (
             correspondeBusca &&
             correspondeFornecedor &&
-            correspondeData
+            correspondeData &&
+            correspondePreco
           );
         }
       );
@@ -1061,6 +1117,7 @@ export default function ComprasPage() {
       busca,
       fornecedorFiltro,
       dataFiltro,
+      somenteSemPreco,
     ]);
 
   const resumo = useMemo(
@@ -1209,7 +1266,17 @@ export default function ComprasPage() {
             </label>
 
             <label style={styles.label}>
-              Modelo
+              <div style={styles.fieldTitleRow}>
+                <span>Modelo</span>
+                <button
+                  type="button"
+                  onClick={removerModeloDasSugestoes}
+                  style={styles.smallDeleteButton}
+                  title="Remover modelo das sugestões (não apaga histórico)"
+                >
+                  −
+                </button>
+              </div>
 
               <input
                 list="modelos-compras"
@@ -1326,17 +1393,14 @@ export default function ComprasPage() {
                       e.target.value
                     )
                   }
-                  placeholder={
-                    moeda === "USD"
-                      ? "Ex.: 500"
-                      : "Ex.: 2800"
-                  }
                   style={{
                     ...styles.input,
                     flex: 1,
                   }}
+                  placeholder={moeda === "USD" ? "Ex.: 500 (opcional)" : "Ex.: 2800 (opcional)"}
                 />
               </div>
+              <small style={styles.muted}>O preço pode ser preenchido depois, sem cadastrar a compra novamente.</small>
             </label>
           </div>
 
@@ -1354,15 +1418,24 @@ export default function ComprasPage() {
               >
                 <span>Cor</span>
 
-                <button
-                  type="button"
-                  onClick={adicionarCor}
-                  style={
-                    styles.smallAddButton
-                  }
-                >
-                  +
-                </button>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button
+                    type="button"
+                    onClick={adicionarCor}
+                    style={styles.smallAddButton}
+                    title="Adicionar cor"
+                  >
+                    +
+                  </button>
+                  <button
+                    type="button"
+                    onClick={removerCorSelecionada}
+                    style={styles.smallDeleteButton}
+                    title="Remover a cor selecionada"
+                  >
+                    −
+                  </button>
+                </div>
               </div>
 
               <select
@@ -1460,14 +1533,14 @@ export default function ComprasPage() {
               <p style={styles.muted}>Estes itens serão registrados juntos em uma única compra.</p>
               <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
                 {itensPendentes.map((item, index) => (
-                  <div key={`${item.modelo}-${item.cor}-${index}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: 12, border: "1px solid #dbe3ef", borderRadius: 10, background: "#fff" }}>
+                  <div key={`${item.modelo}-${item.cor}-${index}`} style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 40, padding: "16px 48px 16px 12px", border: "1px solid #dbe3ef", borderRadius: 10, background: "#fff" }}>
                     <div>
                       <strong>{item.modelo}</strong>
                       <div style={styles.muted}>{item.cor || "Cor não informada"} · {item.memoria || "GB não informado"} · {item.estadoConservacao} · {item.quantidade} aparelho(s)</div>
                       <div style={styles.muted}>{item.semImei ? "Cadastro por quantidade — sem IMEI" : `IMEIs: ${item.imeis.join(", ")}`}</div>
                       <div style={styles.muted}>Preço por aparelho: {dinheiro(item.precoCompra, item.moeda)}</div>
                     </div>
-                    <button type="button" onClick={() => removerItemPendente(index)} style={styles.chipButton} aria-label="Remover item">×</button>
+                    <button type="button" onClick={() => removerItemPendente(index)} title="Remover este item da compra antes de registrar" style={{ position: "absolute", top: 8, right: 8, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: 8, background: "#dc2626", color: "#fff", cursor: "pointer", fontSize: 24, fontWeight: 800, lineHeight: 1, zIndex: 2 }} aria-label={`Remover ${item.modelo} desta compra`}>×</button>
                   </div>
                 ))}
               </div>
@@ -1926,10 +1999,19 @@ export default function ComprasPage() {
 
           <button
             type="button"
+            onClick={() => setSomenteSemPreco((valor) => !valor)}
+            style={somenteSemPreco ? styles.modeButtonActive : styles.secondaryButton}
+          >
+            {somenteSemPreco ? "✓ Exibindo sem preço" : "💲 Aparelhos sem preço"}
+          </button>
+
+          <button
+            type="button"
             onClick={() => {
               setBusca("");
               setFornecedorFiltro("");
               setDataFiltro("");
+              setSomenteSemPreco(false);
             }}
             style={
               styles.clearButton
@@ -2108,11 +2190,8 @@ export default function ComprasPage() {
                             styles.td
                           }
                         >
-                          <strong>
-                            {dinheiro(
-                              preco,
-                              moedaCompra
-                            )}
+                          <strong style={{ color: preco === null || preco === undefined ? "#b45309" : undefined }}>
+                            {preco === null || preco === undefined ? "Sem preço" : dinheiro(preco, moedaCompra)}
                           </strong>
 
                           <div
@@ -2392,6 +2471,7 @@ export default function ComprasPage() {
                   <input
                     inputMode="decimal"
                     value={editPreco}
+                    placeholder="Deixe vazio se não souber"
                     onChange={(e) =>
                       setEditPreco(
                         e.target.value
@@ -2431,6 +2511,19 @@ export default function ComprasPage() {
                       </option>
                     )
                   )}
+                </select>
+              </label>
+
+              <label style={styles.label}>
+                Estado do aparelho
+
+                <select
+                  value={editEstadoConservacao}
+                  onChange={(e) => setEditEstadoConservacao(e.target.value as "Semi novo" | "Lacrado")}
+                  style={styles.input}
+                >
+                  <option value="Lacrado">Lacrado</option>
+                  <option value="Semi novo">Semi novo</option>
                 </select>
               </label>
 
@@ -2740,6 +2833,22 @@ const styles: Record<
     outline: "none",
   },
 
+  smallDeleteButton: {
+    border: "1px solid #fecaca",
+    background: "#fff1f2",
+    color: "#be123c",
+    borderRadius: 7,
+    width: 28,
+    height: 28,
+    fontSize: 20,
+    lineHeight: "20px",
+    fontWeight: 700,
+    cursor: "pointer",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
   smallAddButton: {
     border:
       "1px solid #bfdbfe",
@@ -2932,9 +3041,12 @@ const styles: Record<
   filters: {
     display: "grid",
     gridTemplateColumns:
-      "2fr 1fr 1fr auto",
+      "minmax(240px, 2fr) minmax(190px, 1fr) minmax(150px, 1fr) auto",
     gap: 10,
+    alignItems: "center",
     marginBottom: 16,
+    width: "100%",
+    overflowX: "auto",
   },
 
   clearButton: {

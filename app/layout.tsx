@@ -235,6 +235,20 @@ export default function RootLayout({
             <div className="space-y-1">
 
               {/* =================================================
+                  DASHBOARD - PRIMEIRO ITEM
+              ================================================== */}
+
+              {isAdmin && (
+                <Link
+                  href="/dashboard"
+                  className="flex items-center gap-3 rounded-lg bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+                >
+                  <span>📊</span>
+                  <span>Dashboard</span>
+                </Link>
+              )}
+
+              {/* =================================================
                   CALENDÁRIO
               ================================================== */}
 
@@ -350,14 +364,6 @@ export default function RootLayout({
 
               {isAdmin && (
                 <>
-                  <Link
-                    href="/dashboard"
-                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
-                  >
-                    <span>📊</span>
-                    <span>Dashboard</span>
-                  </Link>
-
                   <Link
                     href="/telefones-sem-preco"
                     className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
