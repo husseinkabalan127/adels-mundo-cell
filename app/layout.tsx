@@ -194,16 +194,16 @@ export default function RootLayout({
             SIDEBAR
         ================================================== */}
 
-        <aside className="fixed left-0 top-0 z-50 h-screen w-64 overflow-y-auto border-r bg-white shadow-lg">
+        <aside className="fixed left-0 top-0 z-50 h-screen w-64 overflow-y-auto border-r border-blue-900/30 bg-gradient-to-b from-blue-700 via-blue-800 to-blue-950 text-white shadow-lg">
 
           {/* =================================================
               LOGO
           ================================================== */}
 
-          <div className="flex h-16 items-center border-b px-4">
+          <div className="flex h-16 items-center border-b border-white/20 px-4">
             <Link
               href="/"
-              className="text-lg font-bold text-gray-900"
+              className="text-lg font-bold text-white"
             >
               📱 Adel's Mundo Cell
             </Link>
@@ -214,12 +214,12 @@ export default function RootLayout({
           ================================================== */}
 
           {!carregando && usuario && (
-            <div className="border-b px-4 py-2.5">
-              <div className="font-semibold text-sm text-gray-800">
+            <div className="border-b border-white/20 px-4 py-2.5">
+              <div className="font-semibold text-sm text-white">
                 {usuario.nome}
               </div>
 
-              <div className="mt-0.5 text-[11px] text-gray-500">
+              <div className="mt-0.5 text-[11px] text-blue-100">
                 {isAdmin
                   ? "👑 Administrador"
                   : "👷 Funcionário"}
@@ -241,7 +241,7 @@ export default function RootLayout({
               {isAdmin && (
                 <Link
                   href="/dashboard"
-                  className="flex items-center gap-3 rounded-lg bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+                  className="flex items-center gap-3 rounded-lg bg-white/20 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/30"
                 >
                   <span>📊</span>
                   <span>Dashboard</span>
@@ -254,7 +254,7 @@ export default function RootLayout({
 
               <Link
                 href="/calendario"
-                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-blue-50 transition hover:bg-white/15 hover:text-white"
               >
                 <span>📅</span>
                 <span>Calendário</span>
@@ -266,7 +266,7 @@ export default function RootLayout({
 
               <Link
                 href="/clientes"
-                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-blue-50 transition hover:bg-white/15 hover:text-white"
               >
                 <span>👤</span>
                 <span>Clientes</span>
@@ -278,7 +278,7 @@ export default function RootLayout({
 
               <Link
                 href="/assistencias"
-                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-blue-50 transition hover:bg-white/15 hover:text-white"
               >
                 <span>🔧</span>
                 <span>Assistência</span>
@@ -290,7 +290,7 @@ export default function RootLayout({
 
               <Link
                 href="/vendas"
-                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-blue-50 transition hover:bg-white/15 hover:text-white"
               >
                 <span>💰</span>
                 <span>Vendas</span>
@@ -302,7 +302,7 @@ export default function RootLayout({
 
               <Link
                 href="/estoque"
-                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-blue-50 transition hover:bg-white/15 hover:text-white"
               >
                 <span>📦</span>
                 <span>Estoque</span>
@@ -314,7 +314,7 @@ export default function RootLayout({
 
               <Link
                 href="/lista-de-precos"
-                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-blue-50 transition hover:bg-white/15 hover:text-white"
               >
                 <span>🏷️</span>
                 <span>Lista de Preços</span>
@@ -327,7 +327,7 @@ export default function RootLayout({
               {isAdmin && (
                 <Link
                   href="/contas-a-receber"
-                  className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+                  className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-blue-50 transition hover:bg-white/15 hover:text-white"
                 >
                   <span>💳</span>
                   <span>Contas a Receber</span>
@@ -340,7 +340,7 @@ export default function RootLayout({
 
               <Link
                 href="/compras"
-                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-blue-50 transition hover:bg-white/15 hover:text-white"
               >
                 <span>🛒</span>
                 <span>Compras</span>
@@ -352,7 +352,7 @@ export default function RootLayout({
 
               <Link
                 href="/consulta-imei"
-                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-blue-50 transition hover:bg-white/15 hover:text-white"
               >
                 <span>🔍</span>
                 <span>Consulta IMEI</span>
@@ -366,7 +366,7 @@ export default function RootLayout({
                 <>
                   <Link
                     href="/telefones-sem-preco"
-                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-blue-50 transition hover:bg-white/15 hover:text-white"
                   >
                     <span>🏷️</span>
                     <span>
@@ -376,7 +376,7 @@ export default function RootLayout({
 
                   <Link
                     href="/relatorio"
-                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-blue-50 transition hover:bg-white/15 hover:text-white"
                   >
                     <span>📋</span>
                     <span>Relatório</span>
@@ -384,7 +384,7 @@ export default function RootLayout({
 
                   <Link
                     href="/configuracoes"
-                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-blue-50 transition hover:bg-white/15 hover:text-white"
                   >
                     <span>⚙️</span>
                     <span>Configurações</span>
@@ -392,7 +392,7 @@ export default function RootLayout({
 
                   <Link
                     href="/usuarios"
-                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-blue-50 transition hover:bg-white/15 hover:text-white"
                   >
                     <span>👥</span>
                     <span>Usuários</span>
@@ -418,7 +418,7 @@ export default function RootLayout({
           <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b bg-white px-5 shadow-sm">
 
             <div>
-              <h1 className="text-lg font-bold text-gray-900">
+              <h1 className="text-lg font-bold text-white">
                 Adel's Mundo Cell
               </h1>
 

@@ -168,7 +168,13 @@ export default function VendasPage() {
   const [imeiEntradaPorItem, setImeiEntradaPorItem] =
     useState<Record<number, string>>({});
   const [buscaProdutoTabela, setBuscaProdutoTabela] = useState("");
+  const [modalProdutoAberto, setModalProdutoAberto] = useState(false);
+  const [produtoModalId, setProdutoModalId] = useState<number | "">("");
+  const [quantidadeModal, setQuantidadeModal] = useState("1");
+  const [precoModal, setPrecoModal] = useState("");
+  const [indiceItemModal, setIndiceItemModal] = useState<number | null>(null);
   const [telaPagamento, setTelaPagamento] = useState(false);
+  const [vendaAposFinalizar, setVendaAposFinalizar] = useState<Venda | null>(null);
   const [editarDesconto, setEditarDesconto] = useState(false);
 
   // =====================================================
@@ -541,25 +547,19 @@ export default function VendasPage() {
     index: number,
     produto: Produto
   ) {
-    const precoExistente = itens.find(
-      (item, i) => i !== index && item.produtoId === produto.id && item.valorUnitario !== ""
-    )?.valorUnitario || "";
-
-    atualizarItem(
-      index,
-      {
-        produtoId: produto.id,
-        imeis: [],
-        quantidade: 1,
-        valorUnitario: precoExistente,
-      }
-    );
-
-    // O modelo foi escolhido: limpar a busca para fechar a lista de sugestões.
+    // Ao escolher um modelo, abrir a janela para informar o preço
+    // antes de adicionar o aparelho à venda.
+    setIndiceItemModal(index);
+    setProdutoModalId(produto.id);
+    setQuantidadeModal("1");
+    setPrecoModal("");
+    setBuscaProdutoTabela(produto.nome);
     setBuscaModelo((atual) => ({
       ...atual,
       [index]: "",
     }));
+    setErro("");
+    setModalProdutoAberto(true);
   }
 
   function selecionarProdutoTabela(produto: Produto) {
@@ -1201,6 +1201,30 @@ export default function VendasPage() {
         data.message ||
           (editandoVendaId ? "Venda atualizada com sucesso!" : "Venda registrada com sucesso!")
       );
+
+      // Após concluir uma venda nova, mostrar opções: enviar PDF pelo WhatsApp ou imprimir.
+      if (!editandoVendaId) {
+        try {
+          const resVendas = await fetch("/api/vendas", { cache: "no-store" });
+          const dadosVendas = await resVendas.json();
+          const listaVendas: Venda[] = Array.isArray(dadosVendas)
+            ? dadosVendas
+            : Array.isArray(dadosVendas?.vendas)
+              ? dadosVendas.vendas
+              : [];
+          const idCriado = Number(data?.venda?.id ?? data?.id ?? data?.vendaId);
+          const vendaCriada = (idCriado
+            ? listaVendas.find((v) => v.id === idCriado)
+            : null) || listaVendas
+              .filter((v) => String(v.cliente || "") === cliente)
+              .sort((a, b) => b.id - a.id)[0];
+          if (vendaCriada) setVendaAposFinalizar(vendaCriada);
+          else setMensagem("Venda registrada, mas não foi possível carregar a fatura. Abra a venda no histórico para continuar.");
+        } catch {
+          setMensagem("Venda registrada, mas não foi possível carregar a fatura. Abra a venda no histórico para continuar.");
+        }
+      }
+
       setEditandoVendaId(null);
       setTelaPagamento(false);
 
@@ -1456,7 +1480,8 @@ export default function VendasPage() {
   // =====================================================
 
   function abrirFatura(
-    venda: Venda
+    venda: Venda,
+    janelaExistente?: Window | null
   ) {
     const itensVenda =
       Array.isArray(
@@ -1674,6 +1699,32 @@ export default function VendasPage() {
             font-weight: bold;
           }
 
+          .warranty {
+            margin-top: 24px;
+            padding: 14px 16px;
+            background: #eeeeee;
+            border-radius: 4px;
+            font-size: 13px;
+            line-height: 1.45;
+          }
+
+          .warranty h2 {
+            margin: 0 0 8px;
+            text-align: center;
+            font-size: 16px;
+            color: #b91c1c;
+          }
+
+          .warranty p {
+            margin: 6px 0;
+            color: #b91c1c;
+          }
+
+          .warranty .warranty-terms {
+            color: #b91c1c;
+            font-weight: 600;
+          }
+
           .footer {
             text-align: center;
             margin-top: 40px;
@@ -1699,6 +1750,11 @@ export default function VendasPage() {
 
           .print {
             background: #1769e0;
+            color: white;
+          }
+
+          .whatsapp {
+            background: #16a34a;
             color: white;
           }
 
@@ -1879,6 +1935,13 @@ export default function VendasPage() {
 
           </div>
 
+          <div class="warranty">
+            <p><strong>ANDROID: SEM GARANTIA.</strong></p>
+            <h2>Garantia de 1 mês</h2>
+            <p><strong>IPHONE SEMI NOVO</strong></p>
+            <p class="warranty-terms"><strong>A garantia não cobre:</strong> defeitos ou danos causados pelo uso inadequado do produto pelo cliente, como peças arranhadas, trincadas ou quebradas, derramamento de líquidos de qualquer natureza, danos causados por agentes naturais (chuva, maresia, descarga elétrica e outros), exposição excessiva ao calor e selo da garantia rompido.</p>
+          </div>
+
           <div class="footer">
 
             Obrigado pela preferência!
@@ -1891,13 +1954,19 @@ export default function VendasPage() {
 
         </div>
 
+        <script>
+          window.addEventListener("load", function () {
+            setTimeout(function () { window.print(); }, 500);
+          });
+        </script>
+
       </body>
 
       </html>
     `;
 
     const janela =
-      window.open(
+      janelaExistente || window.open(
         "",
         "_blank",
         "width=900,height=800"
@@ -1963,6 +2032,12 @@ export default function VendasPage() {
       `Pagamento: ${venda.formaPagamento || "Não informado"}`,
       `Estado: ${venda.estadoFatura || "Não informado"}`,
       "",
+      "GARANTIA",
+      "Android: sem garantia.",
+      "Garantia de 1 mês",
+      "IPHONE SEMI NOVO",
+      "A garantia não cobre defeitos ou danos causados pelo uso inadequado do produto pelo cliente, peças arranhadas, trincadas ou quebradas, derramamento de líquidos, danos causados por agentes naturais (chuva, maresia, descarga elétrica e outros), exposição excessiva ao calor e selo da garantia rompido.",
+      "",
       "Obrigado pela preferência!",
     ];
     canvas.width = width;
@@ -2021,6 +2096,104 @@ export default function VendasPage() {
     URL.revokeObjectURL(url);
     window.open("https://wa.me/", "_blank");
     window.alert("A imagem da fatura foi baixada. No WhatsApp, anexe a imagem baixada para enviar como foto.");
+  }
+
+  // =====================================================
+  // AÇÕES DA FATURA APÓS FINALIZAR A VENDA
+  // =====================================================
+
+  function linhasFaturaPdf(venda: Venda) {
+    const linhas: string[] = [];
+    const numero = String(venda.id).padStart(6, "0");
+    linhas.push("ADEL'S MUNDO CELL", `FATURA #${numero}`, `Data: ${formatarData(venda.dataVenda || venda.createdAt || venda.data)}`);
+    linhas.push(`Cliente: ${venda.cliente || "Nao informado"}`, `Pagamento: ${venda.formaPagamento || "Nao informado"}`, "", "PRODUTOS");
+    (Array.isArray(venda.itens) ? venda.itens : []).forEach((item: any, i: number) => {
+      const qtd = Number(item.quantidade) || 0;
+      const valor = Number(item.valorUnitario ?? item.preco ?? item.valor ?? 0) || 0;
+      const subtotal = typeof item.total === "number" ? item.total : qtd * valor;
+      linhas.push(`${i + 1}. ${nomeProdutoDoItem(item)} | Qtde: ${qtd}`);
+      linhas.push(`IMEI: ${imeisDoItem(item)}`);
+      const detalhes = detalhesAparelhosDoItem(item);
+      if (detalhes) linhas.push(detalhes);
+      linhas.push(`Unitario: ${dinheiro(valor)} | Subtotal: ${dinheiro(subtotal)}`, "");
+    });
+    const bruto = totalDaVenda(venda);
+    const desconto = Number(venda.descontoVenda ?? (venda as any).desconto ?? 0) || 0;
+    linhas.push(
+      `Total: ${dinheiro(bruto)}`,
+      `Desconto: ${dinheiro(desconto)}`,
+      `VALOR FINAL: ${dinheiro(Math.max(0, bruto - desconto))}`,
+      "",
+      "ANDROID: SEM GARANTIA.",
+      "Garantia de 1 mes",
+      "IPHONE SEMI NOVO",
+      "A garantia nao cobre: Defeitos ou danos causados pelo uso inadequado do produto pelo cliente,",
+      "como pecas arranhadas, trincadas ou quebradas, derramamento de liquidos de qualquer natureza,",
+      "danos causados por agentes naturais (chuva, maresia, descarga eletrica e outros), exposicao",
+      "excessiva ao calor e selo da garantia rompido.",
+      "",
+      "Obrigado pela preferencia!",
+      "Adel's Mundo Cell"
+    );
+    return linhas;
+  }
+
+  function criarPdfFatura(venda: Venda): Blob {
+    // PDF simples e autónomo, sem dependências externas. Usa texto ASCII para compatibilidade.
+    const normalizar = (valor: string) => valor.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\x20-\x7E]/g, "?");
+    const escapar = (valor: string) => normalizar(valor).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+    const linhas = linhasFaturaPdf(venda);
+    const pageLines = linhas.slice(0, 48);
+    let stream = "BT\n/F1 10 Tf\n48 790 Td\n14 TL\n";
+    pageLines.forEach((linha, i) => {
+      if (linha === "Garantia de 1 mes" || linha.startsWith("ANDROID:") || linha.startsWith("IPHONE SEMI NOVO:") || linha === "A garantia nao cobre:" || linha.startsWith("danos por uso inadequado")) {
+        stream += "1 0 0 rg\n";
+      } else {
+        stream += "0.08 0.08 0.08 rg\n";
+      }
+      stream += `(${escapar(linha).slice(0, 115)}) Tj\nT*\n`;
+    });
+    stream += "ET";
+    const objects = [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+      `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+    ];
+    let pdf = "%PDF-1.4\n%----\n";
+    const offsets = [0];
+    objects.forEach((obj, i) => { offsets.push(pdf.length); pdf += `${i + 1} 0 obj\n${obj}\nendobj\n`; });
+    const xref = pdf.length;
+    pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+    for (let i = 1; i < offsets.length; i++) pdf += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
+    pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+    return new Blob([pdf], { type: "application/pdf" });
+  }
+
+  async function enviarPdfWhatsApp(venda: Venda) {
+    const numero = String(venda.id).padStart(6, "0");
+    const blob = criarPdfFatura(venda);
+    const arquivo = new File([blob], `Fatura-${numero}.pdf`, { type: "application/pdf" });
+    try {
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [arquivo] })) {
+        await navigator.share({ files: [arquivo], title: `Fatura #${numero}`, text: `Fatura Adel's Mundo Cell #${numero}` });
+        setVendaAposFinalizar(null);
+        return;
+      }
+    } catch (e: any) {
+      if (e?.name === "AbortError") return;
+    }
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Fatura-${numero}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    window.open(`https://wa.me/?text=${encodeURIComponent(`Olá! Segue a fatura #${numero} da Adel's Mundo Cell. Estou anexando o PDF.`)}`, "_blank");
+    setVendaAposFinalizar(null);
   }
 
   // =====================================================
@@ -2292,34 +2465,71 @@ export default function VendasPage() {
           <textarea value={observacoes} onChange={(e) => setObservacoes(e.target.value)} placeholder="Observações sobre esta venda" rows={3} style={{ ...inputStyle, resize: "vertical", minHeight: 84 }} />
         </label>
 
-        {/* ================================================= */}
-        {/* BUSCA DE PRODUTO E ITENS DA VENDA */}
-        <div style={{ marginTop: 18, position: "relative" }}>
-          <label style={{ display: "grid", gap: 7, fontWeight: 500 }}>
-            Buscar produto por nome ou código
-            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 0 }}>
-              <input
-                value={buscaProdutoTabela}
-                onChange={(e) => setBuscaProdutoTabela(e.target.value)}
-                placeholder="Clique ou digite para buscar um produto"
-                autoComplete="off"
-                style={{ ...inputStyle, marginTop: 0, borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
-              />
-              <button type="button" onClick={() => { if (!buscaProdutoTabela.trim()) setErro("Digite o nome do produto para buscar."); }} style={{ ...blueButton, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, display: "flex", alignItems: "center", gap: 8 }}>⌕ Buscar</button>
-            </div>
-          </label>
-          <small style={{ display: "block", marginTop: 7, color: "#475569" }}>Atalhos: F4 busca produto | F6 resumo da venda</small>
-          {buscaProdutoTabela.trim() && (
-            <div style={{ position: "absolute", zIndex: 30, left: 0, right: 0, top: "100%", background: "#fff", border: "1px solid #d8d8d8", borderRadius: 8, boxShadow: "0 6px 18px rgba(0,0,0,.12)", maxHeight: 260, overflowY: "auto" }}>
-              {produtos.filter((p) => p.quantidade > 0 && p.nome.toLowerCase().includes(buscaProdutoTabela.trim().toLowerCase())).slice(0, 20).map((p) => (
-                <button key={p.id} type="button" onClick={() => selecionarProdutoTabela(p)} style={{ display: "block", width: "100%", textAlign: "left", border: 0, borderBottom: "1px solid #eee", background: "white", padding: "12px 14px", cursor: "pointer" }}>
-                  <strong>{p.nome}</strong><span style={{ color: "#666", marginLeft: 12, fontSize: 12 }}>Estoque: {p.quantidade}</span>
-                </button>
-              ))}
-              {!produtos.some((p) => p.quantidade > 0 && p.nome.toLowerCase().includes(buscaProdutoTabela.trim().toLowerCase())) && <div style={{ padding: 12, color: "#777" }}>Nenhum produto encontrado.</div>}
-            </div>
-          )}
+        {/* Adicionar produto por janela modal — sem Base de preço */}
+        <div style={{ marginTop: 18, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <strong style={{ display: "block", fontSize: 16 }}>Produtos da venda</strong>
+            <small style={{ color: "#64748b" }}>Adicione o modelo, a quantidade e o preço de venda diretamente.</small>
+          </div>
+          <button type="button" onClick={() => { setBuscaProdutoTabela(""); setProdutoModalId(""); setQuantidadeModal("1"); setPrecoModal(""); setIndiceItemModal(null); setModalProdutoAberto(true); setErro(""); }} style={{ ...blueButton, padding: "12px 18px" }}>＋ Adicionar produto</button>
         </div>
+
+        {modalProdutoAberto && (
+          <div role="dialog" aria-modal="true" aria-labelledby="titulo-modal-produto" onMouseDown={(e) => { if (e.target === e.currentTarget) setModalProdutoAberto(false); }} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(15,23,42,.58)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+            <div style={{ width: "100%", maxWidth: 620, maxHeight: "90vh", overflowY: "auto", background: "#fff", borderRadius: 16, padding: 24, boxShadow: "0 24px 70px rgba(0,0,0,.28)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 18 }}>
+                <h3 id="titulo-modal-produto" style={{ margin: 0, fontSize: 21 }}>Adicionar telefone à venda</h3>
+                <button type="button" aria-label="Fechar" onClick={() => setModalProdutoAberto(false)} style={{ border: 0, background: "#f1f5f9", borderRadius: 8, width: 38, height: 38, cursor: "pointer", fontSize: 24 }}>×</button>
+              </div>
+              <label style={{ display: "grid", gap: 7, fontWeight: 600 }}>
+                🔎 Buscar produto
+                <input autoFocus value={buscaProdutoTabela} onChange={(e) => { setBuscaProdutoTabela(e.target.value); setProdutoModalId(""); }} placeholder="Digite o nome do modelo" autoComplete="off" style={{ ...inputStyle, marginTop: 0 }} />
+              </label>
+              <div style={{ marginTop: 8, border: "1px solid #e2e8f0", borderRadius: 10, maxHeight: 220, overflowY: "auto" }}>
+                {produtos.filter((p) => p.quantidade > 0 && (!buscaProdutoTabela.trim() || p.nome.toLowerCase().includes(buscaProdutoTabela.trim().toLowerCase()))).slice(0, 30).map((p) => (
+                  <button key={p.id} type="button" onClick={() => { setProdutoModalId(p.id); setPrecoModal(""); }} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, width: "100%", textAlign: "left", border: 0, borderBottom: "1px solid #edf0f4", background: produtoModalId === p.id ? "#eff6ff" : "#fff", padding: "12px 14px", cursor: "pointer" }}>
+                    <span><strong>{p.nome}</strong><small style={{ display: "block", marginTop: 4, color: "#64748b" }}>{(p.aparelhos || []).filter((a) => !a.vendido).length} aparelho(s) disponível(is)</small></span>
+                    <span style={{ whiteSpace: "nowrap", fontSize: 12, fontWeight: 700, color: "#166534" }}>Estoque: {p.quantidade}</span>
+                  </button>
+                ))}
+                {produtos.filter((p) => p.quantidade > 0 && (!buscaProdutoTabela.trim() || p.nome.toLowerCase().includes(buscaProdutoTabela.trim().toLowerCase()))).length === 0 && <div style={{ padding: 14, color: "#64748b" }}>Nenhum produto disponível encontrado.</div>}
+              </div>
+              {produtoModalId !== "" && (() => { const escolhido = produtos.find((p) => p.id === produtoModalId); if (!escolhido) return null; return (
+                <div style={{ marginTop: 18, padding: 16, border: "1px solid #bfdbfe", background: "#f8fbff", borderRadius: 12 }}>
+                  <strong style={{ display: "block", marginBottom: 14 }}>{escolhido.nome}</strong>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
+                    <label style={{ display: "grid", gap: 6, fontWeight: 600 }}>Quantidade
+                      <input type="number" min="1" max={escolhido.quantidade} step="1" value={quantidadeModal} onChange={(e) => setQuantidadeModal(e.target.value)} style={{ ...inputStyle, marginTop: 0 }} />
+                    </label>
+                    <label style={{ display: "grid", gap: 6, fontWeight: 600 }}>Preço de venda (R$)
+                      <input inputMode="decimal" value={precoModal} onChange={(e) => setPrecoModal(e.target.value)} placeholder="0,00" style={{ ...inputStyle, marginTop: 0 }} />
+                    </label>
+                  </div>
+                  <small style={{ display: "block", marginTop: 8, color: "#64748b" }}>Disponível no estoque: {escolhido.quantidade}. Não há campo Base de preço nesta janela.</small>
+                </div>
+              ); })()}
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 22, flexWrap: "wrap" }}>
+                <button type="button" onClick={() => setModalProdutoAberto(false)} style={{ ...blueButton, background: "#e2e8f0", color: "#1e293b" }}>Cancelar</button>
+                <button type="button" disabled={produtoModalId === "" || !precoModal.trim() || Number(String(precoModal).replace(",", ".")) < 0 || !Number.isInteger(Number(quantidadeModal)) || Number(quantidadeModal) < 1 || Number(quantidadeModal) > (produtos.find((p) => p.id === produtoModalId)?.quantidade || 0)} onClick={() => {
+                  const produto = produtos.find((p) => p.id === produtoModalId);
+                  if (!produto) return;
+                  const quantidade = Number(quantidadeModal);
+                  const valorUnitario = String(Number(String(precoModal).replace(",", ".")));
+                  const itemVazio = itens.findIndex((item) => item.produtoId === "");
+                  const novoItem: VendaItemForm = { produtoId: produto.id, quantidade, valorUnitario, imeis: [] };
+                  if (indiceItemModal !== null && itens[indiceItemModal]) {
+                    atualizarItem(indiceItemModal, novoItem);
+                  } else if (itemVazio >= 0) {
+                    atualizarItem(itemVazio, novoItem);
+                  } else {
+                    setItens((atuais) => [...atuais, novoItem]);
+                  }
+                  setBuscaProdutoTabela(""); setProdutoModalId(""); setQuantidadeModal("1"); setPrecoModal(""); setIndiceItemModal(null); setModalProdutoAberto(false); setErro(""); setMensagem(`${produto.nome} adicionado à venda.`);
+                }} style={{ ...blueButton, opacity: produtoModalId === "" || !precoModal.trim() ? .55 : 1, cursor: produtoModalId === "" || !precoModal.trim() ? "not-allowed" : "pointer" }}>Adicionar à venda</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div style={{ marginTop: 14 }}>
           <label style={{ display: "grid", gap: 7, fontWeight: 600 }}>
@@ -3561,6 +3771,20 @@ export default function VendasPage() {
         )}
 
       </section>
+
+
+      {vendaAposFinalizar && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.55)", zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div role="dialog" aria-modal="true" style={{ width: "100%", maxWidth: 480, background: "#fff", borderRadius: 16, padding: 26, boxShadow: "0 20px 60px rgba(0,0,0,.25)", textAlign: "center" }}>
+            <div style={{ fontSize: 42, marginBottom: 8 }}>🧾</div>
+            <h2 style={{ margin: "0 0 8px", color: "#111827" }}>Venda finalizada!</h2>
+            <p style={{ margin: "0 0 22px", color: "#4b5563" }}>Como você quer enviar ou imprimir a fatura?</p>
+            <button type="button" onClick={() => void enviarPdfWhatsApp(vendaAposFinalizar)} style={{ ...blueButton, width: "100%", background: "#16a34a", marginBottom: 10, padding: "14px 16px" }}>📲 Enviar PDF pelo WhatsApp</button>
+            <button type="button" onClick={() => { abrirFatura(vendaAposFinalizar); setVendaAposFinalizar(null); }} style={{ ...blueButton, width: "100%", background: "#2563eb", marginBottom: 10, padding: "14px 16px" }}>🖨️ Imprimir / Salvar PDF</button>
+            <button type="button" onClick={() => setVendaAposFinalizar(null)} style={{ ...blueButton, width: "100%", background: "#e5e7eb", color: "#111827", padding: "12px 16px" }}>Fechar</button>
+          </div>
+        </div>
+      )}
 
     </main>
   );
